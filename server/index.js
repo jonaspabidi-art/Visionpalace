@@ -507,9 +507,11 @@ io.use(async (socket, next) => {
         socket.client = client;
         return next();
       }
+      console.log('Socket auth failed: invalid session_token');
     }
     next(new Error('Unauthorized'));
   } catch (err) {
+    console.error('Socket auth error:', err.message);
     next(new Error('Unauthorized'));
   }
 });
