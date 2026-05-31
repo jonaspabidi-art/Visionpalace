@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vision Palace – Admin</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f0f;color:#e8e8e8;height:100vh;display:flex;flex-direction:column}
+
+/* Login */
+#login-screen{display:flex;align-items:center;justify-content:center;height:100vh;background:#0f0f0f}
+.login-box{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:40px;width:360px;text-align:center}
+.login-box h1{font-size:28px;font-weight:700;margin-bottom:8px;letter-spacing:-0.5px}
+.login-box p{color:#888;margin-bottom:32px;font-size:14px}
+.login-box input{width:100%;padding:12px 16px;background:#252525;border:1px solid #333;border-radius:10px;color:#fff;font-size:16px;outline:none;transition:border .2s}
+.login-box input:focus{border-color:#4a9eff}
+.login-box button{width:100%;margin-top:16px;padding:13px;background:#4a9eff;border:none;border-radius:10px;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:background .2s}
+.login-box button:hover{background:#3a8ef0}
+.login-error{color:#ff5555;font-size:13px;margin-top:10px}
+
+/* App */
+#app{display:none;flex-direction:column;height:100vh}
+.topbar{background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+.topbar h1{font-size:18px;font-weight:700;letter-spacing:-0.3px}
+.topbar-right{display:flex;gap:12px;align-items:center}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-primary{background:#4a9eff;color:#fff}
+.btn-primary:hover{background:#3a8ef0}
+.btn-secondary{background:#2a2a2a;color:#ccc;border:1px solid #333}
+.btn-secondary:hover{background:#333}
+.btn-danger{background:#ff4444;color:#fff}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}
+
+.main-layout{display:flex;flex:1;overflow:hidden}
+
+/* Left panel */
+.left-panel{width:55%;display:flex;flex-direction:column;border-right:1px solid #2a2a2a;overflow:hidden}
+.panel-header{padding:16px 20px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:10px}
+.panel-header h2{font-size:15px;font-weight:600;color:#ccc}
+
+/* Composer */
+.composer{padding:20px;border-bottom:1px solid #2a2a2a;background:#151515}
+.composer textarea{width:100%;background:#252525;border:1px solid #333;border-radius:10px;color:#e8e8e8;padding:12px 14px;font-size:14px;resize:vertical;min-height:80px;outline:none;font-family:inherit;transition:border .2s}
+.composer textarea:focus{border-color:#4a9eff}
+.composer-row{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+.price-input{background:#252525;border:1px solid #333;border-radius:8px;color:#e8e8e8;padding:9px 12px;font-size:14px;width:140px;outline:none}
+.price-input:focus{border-color:#4a9eff}
+.pin-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:#888}
+.pin-toggle input{cursor:pointer}
+.media-preview{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.media-thumb{position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid #333}
+.media-thumb img,.media-thumb video{width:100%;height:100%;object-fit:cover}
+.media-thumb .remove{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.7);border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.media-upload-btn{display:flex;align-items:center;gap:6px;background:#252525;border:1px dashed #444;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;color:#888;transition:all .2s}
+.media-upload-btn:hover{border-color:#4a9eff;color:#4a9eff}
+#file-input{display:none}
+
+/* Broadcast feed */
+.broadcast-feed{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.broadcast-feed::-webkit-scrollbar{width:5px}
+.broadcast-feed::-webkit-scrollbar-track{background:#111}
+.broadcast-feed::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+
+.broadcast-card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px;transition:border .2s}
+.broadcast-card.pinned{border-color:#f59e0b;background:#1c1a10}
+.broadcast-meta{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.pin-badge{background:#f59e0b;color:#000;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px}
+.broadcast-time{font-size:12px;color:#555}
+.broadcast-text{font-size:14px;color:#e0e0e0;line-height:1.5;margin-bottom:10px;white-space:pre-wrap}
+.broadcast-price{font-size:16px;font-weight:700;color:#4a9eff;margin-bottom:10px}
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:10px;border-radius:8px;overflow:hidden}
+.media-grid img{width:100%;aspect-ratio:1;object-fit:cover;cursor:pointer;transition:opacity .2s}
+.media-grid img:hover{opacity:.85}
+.media-grid video{width:100%;aspect-ratio:16/9;object-fit:cover}
+.media-expired{font-size:12px;color:#555;font-style:italic}
+.broadcast-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.reaction-summary{display:flex;gap:8px}
+.reaction-pill{font-size:12px;background:#252525;padding:4px 10px;border-radius:20px;cursor:pointer;transition:background .2s}
+.reaction-pill:hover{background:#333}
+.reaction-pill span{color:#888}
+.broadcast-actions{display:flex;gap:6px}
+
+/* Search */
+.search-bar{padding:12px 20px;border-bottom:1px solid #2a2a2a}
+.search-bar input{width:100%;background:#252525;border:1px solid #333;border-radius:8px;color:#e8e8e8;padding:9px 12px;font-size:13px;outline:none}
+.search-bar input:focus{border-color:#4a9eff}
+
+/* Right panel */
+.right-panel{width:45%;display:flex;flex-direction:column;overflow:hidden}
+
+/* Client list */
+.client-list-wrap{flex:1;overflow-y:auto}
+.client-list-wrap::-webkit-scrollbar{width:5px}
+.client-list-wrap::-webkit-scrollbar-track{background:#111}
+.client-list-wrap::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.client-row{display:flex;align-items:center;padding:14px 20px;border-bottom:1px solid #1e1e1e;cursor:pointer;transition:background .15s;gap:12px}
+.client-row:hover{background:#191919}
+.client-row.active{background:#1f2a3a}
+.client-avatar{width:40px;height:40px;border-radius:50%;background:#2a3a4a;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#4a9eff;flex-shrink:0}
+.client-info{flex:1;min-width:0}
+.client-name{font-size:14px;font-weight:600;color:#e0e0e0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.client-label{font-size:12px;color:#666;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.client-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.unread-badge{background:#ff4444;color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;min-width:20px;text-align:center}
+.last-seen{font-size:11px;color:#555}
+.client-inactive{opacity:.4}
+
+/* Chat panel */
+.chat-panel{display:flex;flex-direction:column;height:100%;overflow:hidden}
+.chat-header{padding:14px 20px;border-bottom:1px solid #2a2a2a;display:flex;align-items:center;gap:12px}
+.chat-back{background:none;border:none;color:#4a9eff;cursor:pointer;font-size:13px;padding:0}
+.chat-client-info{flex:1}
+.chat-client-name{font-size:15px;font-weight:600}
+.chat-client-label-edit{display:flex;align-items:center;gap:6px;margin-top:3px}
+.label-input{background:#252525;border:1px solid #333;border-radius:6px;color:#ccc;padding:4px 8px;font-size:12px;width:150px;outline:none}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.chat-messages::-webkit-scrollbar{width:5px}
+.chat-messages::-webkit-scrollbar-track{background:#111}
+.chat-messages::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.msg{display:flex;flex-direction:column;max-width:78%}
+.msg.admin{align-self:flex-end;align-items:flex-end}
+.msg.client{align-self:flex-start;align-items:flex-start}
+.msg-bubble{padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.45;word-break:break-word;white-space:pre-wrap}
+.msg.admin .msg-bubble{background:#2a4a7f;color:#e8f0ff;border-bottom-right-radius:4px}
+.msg.client .msg-bubble{background:#252525;color:#e8e8e8;border-bottom-left-radius:4px}
+.msg-meta{font-size:11px;color:#555;margin-top:3px;display:flex;align-items:center;gap:4px}
+.read-tick{color:#4a9eff}
+.msg-media img{max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer}
+.msg-media video{max-width:220px;border-radius:8px;margin-top:6px}
+.typing-indicator{font-size:12px;color:#555;padding:4px 16px;font-style:italic}
+
+.chat-composer{padding:14px 16px;border-top:1px solid #2a2a2a;display:flex;flex-direction:column;gap:8px}
+.chat-media-preview{display:flex;gap:6px;flex-wrap:wrap}
+.chat-input-row{display:flex;gap:8px;align-items:flex-end}
+.chat-input{flex:1;background:#252525;border:1px solid #333;border-radius:10px;color:#e8e8e8;padding:10px 14px;font-size:14px;resize:none;outline:none;min-height:44px;max-height:120px;font-family:inherit}
+.chat-input:focus{border-color:#4a9eff}
+.send-btn{background:#4a9eff;border:none;border-radius:10px;color:#fff;padding:10px 16px;cursor:pointer;font-size:15px;line-height:1;flex-shrink:0;transition:background .2s}
+.send-btn:hover{background:#3a8ef0}
+#chat-file-input{display:none}
+
+/* Invite modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:28px;width:480px;max-width:95vw}
+.modal h3{font-size:18px;margin-bottom:20px}
+.invite-links{display:flex;flex-direction:column;gap:8px;margin-top:16px;max-height:300px;overflow-y:auto}
+.invite-link-row{display:flex;align-items:center;gap:8px;background:#252525;border-radius:8px;padding:10px 12px}
+.invite-link-text{flex:1;font-size:12px;color:#4a9eff;word-break:break-all}
+.copy-btn{background:#333;border:none;color:#ccc;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;flex-shrink:0}
+.copy-btn:hover{background:#444}
+.modal-footer{margin-top:20px;display:flex;justify-content:flex-end}
+
+/* Reaction modal */
+.reaction-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.reaction-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#252525;border-radius:8px;font-size:13px}
+.reaction-name{font-weight:600}
+.reaction-type{color:#888}
+
+/* Lightbox */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;align-items:center;justify-content:center}
+#lightbox.open{display:flex}
+#lightbox img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px}
+#lightbox-close{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.1);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer}
+
+.empty-state{text-align:center;color:#444;padding:40px 20px;font-size:14px}
+.empty-chat{display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:8px;color:#333;font-size:14px}
+
+@media(max-width:768px){
+  .main-layout{flex-direction:column}
+  .left-panel,.right-panel{width:100%;height:50%}
+}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Vision Palace</h1>
+    <p>Admin-inloggning</p>
+    <input type="password" id="password-input" placeholder="Lösenord" autocomplete="current-password">
+    <button id="login-btn">Logga in</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="topbar">
+    <h1>Vision Palace <span style="color:#4a9eff;font-size:13px;font-weight:400">Admin</span></h1>
+    <div class="topbar-right">
+      <button class="btn btn-secondary btn-sm" id="invite-btn">+ Bjud in klienter</button>
+      <button class="btn btn-secondary btn-sm" id="logout-btn">Logga ut</button>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <!-- Left: Composer + Broadcast feed -->
+    <div class="left-panel">
+      <div class="composer">
+        <textarea id="broadcast-text" placeholder="Skriv ett lageruppdatering…" rows="3"></textarea>
+        <div class="composer-row">
+          <input class="price-input" id="broadcast-price" type="text" placeholder="Pris (valfritt)">
+          <label class="pin-toggle">
+            <input type="checkbox" id="broadcast-pin"> Fäst inlägg
+          </label>
+          <label class="media-upload-btn">
+            <span>📎 Lägg till media</span>
+            <input type="file" id="file-input" multiple accept="image/*,video/*">
+          </label>
+          <button class="btn btn-primary" id="post-broadcast-btn">Publicera</button>
+        </div>
+        <div class="media-preview" id="media-preview"></div>
+      </div>
+
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="Sök sändningar…">
+      </div>
+
+      <div class="broadcast-feed" id="broadcast-feed">
+        <div class="empty-state">Inga sändningar ännu</div>
+      </div>
+    </div>
+
+    <!-- Right: Client list + Chat -->
+    <div class="right-panel">
+      <div id="client-list-view" style="display:flex;flex-direction:column;height:100%">
+        <div class="panel-header">
+          <h2>Klienter</h2>
+          <span id="client-count" style="font-size:12px;color:#555"></span>
+        </div>
+        <div class="client-list-wrap" id="client-list"></div>
+      </div>
+
+      <div id="chat-view" style="display:none;height:100%">
+        <div class="chat-panel">
+          <div class="chat-header">
+            <button class="chat-back" id="chat-back-btn">← Tillbaka</button>
+            <div class="chat-client-info">
+              <div class="chat-client-name" id="chat-client-name"></div>
+              <div class="chat-client-label-edit">
+                <input class="label-input" id="label-input" placeholder="Intern etikett…">
+                <button class="btn btn-secondary btn-sm" id="save-label-btn">Spara</button>
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="toggle-inactive-btn"></button>
+          </div>
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="typing-indicator" id="typing-indicator" style="display:none">Klienten skriver…</div>
+          <div class="chat-composer">
+            <div class="chat-media-preview" id="chat-media-preview"></div>
+            <div class="chat-input-row">
+              <label class="media-upload-btn" style="padding:10px 12px">
+                📎
+                <input type="file" id="chat-file-input" multiple accept="image/*,video/*">
+              </label>
+              <textarea class="chat-input" id="chat-input" placeholder="Skriv ett meddelande…" rows="1"></textarea>
+              <button class="send-btn" id="send-msg-btn">↑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Invite modal -->
+<div class="modal-overlay" id="invite-modal">
+  <div class="modal">
+    <h3>Bjud in klienter</h3>
+    <div style="display:flex;gap:10px;align-items:center">
+      <label style="font-size:13px;color:#888">Antal:</label>
+      <input type="number" id="invite-count" value="1" min="1" max="10" style="width:60px;background:#252525;border:1px solid #333;border-radius:6px;color:#fff;padding:6px 10px;font-size:14px;outline:none">
+      <button class="btn btn-primary" id="generate-invites-btn">Generera</button>
+    </div>
+    <div class="invite-links" id="invite-links"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="close-invite-modal">Stäng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reaction modal -->
+<div class="modal-overlay" id="reaction-modal">
+  <div class="modal">
+    <h3 id="reaction-modal-title">Reaktioner</h3>
+    <div class="reaction-list" id="reaction-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="close-reaction-modal">Stäng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox">
+  <button id="lightbox-close">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+const API = '';
+let token = localStorage.getItem('vp_admin_token');
+let socket = null;
+let broadcasts = [];
+let clients = [];
+let currentClientId = null;
+let pendingMedia = [];
+let pendingChatMedia = [];
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+async function login() {
+  const pw = document.getElementById('password-input').value;
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  try {
+    const r = await fetch('/api/auth/admin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const d = await r.json();
+    if (!r.ok) { err.textContent = d.error || 'Fel lösenord'; return; }
+    token = d.token;
+    localStorage.setItem('vp_admin_token', token);
+    initApp();
+  } catch (e) { err.textContent = 'Anslutningsfel'; }
+}
+
+function logout() {
+  localStorage.removeItem('vp_admin_token');
+  location.reload();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+function initApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  connectSocket();
+  loadBroadcasts();
+  loadClients();
+}
+
+function connectSocket() {
+  socket = io({ auth: { token } });
+  socket.on('admin:new_broadcast', d => {
+    broadcasts.unshift(d.broadcast);
+    renderBroadcasts();
+  });
+  socket.on('broadcast:pin_updated', d => {
+    const b = broadcasts.find(x => x.id === d.id);
+    if (b) b.is_pinned = d.is_pinned;
+    renderBroadcasts();
+  });
+  socket.on('client:new_message', d => {
+    if (currentClientId === d.client.id) {
+      appendMessage(d.message);
+      markRead(currentClientId);
+    } else {
+      const c = clients.find(x => x.id === d.client.id);
+      if (c) { c.unread_count = (c.unread_count || 0) + 1; renderClients(); }
+    }
+  });
+  socket.on('broadcast:new_reaction', d => {
+    const b = broadcasts.find(x => x.id === d.broadcast_id);
+    if (b) b.broadcast_reactions = d.reactions;
+    renderBroadcasts();
+  });
+  socket.on('client:last_seen', d => {
+    const c = clients.find(x => x.id === d.client_id);
+    if (c) { c.last_seen_at = d.last_seen_at; renderClients(); }
+  });
+  socket.on('client:updated', d => {
+    const idx = clients.findIndex(x => x.id === d.client.id);
+    if (idx >= 0) clients[idx] = { ...clients[idx], ...d.client };
+    else clients.unshift(d.client);
+    renderClients();
+    if (currentClientId === d.client.id) updateChatHeader();
+  });
+  socket.on('client:joined', d => {
+    clients.unshift({ ...d.client, unread_count: 0 });
+    renderClients();
+  });
+  socket.on('client:typing', d => {
+    if (currentClientId === d.client_id) {
+      const ti = document.getElementById('typing-indicator');
+      ti.style.display = 'block';
+      clearTimeout(window._typingTimer);
+      window._typingTimer = setTimeout(() => ti.style.display = 'none', 3000);
+    }
+  });
+  socket.on('client:read_receipt', d => {
+    if (currentClientId === d.client_id) markMessagesReadUI();
+  });
+  socket.on('messages:read', d => {
+    if (currentClientId === d.client_id) {
+      const c = clients.find(x => x.id === d.client_id);
+      if (c) { c.unread_count = 0; renderClients(); }
+    }
+  });
+}
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+
+function apiFetch(url, opts = {}) {
+  return fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) }
+  });
+}
+
+async function loadBroadcasts(q = '') {
+  const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
+  const r = await apiFetch(url);
+  const d = await r.json();
+  broadcasts = d.broadcasts || [];
+  renderBroadcasts();
+}
+
+async function loadClients() {
+  const r = await apiFetch('/api/clients');
+  const d = await r.json();
+  clients = d.clients || [];
+  renderClients();
+}
+
+// ─── Broadcasts ───────────────────────────────────────────────────────────────
+
+function renderBroadcasts() {
+  const feed = document.getElementById('broadcast-feed');
+  if (broadcasts.length === 0) { feed.innerHTML = '<div class="empty-state">Inga sändningar ännu</div>'; return; }
+
+  const sorted = [...broadcasts].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1;
+    if (!a.is_pinned && b.is_pinned) return 1;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
+  feed.innerHTML = sorted.map(b => broadcastCardHTML(b)).join('');
+}
+
+function broadcastCardHTML(b) {
+  const date = new Date(b.created_at).toLocaleString('sv-SE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const interested = (b.broadcast_reactions || []).filter(r => r.reaction === 'interested').length;
+  const notInterested = (b.broadcast_reactions || []).filter(r => r.reaction === 'not_interested').length;
+
+  const media = b.broadcast_media || [];
+  const mediaHTML = media.length > 0
+    ? `<div class="media-grid">${media.map(m => m.storage_url
+        ? (m.type === 'video'
+          ? `<video src="${m.storage_url}" controls preload="metadata"></video>`
+          : `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
+        : `<span class="media-expired">Bild/video ej längre tillgänglig</span>`
+      ).join('')}</div>`
+    : '';
+
+  return `
+    <div class="broadcast-card${b.is_pinned ? ' pinned' : ''}" data-id="${b.id}">
+      <div class="broadcast-meta">
+        ${b.is_pinned ? '<span class="pin-badge">FÄST</span>' : ''}
+        <span class="broadcast-time">${date}</span>
+      </div>
+      ${b.text ? `<div class="broadcast-text">${escHtml(b.text)}</div>` : ''}
+      ${b.price ? `<div class="broadcast-price">${escHtml(b.price)}</div>` : ''}
+      ${mediaHTML}
+      <div class="broadcast-footer">
+        <div class="reaction-summary">
+          <span class="reaction-pill" onclick="showReactions('${b.id}')">👍 <span>${interested}</span></span>
+          <span class="reaction-pill" onclick="showReactions('${b.id}')">❌ <span>${notInterested}</span></span>
+        </div>
+        <div class="broadcast-actions">
+          <button class="btn btn-secondary btn-sm" onclick="togglePin('${b.id}')">${b.is_pinned ? 'Lossa' : 'Fäst'}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function postBroadcast() {
+  const text = document.getElementById('broadcast-text').value.trim();
+  const price = document.getElementById('broadcast-price').value.trim();
+  const is_pinned = document.getElementById('broadcast-pin').checked;
+
+  const r = await apiFetch('/api/broadcasts', {
+    method: 'POST',
+    body: JSON.stringify({ text, price, is_pinned, media: pendingMedia })
+  });
+  if (r.ok) {
+    document.getElementById('broadcast-text').value = '';
+    document.getElementById('broadcast-price').value = '';
+    document.getElementById('broadcast-pin').checked = false;
+    pendingMedia = [];
+    document.getElementById('media-preview').innerHTML = '';
+  }
+}
+
+async function togglePin(id) {
+  await apiFetch(`/api/broadcasts/${id}/pin`, { method: 'PATCH' });
+}
+
+async function showReactions(broadcastId) {
+  const r = await apiFetch(`/api/reactions/${broadcastId}`);
+  const d = await r.json();
+  const reactions = d.reactions || [];
+  document.getElementById('reaction-modal-title').textContent = 'Reaktioner';
+  document.getElementById('reaction-list').innerHTML = reactions.length === 0
+    ? '<div style="color:#555;font-size:13px">Inga reaktioner ännu</div>'
+    : reactions.map(r => `
+        <div class="reaction-item">
+          <span class="reaction-name">${escHtml(r.clients?.admin_label || r.clients?.display_name || 'Okänd')}</span>
+          <span class="reaction-type">${r.reaction === 'interested' ? '👍 Intresserad' : '❌ Ej intresserad'}</span>
+        </div>`).join('');
+  document.getElementById('reaction-modal').classList.add('open');
+}
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+
+function renderClients() {
+  const list = document.getElementById('client-list');
+  const active = clients.filter(c => !c.is_inactive);
+  const inactive = clients.filter(c => c.is_inactive);
+  document.getElementById('client-count').textContent = `${active.length} aktiva`;
+
+  if (clients.length === 0) { list.innerHTML = '<div class="empty-state">Inga klienter ännu</div>'; return; }
+
+  list.innerHTML = [...active, ...inactive].map(c => {
+    const initial = (c.admin_label || c.display_name || '?')[0].toUpperCase();
+    const label = c.admin_label ? `<div class="client-label">${escHtml(c.admin_label)}</div>` : `<div class="client-label" style="color:#444">${escHtml(c.display_name)}</div>`;
+    const lastSeen = c.last_seen_at ? timeAgo(c.last_seen_at) : '';
+    const unread = c.unread_count > 0 ? `<span class="unread-badge">${c.unread_count}</span>` : '';
+    return `
+      <div class="client-row${currentClientId === c.id ? ' active' : ''}${c.is_inactive ? ' client-inactive' : ''}" onclick="openChat('${c.id}')">
+        <div class="client-avatar">${initial}</div>
+        <div class="client-info">
+          <div class="client-name">${escHtml(c.admin_label || c.display_name)}</div>
+          ${label}
+        </div>
+        <div class="client-meta">
+          ${unread}
+          <span class="last-seen">${lastSeen}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+
+async function openChat(clientId) {
+  currentClientId = clientId;
+  document.getElementById('client-list-view').style.display = 'none';
+  document.getElementById('chat-view').style.display = 'block';
+  updateChatHeader();
+  renderClients();
+
+  const r = await apiFetch(`/api/messages/${clientId}`);
+  const d = await r.json();
+  const msgs = d.messages || [];
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = msgs.length === 0
+    ? '<div class="empty-chat"><span>💬</span><span>Ingen konversation ännu</span></div>'
+    : msgs.map(m => msgHTML(m)).join('');
+  container.scrollTop = container.scrollHeight;
+
+  await markRead(clientId);
+  const c = clients.find(x => x.id === clientId);
+  if (c) { c.unread_count = 0; renderClients(); }
+}
+
+function updateChatHeader() {
+  const c = clients.find(x => x.id === currentClientId);
+  if (!c) return;
+  document.getElementById('chat-client-name').textContent = c.admin_label || c.display_name;
+  document.getElementById('label-input').value = c.admin_label || '';
+  document.getElementById('toggle-inactive-btn').textContent = c.is_inactive ? 'Aktivera' : 'Markera inaktiv';
+}
+
+function appendMessage(msg) {
+  const container = document.getElementById('chat-messages');
+  const empty = container.querySelector('.empty-chat');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.innerHTML = msgHTML(msg);
+  container.appendChild(div.firstElementChild);
+  container.scrollTop = container.scrollHeight;
+}
+
+function msgHTML(m) {
+  const time = new Date(m.created_at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const media = m.message_media || [];
+  const mediaHTML = media.map(med => med.storage_url
+    ? (med.type === 'video'
+      ? `<video src="${med.storage_url}" controls style="max-width:220px;border-radius:8px;margin-top:6px"></video>`
+      : `<img src="${med.thumbnail_url || med.storage_url}" data-full="${med.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:220px;border-radius:8px;margin-top:6px;cursor:pointer" loading="lazy">`)
+    : `<span class="media-expired">Bild/video ej längre tillgänglig</span>`
+  ).join('');
+
+  const readTick = m.sender === 'admin' ? `<span class="read-tick">${m.read ? '✓✓' : '✓'}</span>` : '';
+  return `
+    <div class="msg ${m.sender}">
+      <div class="msg-bubble">${m.text ? escHtml(m.text) : ''}${mediaHTML ? `<div class="msg-media">${mediaHTML}</div>` : ''}</div>
+      <div class="msg-meta">${time} ${readTick}</div>
+    </div>`;
+}
+
+function markMessagesReadUI() {
+  document.querySelectorAll('.msg.admin .read-tick').forEach(el => el.textContent = '✓✓');
+}
+
+async function markRead(clientId) {
+  await apiFetch(`/api/messages/${clientId}/read`, { method: 'POST' });
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text && pendingChatMedia.length === 0) return;
+  if (!currentClientId) return;
+
+  input.value = '';
+  const r = await apiFetch(`/api/messages/${currentClientId}`, {
+    method: 'POST',
+    body: JSON.stringify({ text, media: pendingChatMedia })
+  });
+  if (r.ok) {
+    pendingChatMedia = [];
+    document.getElementById('chat-media-preview').innerHTML = '';
+    const d = await r.json();
+    appendMessage(d.message);
+  }
+}
+
+async function saveLabel() {
+  if (!currentClientId) return;
+  const label = document.getElementById('label-input').value.trim();
+  const r = await apiFetch(`/api/clients/${currentClientId}/label`, {
+    method: 'PATCH', body: JSON.stringify({ admin_label: label })
+  });
+  if (r.ok) {
+    const d = await r.json();
+    const c = clients.find(x => x.id === currentClientId);
+    if (c) { c.admin_label = d.client.admin_label; updateChatHeader(); renderClients(); }
+  }
+}
+
+async function toggleInactive() {
+  if (!currentClientId) return;
+  const r = await apiFetch(`/api/clients/${currentClientId}/inactive`, { method: 'PATCH' });
+  if (r.ok) {
+    const d = await r.json();
+    const c = clients.find(x => x.id === currentClientId);
+    if (c) { c.is_inactive = d.client.is_inactive; updateChatHeader(); renderClients(); }
+  }
+}
+
+// ─── Media upload ─────────────────────────────────────────────────────────────
+
+async function uploadFiles(files, targetArray, previewEl) {
+  const formData = new FormData();
+  for (const f of files) formData.append('files', f);
+  const r = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData
+  });
+  if (!r.ok) { alert('Uppladdning misslyckades'); return; }
+  const d = await r.json();
+  for (const f of d.files) {
+    targetArray.push(f);
+    const div = document.createElement('div');
+    div.className = 'media-thumb';
+    div.innerHTML = f.type === 'video'
+      ? `<video src="${f.url}" muted></video><button class="remove" onclick="removeMedia(this,'${f.url}',${targetArray === pendingMedia ? 'true' : 'false'})">✕</button>`
+      : `<img src="${f.thumbUrl}" loading="lazy"><button class="remove" onclick="removeMedia(this,'${f.url}',${targetArray === pendingMedia ? 'true' : 'false'})">✕</button>`;
+    previewEl.appendChild(div);
+  }
+}
+
+function removeMedia(btn, url, isBroadcast) {
+  const arr = isBroadcast ? pendingMedia : pendingChatMedia;
+  const idx = arr.findIndex(f => f.url === url);
+  if (idx >= 0) arr.splice(idx, 1);
+  btn.closest('.media-thumb').remove();
+}
+
+// ─── Invites ──────────────────────────────────────────────────────────────────
+
+async function generateInvites() {
+  const count = parseInt(document.getElementById('invite-count').value) || 1;
+  const r = await apiFetch('/api/invite', { method: 'POST', body: JSON.stringify({ count }) });
+  const d = await r.json();
+  const container = document.getElementById('invite-links');
+  container.innerHTML = '';
+  const base = location.origin;
+  for (const t of d.tokens) {
+    const url = `${base}/join/${t}`;
+    const div = document.createElement('div');
+    div.className = 'invite-link-row';
+    div.innerHTML = `<span class="invite-link-text">${url}</span><button class="copy-btn" onclick="copyText('${url}',this)">Kopiera</button>`;
+    container.appendChild(div);
+  }
+}
+
+async function copyText(text, btn) {
+  await navigator.clipboard.writeText(text);
+  btn.textContent = 'Kopierat!';
+  setTimeout(() => btn.textContent = 'Kopiera', 2000);
+}
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+
+function openLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso)) / 1000;
+  if (diff < 60) return 'just nu';
+  if (diff < 3600) return `${Math.floor(diff/60)}m sedan`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}t sedan`;
+  return `${Math.floor(diff/86400)}d sedan`;
+}
+
+// ─── Event listeners ──────────────────────────────────────────────────────────
+
+document.getElementById('login-btn').addEventListener('click', login);
+document.getElementById('password-input').addEventListener('keydown', e => e.key === 'Enter' && login());
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+document.getElementById('post-broadcast-btn').addEventListener('click', postBroadcast);
+document.getElementById('file-input').addEventListener('change', async e => {
+  await uploadFiles(Array.from(e.target.files), pendingMedia, document.getElementById('media-preview'));
+  e.target.value = '';
+});
+
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(window._searchTimer);
+  window._searchTimer = setTimeout(() => loadBroadcasts(e.target.value), 300);
+});
+
+document.getElementById('invite-btn').addEventListener('click', () => {
+  document.getElementById('invite-modal').classList.add('open');
+});
+document.getElementById('close-invite-modal').addEventListener('click', () => {
+  document.getElementById('invite-modal').classList.remove('open');
+});
+document.getElementById('generate-invites-btn').addEventListener('click', generateInvites);
+
+document.getElementById('close-reaction-modal').addEventListener('click', () => {
+  document.getElementById('reaction-modal').classList.remove('open');
+});
+
+document.getElementById('chat-back-btn').addEventListener('click', () => {
+  currentClientId = null;
+  document.getElementById('chat-view').style.display = 'none';
+  document.getElementById('client-list-view').style.display = 'flex';
+  renderClients();
+});
+
+document.getElementById('send-msg-btn').addEventListener('click', sendChatMessage);
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+  if (socket) socket.emit('admin:typing', { client_id: currentClientId });
+});
+
+document.getElementById('save-label-btn').addEventListener('click', saveLabel);
+document.getElementById('toggle-inactive-btn').addEventListener('click', toggleInactive);
+
+document.getElementById('chat-file-input').addEventListener('change', async e => {
+  await uploadFiles(Array.from(e.target.files), pendingChatMedia, document.getElementById('chat-media-preview'));
+  e.target.value = '';
+});
+
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target === e.currentTarget || e.target.id === 'lightbox-close') {
+    document.getElementById('lightbox').classList.remove('open');
+  }
+});
+
+// Modal overlay click to close
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+if (token) {
+  // Verify token is valid before skipping login
+  fetch('/api/clients', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => { if (r.ok) initApp(); else { localStorage.removeItem('vp_admin_token'); token = null; } })
+    .catch(() => {});
+}
+</script>
+</body>
+</html>
