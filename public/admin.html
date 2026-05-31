@@ -651,7 +651,7 @@ function initApp() {
 }
 
 function connectSocket() {
-  socket = io({ auth: { token } });
+  socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
 
   socket.on('admin:new_broadcast', d => {
     broadcasts.push(d.broadcast);
