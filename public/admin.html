@@ -49,13 +49,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .login-btn:active { opacity: .85; }
 .login-error { color: #ff5555; font-size: 13px; margin-top: 12px; }
 
-/* ── App ── */
+/* ── App shell ── */
 #app { display: none; flex-direction: column; height: 100dvh; }
 
 /* ── Header ── */
 .app-header {
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 0 16px; display: flex; align-items: center; gap: 12px;
+  padding: 0 14px; display: flex; align-items: center; gap: 10px;
   height: calc(56px + var(--safe-top)); padding-top: var(--safe-top);
   flex-shrink: 0;
 }
@@ -66,12 +66,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .header-title { font-size: 16px; font-weight: 700; flex: 1; }
 .hbtn {
-  padding: 7px 14px; border-radius: 10px; border: 1px solid var(--border);
+  padding: 7px 13px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface2); color: var(--text2); font-size: 13px; font-weight: 600;
   cursor: pointer; white-space: nowrap;
 }
 .hbtn:active { opacity: .75; }
 .hbtn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.icon-btn {
+  width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text2); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+/* ── Search bar ── */
+#search-bar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 14px; flex-shrink: 0;
+}
+.search-wrap { position: relative; }
+.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 15px; pointer-events: none; }
+.search-input {
+  width: 100%; padding: 9px 14px 9px 36px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 11px; color: var(--text);
+  font-size: 14px; outline: none; -webkit-appearance: none;
+}
+.search-input:focus { border-color: var(--blue); }
 
 /* ── Tab bar ── */
 .tab-bar {
@@ -87,7 +106,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tab-icon { font-size: 20px; }
 .tab-label { font-size: 10px; font-weight: 600; }
 .tab-badge {
-  position: absolute; top: 6px; right: calc(50% - 18px);
+  position: absolute; top: 6px; right: calc(50% - 20px);
   background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700;
   min-width: 16px; height: 16px; border-radius: 8px; display: none;
   align-items: center; justify-content: center; padding: 0 4px;
@@ -97,105 +116,164 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .view { flex: 1; overflow: hidden; display: none; flex-direction: column; }
 .view.active { display: flex; }
 
-/* ── Compose view ── */
-#compose-view { overflow-y: auto; padding: 16px; gap: 12px; -webkit-overflow-scrolling: touch; }
-#compose-view::-webkit-scrollbar { display: none; }
+/* ══════════════════════════════════════════
+   BROADCAST VIEW — WhatsApp group chat style
+══════════════════════════════════════════ */
+#broadcast-view { display: none; flex-direction: column; }
+#broadcast-view.active { display: flex; }
 
-.compose-card { background: var(--surface); border-radius: 16px; overflow: hidden; }
-.compose-card-header {
-  padding: 14px 16px 0; font-size: 12px; font-weight: 700; color: var(--text3);
-  letter-spacing: 0.5px; text-transform: uppercase;
+.bc-feed {
+  flex: 1; overflow-y: auto; padding: 14px 14px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+  -webkit-overflow-scrolling: touch;
 }
-.compose-textarea {
-  width: 100%; padding: 12px 16px; background: transparent; border: none;
-  color: var(--text); font-size: 15px; resize: none; outline: none;
-  min-height: 90px; font-family: inherit; line-height: 1.5;
-}
-.compose-textarea::placeholder { color: var(--text3); }
-.compose-divider { height: 1px; background: var(--border); margin: 0 16px; }
-.compose-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
-.compose-input {
-  flex: 1; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 10px; color: var(--text); font-size: 14px; outline: none;
-  -webkit-appearance: none;
-}
-.compose-input::placeholder { color: var(--text3); }
-.compose-input:focus { border-color: var(--blue); }
-.pin-toggle {
-  display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--text2);
-}
-.pin-toggle input { width: 18px; height: 18px; accent-color: var(--blue); cursor: pointer; }
+.bc-feed::-webkit-scrollbar { display: none; }
 
-.media-add-btn {
-  display: flex; align-items: center; gap: 8px; padding: 11px 16px;
-  background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 12px;
-  cursor: pointer; color: var(--text3); font-size: 14px; transition: all .15s;
-}
-.media-add-btn:hover, .media-add-btn:active { border-color: var(--blue); color: var(--blue); }
-#file-input { display: none; }
-
-.media-grid-preview { display: flex; gap: 8px; flex-wrap: wrap; }
-.prev-thumb {
-  position: relative; width: 72px; height: 72px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border);
-}
-.prev-thumb img, .prev-thumb video { width: 100%; height: 100%; object-fit: cover; }
-.prev-thumb .rm {
-  position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
-  background: rgba(0,0,0,.75); border: none; color: #fff; border-radius: 50%;
-  font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+.feed-empty {
+  margin: auto; color: var(--text3); font-size: 14px; text-align: center; padding: 40px 0;
 }
 
-.post-btn {
-  width: 100%; padding: 15px; background: var(--blue); border: none; border-radius: 14px;
-  color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .15s;
+/* Each broadcast row — right-aligned (admin sends) */
+.bc-msg-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 6px;
 }
-.post-btn:active { opacity: .85; }
 
-/* ── Feed view (admin) ── */
-#admin-feed-view { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-#admin-feed-view::-webkit-scrollbar { display: none; }
+.bc-pin-tag {
+  font-size: 10px; color: var(--blue); margin-bottom: 2px;
+  padding-right: 2px; letter-spacing: 0.2px; opacity: 0.8;
+}
 
-.search-bar { padding: 12px 16px; position: sticky; top: 0; background: var(--bg); z-index: 5; }
-.search-input {
-  width: 100%; padding: 10px 14px 10px 38px; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: 12px; color: var(--text);
-  font-size: 14px; outline: none; -webkit-appearance: none;
+.bc-bubble {
+  max-width: 84%;
+  background: var(--blue);
+  color: #fff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 13px 8px;
+  word-break: break-word;
 }
-.search-wrap { position: relative; }
-.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); font-size: 15px; pointer-events: none; }
 
-.feed-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.bc-bubble-media { margin-bottom: 8px; }
+.bc-bubble-media img {
+  max-width: 220px; width: 100%; border-radius: 10px;
+  display: block; cursor: pointer; margin-bottom: 2px;
+}
+.bc-bubble-media video {
+  max-width: 220px; width: 100%; border-radius: 10px; display: block;
+}
+.bc-media-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+  border-radius: 10px; overflow: hidden; max-width: 220px;
+}
+.bc-media-grid img {
+  width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; display: block;
+}
 
-.admin-card {
-  background: var(--surface); border-radius: 16px; overflow: hidden; border: 1px solid var(--border);
+.bc-bubble-price {
+  font-size: 16px; font-weight: 800; margin-bottom: 4px;
+  color: rgba(255,255,255,.9);
 }
-.admin-card.pinned { border-color: rgba(74,158,255,.4); }
-.admin-card-media img {
-  width: 100%; max-height: 200px; object-fit: cover; display: block; cursor: pointer;
+.bc-bubble-text {
+  font-size: 15px; line-height: 1.4; white-space: pre-wrap;
 }
-.admin-card-media video { width: 100%; max-height: 160px; object-fit: cover; display: block; }
-.admin-card-media-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
-.admin-card-media-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; display: block; }
-.admin-card-body { padding: 12px 14px; }
-.admin-card-price { font-size: 18px; font-weight: 800; color: var(--blue); margin-bottom: 4px; }
-.admin-card-text { font-size: 13px; color: #ccc; line-height: 1.5; white-space: pre-wrap; }
-.admin-card-footer {
-  padding: 10px 14px; border-top: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-}
-.admin-card-meta { font-size: 11px; color: var(--text3); }
-.admin-card-actions { display: flex; gap: 8px; align-items: center; }
-.reactions-pill {
-  font-size: 12px; color: var(--text2); background: var(--surface2);
-  padding: 5px 10px; border-radius: 8px; cursor: pointer; border: none;
-}
-.pin-btn {
-  font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--surface2); color: var(--text2); cursor: pointer;
-}
-.pin-active { border-color: var(--blue); color: var(--blue); }
 
-/* ── Clients view ── */
+.bc-bubble-footer {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px; margin-top: 6px;
+}
+.bc-bubble-time { font-size: 11px; opacity: .6; }
+.bc-react-btn {
+  background: rgba(255,255,255,.18); border: none; color: #fff;
+  border-radius: 10px; padding: 3px 9px; font-size: 11px;
+  cursor: pointer; font-family: inherit;
+}
+.bc-react-btn:active { opacity: .75; }
+.bc-pin-btn {
+  background: none; border: none; color: rgba(255,255,255,.5);
+  font-size: 14px; cursor: pointer; padding: 0; line-height: 1;
+}
+.bc-pin-btn.pinned { color: #fff; }
+
+/* Date separator */
+.bc-date-sep { text-align: center; margin: 10px 0 8px; }
+.bc-date-sep span {
+  background: var(--surface2); color: var(--text3); font-size: 11px;
+  font-weight: 500; padding: 4px 12px; border-radius: 10px;
+}
+
+/* ── Broadcast composer ── */
+.bc-composer {
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 8px 12px; padding-bottom: max(8px, var(--safe-bot)); flex-shrink: 0;
+}
+.bc-media-prev {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.prev-sm {
+  position: relative; width: 56px; height: 56px; border-radius: 8px;
+  overflow: hidden; border: 1px solid var(--border);
+}
+.prev-sm img, .prev-sm video { width: 100%; height: 100%; object-fit: cover; }
+.prev-sm button {
+  position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
+  background: rgba(0,0,0,.8); border: none; color: #fff; border-radius: 50%;
+  font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+
+.bc-extras {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px;
+}
+.bc-price-input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); padding: 8px 12px; font-size: 14px;
+  outline: none; -webkit-appearance: none;
+}
+.bc-price-input:focus { border-color: var(--blue); }
+.bc-price-input::placeholder { color: var(--text3); }
+.pin-toggle-sm {
+  display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--text2); white-space: nowrap; cursor: pointer;
+}
+.pin-toggle-sm input { accent-color: var(--blue); width: 16px; height: 16px; }
+
+.bc-main-row { display: flex; gap: 8px; align-items: flex-end; }
+
+.attach-bc {
+  width: 40px; height: 40px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text2); font-size: 22px; font-weight: 300;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.attach-bc input { display: none; }
+
+.extras-toggle {
+  width: 40px; height: 40px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text2); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  letter-spacing: 1px;
+}
+.extras-toggle.active { border-color: var(--blue); color: var(--blue); }
+
+.bc-input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 22px;
+  color: var(--text); padding: 10px 16px; font-size: 15px; resize: none; outline: none;
+  max-height: 120px; min-height: 40px; font-family: inherit; line-height: 1.4;
+}
+.bc-input:focus { border-color: var(--blue); }
+.bc-input::placeholder { color: var(--text3); }
+
+.send-btn {
+  width: 40px; height: 40px; background: var(--blue); border: none; border-radius: 50%;
+  color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.send-btn:active { opacity: .85; }
+
+/* ══════════════════════════════════════════
+   CLIENTS VIEW
+══════════════════════════════════════════ */
 #clients-view { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #clients-view::-webkit-scrollbar { display: none; }
 .clients-list { padding: 8px 0; }
@@ -205,7 +283,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .client-row:active { background: var(--surface); }
 .client-avatar {
-  width: 46px; height: 46px; border-radius: 50%; background: var(--blue-dim, #1a3a6a);
+  width: 46px; height: 46px; border-radius: 50%; background: #1a3a6a;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 700; color: var(--blue); flex-shrink: 0;
 }
@@ -215,12 +293,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .client-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
 .unread-badge {
   background: var(--blue); color: #fff; font-size: 11px; font-weight: 700;
-  min-width: 20px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 0 5px;
+  min-width: 20px; height: 20px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; padding: 0 5px;
 }
 .last-seen-txt { font-size: 11px; color: var(--text3); }
 .client-inactive { opacity: .35; }
 
-/* ── Chat panel ── */
+/* ══════════════════════════════════════════
+   PRIVATE CHAT PANEL
+══════════════════════════════════════════ */
 #chat-panel {
   position: fixed; inset: 0; background: var(--bg); z-index: 40;
   display: none; flex-direction: column;
@@ -242,7 +323,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .chat-panel-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
 .danger-btn {
   padding: 6px 12px; border-radius: 8px; border: 1px solid #ff3b30;
-  background: transparent; color: #ff3b30; font-size: 12px; cursor: pointer;
+  background: transparent; color: #ff3b30; font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 
 .chat-messages {
@@ -256,7 +337,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .msg-row.from-client { align-items: flex-start; }
 .bubble {
   max-width: 78%; padding: 9px 13px; border-radius: 18px;
-  word-break: break-word; white-space: pre-wrap; font-size: 15px; line-height: 1.4; position: relative;
+  word-break: break-word; white-space: pre-wrap; font-size: 15px; line-height: 1.4;
 }
 .msg-row.from-admin .bubble { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
 .msg-row.from-client .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 5px; }
@@ -272,7 +353,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .typing-dots span:nth-child(3) { animation-delay: .3s; }
 @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
 
-/* Label edit bar */
 .label-bar {
   padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
   display: flex; gap: 8px; align-items: center;
@@ -289,27 +369,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   padding: 10px 12px; padding-bottom: max(10px, var(--safe-bot)); flex-shrink: 0;
 }
 .chat-media-prev { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.prev-sm {
-  position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
-}
-.prev-sm img, .prev-sm video { width: 100%; height: 100%; object-fit: cover; }
-.prev-sm button { position: absolute; top: 2px; right: 2px; width: 15px; height: 15px; background: rgba(0,0,0,.75); border: none; color: #fff; border-radius: 50%; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .composer-row { display: flex; gap: 8px; align-items: flex-end; }
 .attach-sm {
-  width: 42px; height: 42px; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 12px; color: var(--text2); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text2); font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
 .msg-input {
   flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 22px;
   color: var(--text); padding: 10px 16px; font-size: 15px; resize: none; outline: none;
-  max-height: 120px; min-height: 42px; font-family: inherit; line-height: 1.4;
+  max-height: 120px; min-height: 40px; font-family: inherit; line-height: 1.4;
 }
 .msg-input:focus { border-color: var(--blue); }
 .msg-input::placeholder { color: var(--text3); }
-.send-btn {
-  width: 42px; height: 42px; background: var(--blue); border: none; border-radius: 50%;
-  color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-}
 #chat-file-input { display: none; }
 .chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--text3); font-size: 14px; }
 
@@ -360,53 +432,54 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <!-- App -->
 <div id="app">
+
+  <!-- Header -->
   <div class="app-header">
     <div class="header-logo">VP</div>
-    <div class="header-title">Admin</div>
+    <div class="header-title" id="header-title">Sändningar</div>
+    <button class="icon-btn" id="search-toggle-btn" title="Sök">🔍</button>
     <button class="hbtn primary" id="invite-open-btn">+ Bjud in</button>
     <button class="hbtn" id="logout-btn">Logga ut</button>
   </div>
 
+  <!-- Search bar (hidden by default) -->
+  <div id="search-bar" style="display:none">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="search-input" placeholder="Sök sändningar…">
+    </div>
+  </div>
+
   <div style="flex:1;overflow:hidden;display:flex;flex-direction:column">
 
-    <!-- Compose -->
-    <div class="view active" id="compose-view">
-      <div class="compose-card">
-        <div class="compose-card-header">Ny sändning</div>
-        <textarea class="compose-textarea" id="bc-text" placeholder="Skriv en uppdatering till alla klienter…"></textarea>
-        <div class="compose-divider"></div>
-        <div class="compose-row">
-          <input class="compose-input" id="bc-price" placeholder="Pris (valfritt)" style="max-width:160px">
-          <label class="pin-toggle">
+    <!-- Broadcast view — group chat -->
+    <div class="view active" id="broadcast-view">
+      <!-- Feed -->
+      <div class="bc-feed" id="bc-feed">
+        <div class="feed-empty">Inga sändningar ännu</div>
+      </div>
+      <!-- Composer -->
+      <div class="bc-composer">
+        <div class="bc-media-prev" id="bc-media-prev"></div>
+        <div class="bc-extras" id="bc-extras" style="display:none">
+          <input class="bc-price-input" id="bc-price" placeholder="Pris, t.ex. 450 kr…">
+          <label class="pin-toggle-sm">
             <input type="checkbox" id="bc-pin"> Fäst
           </label>
         </div>
-        <div class="compose-divider"></div>
-        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-          <label class="media-add-btn">
-            <span>📎</span><span>Lägg till bilder / video</span>
-            <input type="file" id="file-input" multiple accept="image/*,video/*">
+        <div class="bc-main-row">
+          <label class="attach-bc" title="Lägg till bilder/video">
+            +
+            <input type="file" id="bc-file" multiple accept="image/*,video/*">
           </label>
-          <div class="media-grid-preview" id="bc-media-preview"></div>
-          <button class="post-btn" id="post-btn">Publicera sändning</button>
+          <button class="extras-toggle" id="bc-extras-btn" title="Pris / fäst">···</button>
+          <textarea class="bc-input" id="bc-text" placeholder="Skriv ett meddelande till alla…" rows="1"></textarea>
+          <button class="send-btn" id="bc-send-btn">↑</button>
         </div>
       </div>
     </div>
 
-    <!-- Feed -->
-    <div class="view" id="admin-feed-view">
-      <div class="search-bar">
-        <div class="search-wrap">
-          <span class="search-icon">🔍</span>
-          <input class="search-input" id="search-input" placeholder="Sök sändningar…">
-        </div>
-      </div>
-      <div class="feed-list" id="feed-list">
-        <div style="text-align:center;color:var(--text3);padding:40px 0;font-size:14px">Inga sändningar ännu</div>
-      </div>
-    </div>
-
-    <!-- Clients -->
+    <!-- Clients view -->
     <div class="view" id="clients-view">
       <div class="clients-list" id="clients-list">
         <div style="text-align:center;color:var(--text3);padding:40px 0;font-size:14px">Inga klienter ännu</div>
@@ -417,12 +490,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
   <!-- Tab bar -->
   <div class="tab-bar">
-    <button class="tab-btn active" id="tab-compose" onclick="switchTab('compose')">
-      <span class="tab-icon">✏️</span>
-      <span class="tab-label">Komponera</span>
-    </button>
-    <button class="tab-btn" id="tab-admin-feed" onclick="switchTab('admin-feed')">
-      <span class="tab-icon">📋</span>
+    <button class="tab-btn active" id="tab-broadcast" onclick="switchTab('broadcast')">
+      <span class="tab-icon">💬</span>
       <span class="tab-label">Sändningar</span>
     </button>
     <button class="tab-btn" id="tab-clients" onclick="switchTab('clients')">
@@ -431,9 +500,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <span class="tab-badge" id="clients-badge"></span>
     </button>
   </div>
+
 </div>
 
-<!-- Chat panel -->
+<!-- Private chat panel -->
 <div id="chat-panel">
   <div class="chat-panel-header">
     <button class="back-btn" id="chat-back">‹</button>
@@ -448,7 +518,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <button class="label-save" id="label-save-btn">Spara</button>
   </div>
   <div class="chat-messages" id="chat-messages">
-    <div class="chat-empty">💬 Ingen konversation ännu</div>
+    <div class="chat-empty">Ingen konversation ännu</div>
   </div>
   <div class="typing-row" id="typing-row" style="display:none">
     <div class="typing-dots"><span></span><span></span><span></span></div>
@@ -500,13 +570,15 @@ let socket = null;
 let broadcasts = [];
 let clients = [];
 let currentClientId = null;
-let pendingMedia = [];
+let pendingBcMedia = [];
 let pendingChatMedia = [];
 let totalUnread = 0;
+let extrasOpen = false;
+let searchVisible = false;
 
 // ── Auth ──
 document.getElementById('login-btn').onclick = login;
-document.getElementById('pw-input').addEventListener('keydown', e => e.key==='Enter' && login());
+document.getElementById('pw-input').addEventListener('keydown', e => e.key === 'Enter' && login());
 
 async function login() {
   const pw = document.getElementById('pw-input').value;
@@ -514,7 +586,8 @@ async function login() {
   err.textContent = '';
   try {
     const r = await fetch('/api/auth/admin', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
     });
     const d = await r.json();
     if (!r.ok) { err.textContent = d.error || 'Fel lösenord'; return; }
@@ -535,7 +608,33 @@ function switchTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById(tab + '-view').classList.add('active');
+  document.getElementById('header-title').textContent = tab === 'broadcast' ? 'Sändningar' : 'Klienter';
+  // Show search toggle only on broadcast tab
+  document.getElementById('search-toggle-btn').style.display = tab === 'broadcast' ? '' : 'none';
+  if (tab !== 'broadcast' && searchVisible) toggleSearch();
 }
+
+// ── Search toggle ──
+document.getElementById('search-toggle-btn').onclick = toggleSearch;
+function toggleSearch() {
+  searchVisible = !searchVisible;
+  document.getElementById('search-bar').style.display = searchVisible ? '' : 'none';
+  if (!searchVisible) {
+    document.getElementById('search-input').value = '';
+    loadBroadcasts();
+  }
+}
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(window._st);
+  window._st = setTimeout(() => loadBroadcasts(e.target.value), 300);
+});
+
+// ── Extras toggle (price + pin) ──
+document.getElementById('bc-extras-btn').onclick = () => {
+  extrasOpen = !extrasOpen;
+  document.getElementById('bc-extras').style.display = extrasOpen ? 'flex' : 'none';
+  document.getElementById('bc-extras-btn').classList.toggle('active', extrasOpen);
+};
 
 // ── Init ──
 function initApp() {
@@ -548,139 +647,207 @@ function initApp() {
 
 function connectSocket() {
   socket = io({ auth: { token } });
-  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); });
+
+  socket.on('admin:new_broadcast', d => {
+    broadcasts.push(d.broadcast);
+    appendBroadcast(d.broadcast);
+  });
+
   socket.on('broadcast:pin_updated', d => {
-    const b = broadcasts.find(x => x.id===d.id);
+    const b = broadcasts.find(x => x.id === d.id);
     if (b) b.is_pinned = d.is_pinned;
     renderFeed();
   });
+
+  socket.on('broadcast:new_reaction', d => {
+    const b = broadcasts.find(x => x.id === d.broadcast_id);
+    if (b) b.broadcast_reactions = d.reactions;
+    // Update just the reaction counts in the DOM
+    updateReactionUI(d.broadcast_id, d.reactions);
+  });
+
   socket.on('client:new_message', d => {
     if (currentClientId === d.client.id) {
       appendMsg(d.message);
       markRead(currentClientId);
     } else {
-      const c = clients.find(x => x.id===d.client.id);
-      if (c) { c.unread_count = (c.unread_count||0)+1; renderClients(); updateUnreadBadge(); }
+      const c = clients.find(x => x.id === d.client.id);
+      if (c) { c.unread_count = (c.unread_count || 0) + 1; renderClients(); updateUnreadBadge(); }
     }
   });
-  socket.on('broadcast:new_reaction', d => {
-    const b = broadcasts.find(x => x.id===d.broadcast_id);
-    if (b) b.broadcast_reactions = d.reactions;
-    renderFeed();
-  });
+
   socket.on('client:last_seen', d => {
-    const c = clients.find(x => x.id===d.client_id);
+    const c = clients.find(x => x.id === d.client_id);
     if (c) { c.last_seen_at = d.last_seen_at; renderClients(); }
   });
-  socket.on('client:joined', d => { clients.unshift({...d.client, unread_count:0}); renderClients(); });
+
+  socket.on('client:joined', d => { clients.unshift({ ...d.client, unread_count: 0 }); renderClients(); });
+
   socket.on('client:updated', d => {
-    const i = clients.findIndex(x => x.id===d.client.id);
-    if (i>=0) clients[i] = {...clients[i], ...d.client};
+    const i = clients.findIndex(x => x.id === d.client.id);
+    if (i >= 0) clients[i] = { ...clients[i], ...d.client };
     renderClients();
-    if (currentClientId===d.client.id) updateChatHeader();
+    if (currentClientId === d.client.id) updateChatHeader();
   });
+
   socket.on('client:typing', d => {
-    if (currentClientId===d.client_id) {
+    if (currentClientId === d.client_id) {
       const row = document.getElementById('typing-row');
       row.style.display = 'block';
       clearTimeout(window._tt);
-      window._tt = setTimeout(()=>row.style.display='none', 3000);
+      window._tt = setTimeout(() => row.style.display = 'none', 3000);
     }
   });
+
   socket.on('client:read_receipt', d => {
-    if (currentClientId===d.client_id) markMsgsReadUI();
+    if (currentClientId === d.client_id) markMsgsReadUI();
   });
 }
 
 // ── API ──
-function api(url, opts={}) {
-  return fetch(url, { ...opts, headers: { 'Content-Type':'application/json', Authorization:`Bearer ${token}`, ...(opts.headers||{}) } });
-}
-
-async function loadBroadcasts(q='') {
-  const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
-  const r = await api(url);
-  const d = await r.json();
-  broadcasts = d.broadcasts || [];
-  renderFeed();
-}
-
-async function loadClients() {
-  const r = await api('/api/clients');
-  const d = await r.json();
-  clients = d.clients || [];
-  renderClients();
-  updateUnreadBadge();
+function api(url, opts = {}) {
+  return fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) }
+  });
 }
 
 // ── Broadcasts ──
-function renderFeed() {
-  const list = document.getElementById('feed-list');
-  if (!broadcasts.length) {
-    list.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px 0;font-size:14px">Inga sändningar ännu</div>';
-    return;
-  }
-  const sorted = [...broadcasts].sort((a,b)=>{
-    if (a.is_pinned && !b.is_pinned) return -1;
-    if (!a.is_pinned && b.is_pinned) return 1;
-    return new Date(b.created_at)-new Date(a.created_at);
-  });
-  list.innerHTML = sorted.map(adminCardHTML).join('');
+async function loadBroadcasts(q = '') {
+  const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
+  const r = await api(url);
+  const d = await r.json();
+  // Sort chronologically for chat view
+  broadcasts = (d.broadcasts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  renderFeed();
 }
 
-function adminCardHTML(b) {
-  const date = new Date(b.created_at).toLocaleString('sv-SE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-  const media = b.broadcast_media||[];
-  const int = (b.broadcast_reactions||[]).filter(r=>r.reaction==='interested').length;
-  const nint = (b.broadcast_reactions||[]).filter(r=>r.reaction==='not_interested').length;
-  const gridClass = media.length>1 ? 'admin-card-media admin-card-media-grid' : 'admin-card-media';
+function renderFeed() {
+  const feed = document.getElementById('bc-feed');
+  if (!broadcasts.length) {
+    feed.innerHTML = '<div class="feed-empty">Inga sändningar ännu</div>';
+    return;
+  }
+  let html = '';
+  let lastDate = '';
+  for (const b of broadcasts) {
+    const d = new Date(b.created_at);
+    const dateStr = d.toLocaleDateString('sv-SE', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (dateStr !== lastDate) {
+      html += `<div class="bc-date-sep"><span>${dateStr}</span></div>`;
+      lastDate = dateStr;
+    }
+    html += bcBubbleHTML(b);
+  }
+  feed.innerHTML = html;
+  feed.scrollTop = feed.scrollHeight;
+}
 
-  const mediaHTML = media.length ? `<div class="${gridClass}">${media.map(m=>
-    m.storage_url
-      ? (m.type==='video'
-        ? `<video src="${m.storage_url}" controls preload="metadata"></video>`
-        : `<img src="${m.thumbnail_url||m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-      : `<div style="padding:16px;font-size:12px;color:var(--text3);font-style:italic">Bild ej tillgänglig</div>`
-  ).join('')}</div>` : '';
+function appendBroadcast(b) {
+  const feed = document.getElementById('bc-feed');
+  const empty = feed.querySelector('.feed-empty');
+  if (empty) empty.remove();
 
-  return `<div class="admin-card${b.is_pinned?' pinned':''}">
-    ${mediaHTML}
-    ${(b.text||b.price) ? `<div class="admin-card-body">
-      ${b.price?`<div class="admin-card-price">${esc(b.price)}</div>`:''}
-      ${b.text?`<div class="admin-card-text">${esc(b.text)}</div>`:''}
-    </div>` : ''}
-    <div class="admin-card-footer">
-      <span class="admin-card-meta">${date}</span>
-      <div class="admin-card-actions">
-        <button class="reactions-pill" onclick="showReactions('${b.id}')">👍${int} ❌${nint}</button>
-        <button class="pin-btn${b.is_pinned?' pin-active':''}" onclick="togglePin('${b.id}')">${b.is_pinned?'📌 Lossa':'📌 Fäst'}</button>
+  const d = new Date(b.created_at);
+  const dateStr = d.toLocaleDateString('sv-SE', { day: '2-digit', month: 'short', year: 'numeric' });
+  const lastSep = feed.querySelector('.bc-date-sep:last-of-type');
+  const lastDate = lastSep ? lastSep.textContent.trim() : '';
+  if (dateStr !== lastDate) {
+    const sep = document.createElement('div');
+    sep.innerHTML = `<div class="bc-date-sep"><span>${dateStr}</span></div>`;
+    feed.appendChild(sep.firstElementChild);
+  }
+
+  const div = document.createElement('div');
+  div.innerHTML = bcBubbleHTML(b);
+  feed.appendChild(div.firstElementChild);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function bcBubbleHTML(b) {
+  const time = new Date(b.created_at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const media = b.broadcast_media || [];
+  const interested = (b.broadcast_reactions || []).filter(r => r.reaction === 'interested').length;
+  const notInt = (b.broadcast_reactions || []).filter(r => r.reaction === 'not_interested').length;
+
+  let mediaHTML = '';
+  if (media.length === 1) {
+    const m = media[0];
+    mediaHTML = m.storage_url
+      ? (m.type === 'video'
+        ? `<video src="${m.storage_url}" controls style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px"></video>`
+        : `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer" loading="lazy">`)
+      : '';
+  } else if (media.length > 1) {
+    const imgs = media.map(m => m.storage_url && m.type !== 'video'
+      ? `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`
+      : ''
+    ).join('');
+    mediaHTML = `<div class="bc-media-grid" style="margin-bottom:6px">${imgs}</div>`;
+  }
+
+  return `<div class="bc-msg-row" data-id="${b.id}">
+    ${b.is_pinned ? '<div class="bc-pin-tag">📌 Fäst</div>' : ''}
+    <div class="bc-bubble">
+      ${mediaHTML}
+      ${b.price ? `<div class="bc-bubble-price">${esc(b.price)}</div>` : ''}
+      ${b.text ? `<div class="bc-bubble-text">${esc(b.text)}</div>` : ''}
+      <div class="bc-bubble-footer">
+        <span class="bc-bubble-time">${time}</span>
+        <button class="bc-react-btn" onclick="showReactions('${b.id}')">✓ ${interested} &nbsp; ✕ ${notInt}</button>
+        <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">📌</button>
       </div>
     </div>
   </div>`;
+}
+
+function updateReactionUI(broadcastId, reactions) {
+  const row = document.querySelector(`.bc-msg-row[data-id="${broadcastId}"]`);
+  if (!row) return;
+  const interested = reactions.filter(r => r.reaction === 'interested').length;
+  const notInt = reactions.filter(r => r.reaction === 'not_interested').length;
+  const btn = row.querySelector('.bc-react-btn');
+  if (btn) btn.innerHTML = `✓ ${interested} &nbsp; ✕ ${notInt}`;
 }
 
 async function postBroadcast() {
   const text = document.getElementById('bc-text').value.trim();
   const price = document.getElementById('bc-price').value.trim();
   const is_pinned = document.getElementById('bc-pin').checked;
-  const btn = document.getElementById('post-btn');
-  btn.textContent = 'Publicerar…'; btn.disabled = true;
+  if (!text && !price && !pendingBcMedia.length) return;
+
+  const btn = document.getElementById('bc-send-btn');
+  btn.disabled = true;
+
   const r = await api('/api/broadcasts', {
-    method:'POST', body: JSON.stringify({ text, price, is_pinned, media: pendingMedia })
+    method: 'POST',
+    body: JSON.stringify({ text, price, is_pinned, media: pendingBcMedia })
   });
-  btn.textContent = 'Publicera sändning'; btn.disabled = false;
+
+  btn.disabled = false;
   if (r.ok) {
     document.getElementById('bc-text').value = '';
     document.getElementById('bc-price').value = '';
     document.getElementById('bc-pin').checked = false;
-    pendingMedia = [];
-    document.getElementById('bc-media-preview').innerHTML = '';
-    switchTab('admin-feed');
+    pendingBcMedia = [];
+    document.getElementById('bc-media-prev').innerHTML = '';
+    if (extrasOpen) {
+      extrasOpen = false;
+      document.getElementById('bc-extras').style.display = 'none';
+      document.getElementById('bc-extras-btn').classList.remove('active');
+    }
+    autoResize(document.getElementById('bc-text'));
   }
 }
 
+document.getElementById('bc-send-btn').onclick = postBroadcast;
+document.getElementById('bc-text').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postBroadcast(); }
+});
+document.getElementById('bc-text').addEventListener('input', function () { autoResize(this); });
+
 async function togglePin(id) {
-  await api(`/api/broadcasts/${id}/pin`, { method:'PATCH' });
+  await api(`/api/broadcasts/${id}/pin`, { method: 'PATCH' });
 }
 
 async function showReactions(id) {
@@ -689,37 +856,31 @@ async function showReactions(id) {
   const list = document.getElementById('reaction-list');
   list.innerHTML = !d.reactions?.length
     ? '<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px">Inga reaktioner ännu</div>'
-    : d.reactions.map(r=>`<div class="reaction-item">
-        <span class="reaction-name">${esc(r.clients?.admin_label||r.clients?.display_name||'Okänd')}</span>
-        <span class="reaction-val">${r.reaction==='interested'?'👍 Intresserad':'❌ Inte intresserad'}</span>
+    : d.reactions.map(r => `<div class="reaction-item">
+        <span class="reaction-name">${esc(r.clients?.admin_label || r.clients?.display_name || 'Okänd')}</span>
+        <span class="reaction-val">${r.reaction === 'interested' ? '✓ Intresserad' : '✕ Inte intresserad'}</span>
       </div>`).join('');
   document.getElementById('reaction-modal').classList.add('open');
 }
 
-document.getElementById('post-btn').onclick = postBroadcast;
-document.getElementById('search-input').addEventListener('input', e => {
-  clearTimeout(window._st);
-  window._st = setTimeout(()=>loadBroadcasts(e.target.value), 300);
-});
-
 // ── Clients ──
 function renderClients() {
   const list = document.getElementById('clients-list');
-  const active = clients.filter(c=>!c.is_inactive);
-  const inactive = clients.filter(c=>c.is_inactive);
+  const active = clients.filter(c => !c.is_inactive);
+  const inactive = clients.filter(c => c.is_inactive);
   if (!clients.length) {
     list.innerHTML = '<div style="text-align:center;color:var(--text3);padding:40px 0;font-size:14px">Inga klienter ännu</div>';
     return;
   }
-  list.innerHTML = [...active,...inactive].map(c=>{
-    const init = (c.admin_label||c.display_name||'?')[0].toUpperCase();
+  list.innerHTML = [...active, ...inactive].map(c => {
+    const init = (c.admin_label || c.display_name || '?')[0].toUpperCase();
     const seen = c.last_seen_at ? timeAgo(c.last_seen_at) : '';
-    const unread = c.unread_count>0 ? `<div class="unread-badge">${c.unread_count}</div>` : '';
-    return `<div class="client-row${c.is_inactive?' client-inactive':''}" onclick="openChat('${c.id}')">
+    const unread = c.unread_count > 0 ? `<div class="unread-badge">${c.unread_count}</div>` : '';
+    return `<div class="client-row${c.is_inactive ? ' client-inactive' : ''}" onclick="openChat('${c.id}')">
       <div class="client-avatar">${init}</div>
       <div class="client-body">
-        <div class="client-name">${esc(c.admin_label||c.display_name)}</div>
-        <div class="client-label">${c.admin_label?esc(c.display_name):''}</div>
+        <div class="client-name">${esc(c.admin_label || c.display_name)}</div>
+        <div class="client-label">${c.admin_label ? esc(c.display_name) : ''}</div>
       </div>
       <div class="client-right">
         ${unread}
@@ -730,36 +891,44 @@ function renderClients() {
 }
 
 function updateUnreadBadge() {
-  totalUnread = clients.reduce((s,c)=>s+(c.unread_count||0),0);
+  totalUnread = clients.reduce((s, c) => s + (c.unread_count || 0), 0);
   const badge = document.getElementById('clients-badge');
-  if (totalUnread>0) { badge.textContent=totalUnread; badge.style.display='flex'; }
-  else badge.style.display='none';
+  if (totalUnread > 0) { badge.textContent = totalUnread; badge.style.display = 'flex'; }
+  else badge.style.display = 'none';
 }
 
-// ── Chat ──
+async function loadClients() {
+  const r = await api('/api/clients');
+  const d = await r.json();
+  clients = d.clients || [];
+  renderClients();
+  updateUnreadBadge();
+}
+
+// ── Private chat ──
 async function openChat(clientId) {
   currentClientId = clientId;
   document.getElementById('chat-panel').classList.add('open');
   updateChatHeader();
   const r = await api(`/api/messages/${clientId}`);
   const d = await r.json();
-  const msgs = d.messages||[];
+  const msgs = d.messages || [];
   const c = document.getElementById('chat-messages');
   c.innerHTML = !msgs.length
-    ? '<div class="chat-empty">💬 Ingen konversation ännu</div>'
+    ? '<div class="chat-empty">Ingen konversation ännu</div>'
     : msgs.map(msgHTML).join('');
   c.scrollTop = c.scrollHeight;
   await markRead(clientId);
-  const cl = clients.find(x=>x.id===clientId);
-  if (cl) { cl.unread_count=0; renderClients(); updateUnreadBadge(); }
+  const cl = clients.find(x => x.id === clientId);
+  if (cl) { cl.unread_count = 0; renderClients(); updateUnreadBadge(); }
 }
 
 function updateChatHeader() {
-  const c = clients.find(x=>x.id===currentClientId);
+  const c = clients.find(x => x.id === currentClientId);
   if (!c) return;
-  document.getElementById('cp-name').textContent = c.admin_label||c.display_name;
+  document.getElementById('cp-name').textContent = c.admin_label || c.display_name;
   document.getElementById('cp-sub').textContent = c.admin_label ? c.display_name : '';
-  document.getElementById('label-input').value = c.admin_label||'';
+  document.getElementById('label-input').value = c.admin_label || '';
   document.getElementById('toggle-inactive-btn').textContent = c.is_inactive ? 'Aktivera' : 'Inaktivera';
 }
 
@@ -774,28 +943,28 @@ function appendMsg(m) {
 }
 
 function msgHTML(m) {
-  const time = new Date(m.created_at).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
-  const from = m.sender==='admin' ? 'from-admin' : 'from-client';
-  const media = m.message_media||[];
-  const mediaHTML = media.map(md=>md.storage_url
-    ? (md.type==='video'
+  const time = new Date(m.created_at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const from = m.sender === 'admin' ? 'from-admin' : 'from-client';
+  const media = m.message_media || [];
+  const mediaHTML = media.map(md => md.storage_url
+    ? (md.type === 'video'
       ? `<video src="${md.storage_url}" controls style="max-width:200px;border-radius:10px;margin-top:6px;display:block"></video>`
-      : `<img src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:200px;border-radius:10px;margin-top:6px;cursor:pointer;display:block" loading="lazy">`)
+      : `<img src="${md.thumbnail_url || md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:200px;border-radius:10px;margin-top:6px;cursor:pointer;display:block" loading="lazy">`)
     : `<span style="font-size:12px;color:#555;font-style:italic">Bild ej tillgänglig</span>`
   ).join('');
-  const tick = m.sender==='admin' ? `<span class="read-tick">${m.read?'✓✓':'✓'}</span>` : '';
+  const tick = m.sender === 'admin' ? `<span class="read-tick">${m.read ? '✓✓' : '✓'}</span>` : '';
   return `<div class="msg-row ${from}">
-    <div class="bubble">${m.text?esc(m.text):''}${mediaHTML?`<div class="bubble-media">${mediaHTML}</div>`:''}</div>
+    <div class="bubble">${m.text ? esc(m.text) : ''}${mediaHTML ? `<div class="bubble-media">${mediaHTML}</div>` : ''}</div>
     <div class="msg-meta">${time} ${tick}</div>
   </div>`;
 }
 
 function markMsgsReadUI() {
-  document.querySelectorAll('.msg-row.from-admin .read-tick').forEach(el=>el.textContent='✓✓');
+  document.querySelectorAll('.msg-row.from-admin .read-tick').forEach(el => el.textContent = '✓✓');
 }
 
 async function markRead(clientId) {
-  await api(`/api/messages/${clientId}/read`, { method:'POST' });
+  await api(`/api/messages/${clientId}/read`, { method: 'POST' });
 }
 
 async function sendMessage() {
@@ -803,8 +972,9 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text && !pendingChatMedia.length) return;
   input.value = '';
+  autoResize(input);
   const r = await api(`/api/messages/${currentClientId}`, {
-    method:'POST', body: JSON.stringify({ text, media: pendingChatMedia })
+    method: 'POST', body: JSON.stringify({ text, media: pendingChatMedia })
   });
   if (r.ok) {
     pendingChatMedia = [];
@@ -816,9 +986,10 @@ async function sendMessage() {
 
 document.getElementById('send-btn').onclick = sendMessage;
 document.getElementById('msg-input').addEventListener('keydown', e => {
-  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   if (socket) socket.emit('admin:typing', { client_id: currentClientId });
 });
+document.getElementById('msg-input').addEventListener('input', function () { autoResize(this); });
 
 document.getElementById('chat-back').onclick = () => {
   document.getElementById('chat-panel').classList.remove('open');
@@ -828,47 +999,45 @@ document.getElementById('chat-back').onclick = () => {
 document.getElementById('label-save-btn').onclick = async () => {
   if (!currentClientId) return;
   const label = document.getElementById('label-input').value.trim();
-  await api(`/api/clients/${currentClientId}/label`, { method:'PATCH', body: JSON.stringify({ admin_label: label }) });
+  await api(`/api/clients/${currentClientId}/label`, { method: 'PATCH', body: JSON.stringify({ admin_label: label }) });
 };
 
 document.getElementById('toggle-inactive-btn').onclick = async () => {
   if (!currentClientId) return;
-  await api(`/api/clients/${currentClientId}/inactive`, { method:'PATCH' });
+  await api(`/api/clients/${currentClientId}/inactive`, { method: 'PATCH' });
 };
 
 // ── Media upload ──
-async function uploadFiles(files, arr, prevEl) {
+async function uploadFiles(files, arr, prevEl, isBc) {
   const form = new FormData();
-  files.forEach(f=>form.append('files',f));
-  const r = await fetch('/api/upload', { method:'POST', headers:{Authorization:`Bearer ${token}`}, body:form });
+  files.forEach(f => form.append('files', f));
+  const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   if (!r.ok) { alert('Uppladdning misslyckades'); return; }
   const d = await r.json();
   for (const f of d.files) {
     arr.push(f);
     const div = document.createElement('div');
-    div.className = arr===pendingMedia ? 'prev-thumb' : 'prev-sm';
-    const cls = arr===pendingMedia ? 'prev-thumb' : 'prev-sm';
-    div.className = cls;
-    div.innerHTML = f.type==='video'
-      ? `<video src="${f.url}" muted></video><button onclick="rmFile(this,'${f.url}',${arr===pendingMedia})">✕</button>`
-      : `<img src="${f.thumbUrl}"><button onclick="rmFile(this,'${f.url}',${arr===pendingMedia})">✕</button>`;
+    div.className = 'prev-sm';
+    div.innerHTML = f.type === 'video'
+      ? `<video src="${f.url}" muted></video><button onclick="rmFile(this,'${f.url}',${isBc})">✕</button>`
+      : `<img src="${f.thumbUrl}"><button onclick="rmFile(this,'${f.url}',${isBc})">✕</button>`;
     prevEl.appendChild(div);
   }
 }
 
 function rmFile(btn, url, isBc) {
-  const arr = isBc ? pendingMedia : pendingChatMedia;
-  const i = arr.findIndex(f=>f.url===url);
-  if (i>=0) arr.splice(i,1);
-  btn.closest(isBc?'.prev-thumb':'.prev-sm').remove();
+  const arr = isBc ? pendingBcMedia : pendingChatMedia;
+  const i = arr.findIndex(f => f.url === url);
+  if (i >= 0) arr.splice(i, 1);
+  btn.closest('.prev-sm').remove();
 }
 
-document.getElementById('file-input').addEventListener('change', async e => {
-  await uploadFiles(Array.from(e.target.files), pendingMedia, document.getElementById('bc-media-preview'));
+document.getElementById('bc-file').addEventListener('change', async e => {
+  await uploadFiles(Array.from(e.target.files), pendingBcMedia, document.getElementById('bc-media-prev'), true);
   e.target.value = '';
 });
 document.getElementById('chat-file-input').addEventListener('change', async e => {
-  await uploadFiles(Array.from(e.target.files), pendingChatMedia, document.getElementById('chat-media-prev'));
+  await uploadFiles(Array.from(e.target.files), pendingChatMedia, document.getElementById('chat-media-prev'), false);
   e.target.value = '';
 });
 
@@ -878,8 +1047,8 @@ document.getElementById('invite-open-btn').onclick = () => {
   document.getElementById('invite-modal').classList.add('open');
 };
 document.getElementById('gen-invites-btn').onclick = async () => {
-  const count = parseInt(document.getElementById('invite-count').value)||1;
-  const r = await api('/api/invite', { method:'POST', body: JSON.stringify({ count }) });
+  const count = parseInt(document.getElementById('invite-count').value) || 1;
+  const r = await api('/api/invite', { method: 'POST', body: JSON.stringify({ count }) });
   const d = await r.json();
   const container = document.getElementById('invite-links');
   container.innerHTML = '';
@@ -895,40 +1064,47 @@ document.getElementById('gen-invites-btn').onclick = async () => {
 async function copyLink(url, btn) {
   await navigator.clipboard.writeText(url);
   btn.textContent = '✓ Kopierat';
-  setTimeout(()=>btn.textContent='Kopiera', 2000);
+  setTimeout(() => btn.textContent = 'Kopiera', 2000);
 }
 
 // ── Modal close on backdrop ──
 document.querySelectorAll('.modal-bg').forEach(m => {
-  m.addEventListener('click', e => { if (e.target===m) m.classList.remove('open'); });
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
 });
 
 // ── Lightbox ──
 function openLightbox(src) {
-  document.getElementById('lb-img').src=src;
+  document.getElementById('lb-img').src = src;
   document.getElementById('lightbox').classList.add('open');
 }
 document.getElementById('lightbox').onclick = e => {
-  if (e.target===e.currentTarget||e.target.id==='lb-close') document.getElementById('lightbox').classList.remove('open');
+  if (e.target === e.currentTarget || e.target.id === 'lb-close')
+    document.getElementById('lightbox').classList.remove('open');
 };
+
+// ── Auto-resize textareas ──
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
 
 // ── Utils ──
 function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function timeAgo(iso) {
-  const d = (Date.now()-new Date(iso))/1000;
-  if (d<60) return 'just nu';
-  if (d<3600) return `${Math.floor(d/60)}m`;
-  if (d<86400) return `${Math.floor(d/3600)}t`;
-  return `${Math.floor(d/86400)}d`;
+  const d = (Date.now() - new Date(iso)) / 1000;
+  if (d < 60) return 'just nu';
+  if (d < 3600) return `${Math.floor(d / 60)}m`;
+  if (d < 86400) return `${Math.floor(d / 3600)}t`;
+  return `${Math.floor(d / 86400)}d`;
 }
 
 // ── Boot ──
 if (token) {
-  fetch('/api/clients', { headers: { Authorization:`Bearer ${token}` } })
-    .then(r => { if (r.ok) initApp(); else { localStorage.removeItem('vp_admin_token'); token=null; } })
-    .catch(()=>{});
+  fetch('/api/clients', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => { if (r.ok) initApp(); else { localStorage.removeItem('vp_admin_token'); token = null; } })
+    .catch(() => {});
 }
 </script>
 </body>
