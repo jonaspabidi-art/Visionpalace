@@ -386,6 +386,7 @@ let chatUnread = 0;
 let chatOpen = false;
 let deferredPWA = null;
 let renderedMsgIds = new Set();
+let loadingMsgs = false;
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
@@ -612,6 +613,8 @@ async function react(id, reaction) {
 }
 
 async function loadMessages() {
+  if (loadingMsgs) return;
+  loadingMsgs = true;
   try {
     const r = await fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} });
     if (!r.ok) return;
@@ -634,7 +637,7 @@ async function loadMessages() {
       c.appendChild(div.firstElementChild);
     }
     if (wasEmpty || atBottom) scrollChat();
-  } catch(e) {}
+  } catch(e) {} finally { loadingMsgs = false; }
 }
 
 function appendChatMsg(m) {
