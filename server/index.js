@@ -101,21 +101,28 @@ let adminPushSub = null;   // single admin subscription
 
 async function webPushClient(clientId, title, body) {
   const sub = pushSubs.get(clientId);
-  if (!sub) { console.log('No push sub for client:', clientId); return; }
+  if (!sub) { console.log(`[Push] No subscription for client ${clientId} (total: ${pushSubs.size})`); return; }
+  console.log(`[Push] Sending to client ${clientId}...`);
   try {
     await webpush.sendNotification(sub, JSON.stringify({ title, body }));
+    console.log(`[Push] Delivered OK to ${clientId}`);
   } catch(e) {
-    if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId);
-    else console.error('Web push error:', e.message);
+    console.error(`[Push] Failed for ${clientId}: ${e.statusCode} ${e.message}`);
+    if (e.statusCode === 410 || e.statusCode === 404) { pushSubs.delete(clientId); }
   }
 }
 
 async function webPushAll(title, body) {
+  console.log(`[Push] Broadcasting to ${pushSubs.size} subscribers`);
   const sends = [];
   for (const [clientId, sub] of pushSubs) {
     sends.push(
       webpush.sendNotification(sub, JSON.stringify({ title, body }))
-        .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId); })
+        .then(() => console.log(`[Push] Broadcast OK to ${clientId}`))
+        .catch(e => {
+          console.error(`[Push] Broadcast failed for ${clientId}: ${e.statusCode} ${e.message}`);
+          if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId);
+        })
     );
   }
   await Promise.allSettled(sends);
