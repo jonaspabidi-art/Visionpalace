@@ -654,6 +654,7 @@ function connectSocket() {
   socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
 
   socket.on('admin:new_broadcast', d => {
+    if (broadcasts.find(x => x.id === d.broadcast.id)) return;
     broadcasts.push(d.broadcast);
     appendBroadcast(d.broadcast);
   });
@@ -851,6 +852,7 @@ async function postBroadcast() {
 
   btn.disabled = false;
   if (r.ok) {
+    const d = await r.json();
     document.getElementById('bc-text').value = '';
     document.getElementById('bc-price').value = '';
     document.getElementById('bc-pin').checked = false;
@@ -862,6 +864,8 @@ async function postBroadcast() {
       document.getElementById('bc-extras-btn').classList.remove('active');
     }
     autoResize(document.getElementById('bc-text'));
+    broadcasts.push(d.broadcast);
+    appendBroadcast(d.broadcast);
   }
 }
 
