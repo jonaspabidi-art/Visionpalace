@@ -682,8 +682,15 @@ function connectSocket() {
       appendMsg(d.message);
       markRead(currentClientId);
     } else {
-      const c = clients.find(x => x.id === d.client.id);
-      if (c) { c.unread_count = (c.unread_count || 0) + 1; renderClients(); updateUnreadBadge(); }
+      let c = clients.find(x => x.id === d.client.id);
+      if (!c) {
+        // Client not in local list yet — refresh from server
+        loadClients();
+      } else {
+        c.unread_count = (c.unread_count || 0) + 1;
+        renderClients();
+        updateUnreadBadge();
+      }
     }
   });
 
@@ -693,6 +700,12 @@ function connectSocket() {
   });
 
   socket.on('client:joined', d => { clients.unshift({ ...d.client, unread_count: 0 }); renderClients(); });
+
+  // After reconnect (e.g. server restart), reload fresh data
+  socket.on('connect', () => {
+    loadBroadcasts();
+    loadClients();
+  });
 
   socket.on('client:updated', d => {
     const i = clients.findIndex(x => x.id === d.client.id);
