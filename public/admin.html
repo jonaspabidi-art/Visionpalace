@@ -103,8 +103,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   color: var(--text3); transition: color .15s; position: relative;
 }
 .tab-btn.active { color: var(--blue); }
-.tab-icon { font-size: 20px; }
-.tab-label { font-size: 10px; font-weight: 600; }
+.tab-icon { font-size: 16px; line-height: 1; }
+.tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
 .tab-badge {
   position: absolute; top: 6px; right: calc(50% - 20px);
   background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700;
@@ -442,7 +442,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="app-header">
     <div class="header-logo">VP</div>
     <div class="header-title" id="header-title">Sändningar</div>
-    <button class="icon-btn" id="search-toggle-btn" title="Sök">🔍</button>
+    <button class="icon-btn" id="search-toggle-btn" title="Sök" style="font-size:13px;font-weight:600;letter-spacing:0.3px">Sök</button>
     <button class="hbtn primary" id="invite-open-btn">+ Bjud in</button>
     <button class="hbtn" id="logout-btn">Logga ut</button>
   </div>
@@ -450,7 +450,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <!-- Search bar (hidden by default) -->
   <div id="search-bar" style="display:none">
     <div class="search-wrap">
-      <span class="search-icon">🔍</span>
+      <span class="search-icon">⊙</span>
       <input class="search-input" id="search-input" placeholder="Sök sändningar…">
     </div>
   </div>
@@ -496,11 +496,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <!-- Tab bar -->
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-broadcast" onclick="switchTab('broadcast')">
-      <span class="tab-icon">💬</span>
+      <span class="tab-icon">≡</span>
       <span class="tab-label">Sändningar</span>
     </button>
     <button class="tab-btn" id="tab-clients" onclick="switchTab('clients')">
-      <span class="tab-icon">👥</span>
+      <span class="tab-icon">◎</span>
       <span class="tab-label">Klienter</span>
       <span class="tab-badge" id="clients-badge"></span>
     </button>
@@ -531,7 +531,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="chat-composer">
     <div class="chat-media-prev" id="chat-media-prev"></div>
     <div class="composer-row">
-      <label class="attach-sm">📎<input type="file" id="chat-file-input" multiple accept="image/*,video/*"></label>
+      <label class="attach-sm">+<input type="file" id="chat-file-input" multiple accept="image/*,video/*"></label>
       <textarea class="msg-input" id="msg-input" placeholder="Skriv ett meddelande…" rows="1"></textarea>
       <button class="send-btn" id="send-btn">↑</button>
     </div>
@@ -798,7 +798,7 @@ function bcBubbleHTML(b) {
   }
 
   return `<div class="bc-msg-row" data-id="${b.id}">
-    ${b.is_pinned ? '<div class="bc-pin-tag">📌 Fäst</div>' : ''}
+    ${b.is_pinned ? '<div class="bc-pin-tag">◈ Fäst</div>' : ''}
     <div class="bc-bubble">
       ${mediaHTML}
       ${b.price ? `<div class="bc-bubble-price">${esc(b.price)}</div>` : ''}
@@ -806,8 +806,8 @@ function bcBubbleHTML(b) {
       <div class="bc-bubble-footer">
         <span class="bc-bubble-time">${time}</span>
         <button class="bc-react-btn" onclick="showReactions('${b.id}')">✓ ${interested} &nbsp; ✕ ${notInt}</button>
-        <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">📌</button>
-        <button class="bc-del-btn" onclick="deleteBroadcast('${b.id}')" title="Ta bort">🗑</button>
+        <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">◈</button>
+        <button class="bc-del-btn" onclick="deleteBroadcast('${b.id}')" title="Ta bort">✕</button>
       </div>
     </div>
   </div>`;
