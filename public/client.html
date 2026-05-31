@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -15,158 +15,169 @@
   --bg: #0a0a0a;
   --surface: #141414;
   --surface2: #1e1e1e;
-  --border: #2a2a2a;
+  --border: #252525;
   --blue: #4a9eff;
   --text: #f0f0f0;
   --text2: #888;
-  --text3: #555;
+  --text3: #4a4a4a;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bot: env(safe-area-inset-bottom, 0px);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; overflow: hidden; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 
 /* ── Join ── */
 #join-screen {
   display: flex; align-items: center; justify-content: center;
-  height: 100dvh; padding: 24px;
+  height: 100dvh; padding: 32px 24px;
 }
-.join-card { width: 100%; max-width: 360px; text-align: center; }
-.join-logo {
-  width: 72px; height: 72px; background: var(--blue); border-radius: 22px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 28px; font-weight: 900; color: #fff; margin: 0 auto 20px;
-  box-shadow: 0 8px 32px rgba(74,158,255,.35);
+.join-card { width: 100%; max-width: 340px; }
+.join-wordmark {
+  font-size: 13px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--blue); margin-bottom: 32px;
 }
-.join-card h1 { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
-.join-card p { color: var(--text2); font-size: 14px; margin-bottom: 28px; }
+.join-card h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 8px; }
+.join-card p { color: var(--text2); font-size: 15px; margin-bottom: 32px; line-height: 1.5; }
+.field-label { font-size: 12px; font-weight: 600; letter-spacing: 0.5px; color: var(--text2); text-transform: uppercase; margin-bottom: 8px; }
 .join-input {
   width: 100%; padding: 15px 18px; background: var(--surface2); border: 1.5px solid var(--border);
   border-radius: 14px; color: var(--text); font-size: 16px; outline: none; -webkit-appearance: none;
+  transition: border-color .2s;
 }
 .join-input:focus { border-color: var(--blue); }
 .join-input::placeholder { color: var(--text3); }
 .join-btn {
-  width: 100%; margin-top: 12px; padding: 15px; background: var(--blue); border: none;
+  width: 100%; margin-top: 14px; padding: 16px; background: var(--blue); border: none;
   border-radius: 14px; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  letter-spacing: -0.2px; transition: opacity .15s;
 }
 .join-btn:active { opacity: .85; }
-.join-err { color: #ff5555; font-size: 13px; margin-top: 10px; }
+.join-err { color: #ff5555; font-size: 13px; margin-top: 12px; }
 
-/* ── App ── */
+/* ── App shell ── */
 #app { display: none; height: 100dvh; flex-direction: column; }
 
 /* ── Header ── */
 .header {
-  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  display: flex; align-items: center; gap: 14px; padding: 0 18px;
   height: calc(58px + var(--safe-top)); padding-top: var(--safe-top);
   background: var(--surface); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; position: relative; z-index: 10;
+  flex-shrink: 0;
 }
-.header-avatar {
-  width: 40px; height: 40px; border-radius: 50%; background: var(--blue);
+.header-mark {
+  width: 36px; height: 36px; border-radius: 10px; background: var(--blue);
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 800; color: #fff; flex-shrink: 0;
+  font-size: 12px; font-weight: 900; color: #fff; letter-spacing: 0.5px; flex-shrink: 0;
 }
 .header-info { flex: 1; }
-.header-name { font-size: 16px; font-weight: 700; }
-.header-status { font-size: 12px; color: var(--text3); margin-top: 1px; }
+.header-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+.header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; letter-spacing: 0.1px; }
 
-/* ── Feed (broadcast chat style) ── */
+/* ── Feed ── */
 #feed-screen { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .feed-scroll {
-  flex: 1; overflow-y: auto; padding: 12px 12px 8px;
+  flex: 1; overflow-y: auto; padding: 16px 14px 10px;
   display: flex; flex-direction: column; gap: 2px;
   -webkit-overflow-scrolling: touch;
 }
 .feed-scroll::-webkit-scrollbar { display: none; }
 
-/* Date pill */
-.date-pill {
-  text-align: center; margin: 10px 0 6px; pointer-events: none;
-}
+.date-pill { text-align: center; margin: 12px 0 8px; }
 .date-pill span {
-  background: var(--surface2); color: var(--text3); font-size: 11px;
-  padding: 4px 12px; border-radius: 10px; font-weight: 500;
+  background: var(--surface2); color: var(--text3); font-size: 11px; font-weight: 500;
+  padding: 4px 12px; border-radius: 10px; letter-spacing: 0.3px;
 }
 
-/* Broadcast bubble — left aligned like incoming WhatsApp message */
-.bc-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 6px; }
-.bc-row .sender-avatar {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--blue);
+/* Broadcast bubble */
+.bc-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.bc-mark {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--blue);
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 800; color: #fff; flex-shrink: 0; align-self: flex-end;
+  font-size: 10px; font-weight: 900; color: #fff; flex-shrink: 0; letter-spacing: 0.3px;
 }
 .bc-bubble {
-  max-width: calc(100% - 48px); background: var(--surface);
+  max-width: calc(100% - 46px); background: var(--surface);
   border-radius: 18px 18px 18px 4px; overflow: hidden;
-  border: 1px solid var(--border); position: relative;
+  border: 1px solid var(--border);
 }
-.bc-bubble.pinned { border-color: rgba(74,158,255,.5); }
+.bc-bubble.pinned { border-color: rgba(74,158,255,.4); }
 
-.bc-pin-label {
-  display: flex; align-items: center; gap: 5px; padding: 7px 14px 0;
-  font-size: 11px; color: var(--blue); font-weight: 600; letter-spacing: 0.2px;
+.bc-pin-bar {
+  padding: 8px 14px 0; font-size: 11px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--blue);
+  display: flex; align-items: center; gap: 6px;
+}
+.bc-pin-bar::before {
+  content: ''; display: block; width: 3px; height: 12px;
+  background: var(--blue); border-radius: 2px;
 }
 
-/* Media inside bubble */
 .bc-media img {
-  width: 100%; display: block; max-height: 360px; object-fit: cover; cursor: pointer;
+  width: 100%; display: block; max-height: 340px; object-fit: cover; cursor: pointer;
 }
-.bc-media video { width: 100%; display: block; max-height: 300px; background: #000; }
+.bc-media video { width: 100%; display: block; max-height: 280px; background: #000; }
 .bc-media-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .bc-media-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; cursor: pointer; display: block; }
 .bc-media-grid video { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
-.media-expired { font-size: 12px; color: var(--text3); padding: 14px 16px; font-style: italic; }
+.media-expired { font-size: 12px; color: var(--text3); padding: 16px; font-style: italic; text-align: center; }
 
-/* Text body inside bubble */
-.bc-body { padding: 10px 14px 8px; }
-.bc-price { font-size: 20px; font-weight: 800; color: var(--blue); margin-bottom: 5px; letter-spacing: -0.5px; }
-.bc-text { font-size: 14px; color: #d8d8d8; line-height: 1.55; white-space: pre-wrap; }
-.bc-time { font-size: 11px; color: var(--text3); margin-top: 6px; }
+.bc-body { padding: 12px 14px 8px; }
+.bc-price { font-size: 22px; font-weight: 800; color: var(--blue); letter-spacing: -0.8px; margin-bottom: 6px; }
+.bc-text { font-size: 14px; color: #cccccc; line-height: 1.6; white-space: pre-wrap; }
+.bc-time { font-size: 11px; color: var(--text3); margin-top: 8px; letter-spacing: 0.2px; }
 
-/* Reactions inside bubble */
-.bc-reactions {
-  display: flex; gap: 6px; padding: 0 10px 10px;
-}
+.bc-reactions { display: flex; gap: 6px; padding: 0 10px 10px; }
 .react-btn {
-  flex: 1; padding: 9px 6px; border-radius: 10px; border: 1.5px solid var(--border);
-  background: var(--surface2); color: var(--text3); font-size: 13px; font-weight: 600;
+  flex: 1; padding: 9px 6px; border-radius: 10px; border: 1px solid var(--border);
+  background: transparent; color: var(--text3); font-size: 12px; font-weight: 600;
   cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
-  transition: all .15s; -webkit-appearance: none; outline: none;
+  transition: all .15s; -webkit-appearance: none; outline: none; letter-spacing: 0.2px;
 }
-.react-btn:active { transform: scale(.95); }
-.react-btn.yes { background: rgba(34,197,94,.1); border-color: #22c55e; color: #22c55e; }
-.react-btn.no  { background: rgba(239,68,68,.1); border-color: #ef4444; color: #ef4444; }
+.react-btn:active { opacity: .7; }
+.react-btn.yes { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.5); color: #22c55e; }
+.react-btn.no  { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.5); color: #ef4444; }
 
 .feed-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   flex: 1; gap: 10px; color: var(--text3);
 }
-.feed-empty-icon { font-size: 52px; opacity: .2; }
-.feed-empty p { font-size: 14px; }
+.feed-empty-icon {
+  width: 56px; height: 56px; border-radius: 16px; background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; color: var(--text3);
+}
+.feed-empty p { font-size: 14px; letter-spacing: 0.1px; }
 
-/* Reply bar at bottom of feed */
+/* Reply bar */
 .reply-bar {
-  padding: 10px 16px; padding-bottom: max(10px, var(--safe-bot));
-  background: var(--surface); border-top: 1px solid var(--border);
-  flex-shrink: 0;
+  padding: 10px 14px; padding-bottom: max(10px, var(--safe-bot));
+  background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
 }
 .reply-btn {
-  width: 100%; padding: 13px; background: var(--surface2); border: 1.5px solid var(--border);
-  border-radius: 14px; color: var(--text2); font-size: 14px; cursor: pointer;
-  display: flex; align-items: center; gap: 10px; transition: border-color .15s;
+  width: 100%; padding: 13px 16px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; color: var(--text3); font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; transition: border-color .2s;
+  letter-spacing: 0.1px;
 }
 .reply-btn:active { border-color: var(--blue); }
-.reply-btn span { color: var(--text3); font-size: 18px; }
+.reply-icon {
+  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--text3);
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  flex-shrink: 0;
+}
+.reply-unread {
+  background: var(--blue); color: #fff; font-size: 11px; font-weight: 700;
+  min-width: 20px; height: 20px; border-radius: 10px; padding: 0 5px;
+  display: none; align-items: center; justify-content: center; margin-left: auto;
+}
 
-/* ── Private chat overlay ── */
+/* ── Private chat ── */
 #chat-screen {
   position: fixed; inset: 0; background: var(--bg); z-index: 50;
   display: none; flex-direction: column;
-  transform: translateY(100%); transition: transform .3s cubic-bezier(.4,0,.2,1);
+  transform: translateY(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
 }
 #chat-screen.open { display: flex; transform: translateY(0); }
 
@@ -175,100 +186,119 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   height: calc(58px + var(--safe-top)); padding-top: var(--safe-top);
   background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
-.chat-back { background: none; border: none; color: var(--blue); font-size: 26px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.back-btn {
+  background: none; border: none; color: var(--blue); font-size: 16px; font-weight: 600;
+  cursor: pointer; padding: 6px 8px 6px 0; display: flex; align-items: center; gap: 4px; letter-spacing: -0.2px;
+}
+.back-arrow { font-size: 20px; line-height: 1; }
 .chat-header-info { flex: 1; }
-.chat-header-name { font-size: 16px; font-weight: 700; }
-.chat-header-sub { font-size: 12px; color: var(--text3); }
+.chat-header-name { font-size: 15px; font-weight: 700; }
+.chat-header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
 
 .chat-messages {
-  flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 3px;
+  flex: 1; overflow-y: auto; padding: 14px 14px 6px;
+  display: flex; flex-direction: column; gap: 3px;
   -webkit-overflow-scrolling: touch;
 }
 .chat-messages::-webkit-scrollbar { display: none; }
 
-.msg-row { display: flex; flex-direction: column; margin-bottom: 2px; }
+.msg-row { display: flex; flex-direction: column; margin-bottom: 3px; }
 .msg-row.from-admin { align-items: flex-start; }
 .msg-row.from-me    { align-items: flex-end; }
 .bubble {
-  max-width: 80%; padding: 10px 14px; border-radius: 18px;
-  font-size: 15px; line-height: 1.4; word-break: break-word; white-space: pre-wrap;
+  max-width: 78%; padding: 10px 14px; border-radius: 18px;
+  font-size: 15px; line-height: 1.45; word-break: break-word; white-space: pre-wrap;
 }
 .msg-row.from-admin .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
 .msg-row.from-me .bubble    { background: var(--blue); color: #fff; border-bottom-right-radius: 4px; }
-.msg-meta { font-size: 11px; color: var(--text3); margin: 3px 4px 4px; }
+.msg-meta { font-size: 11px; color: var(--text3); margin: 3px 5px 4px; letter-spacing: 0.2px; }
 .msg-row.from-me .msg-meta { text-align: right; }
-.bubble-img { max-width: 220px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
-.bubble-vid { max-width: 220px; border-radius: 10px; display: block; margin-top: 6px; }
+.bubble-img { max-width: 220px; border-radius: 10px; display: block; margin-top: 8px; cursor: pointer; }
+.bubble-vid { max-width: 220px; border-radius: 10px; display: block; margin-top: 8px; }
 
-.typing-row { padding: 0 12px 8px; display: none; }
+.typing-row { padding: 0 14px 10px; display: none; }
 .typing-dots {
   display: inline-flex; gap: 4px; padding: 10px 14px;
   background: var(--surface2); border-radius: 18px; border-bottom-left-radius: 4px;
 }
-.typing-dots span { width: 6px; height: 6px; background: var(--text3); border-radius: 50%; animation: bounce .9s infinite; }
+.typing-dots span { width: 5px; height: 5px; background: var(--text3); border-radius: 50%; animation: bounce .9s infinite; }
 .typing-dots span:nth-child(2) { animation-delay: .15s; }
 .typing-dots span:nth-child(3) { animation-delay: .3s; }
-@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
 
 .chat-composer {
   background: var(--surface); border-top: 1px solid var(--border);
-  padding: 10px 12px; padding-bottom: max(10px, var(--safe-bot)); flex-shrink: 0;
+  padding: 10px 14px; padding-bottom: max(10px, var(--safe-bot)); flex-shrink: 0;
 }
 .media-prev-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .prev-thumb {
-  position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
+  position: relative; width: 54px; height: 54px; border-radius: 8px;
+  overflow: hidden; border: 1px solid var(--border);
 }
 .prev-thumb img, .prev-thumb video { width: 100%; height: 100%; object-fit: cover; }
 .prev-thumb button {
-  position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
-  background: rgba(0,0,0,.8); border: none; color: #fff; border-radius: 50%;
+  position: absolute; top: 3px; right: 3px; width: 16px; height: 16px;
+  background: rgba(0,0,0,.85); border: none; color: #fff; border-radius: 50%;
   font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
 }
 .input-row { display: flex; gap: 8px; align-items: flex-end; }
 .attach-btn {
   width: 42px; height: 42px; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 12px; color: var(--text2); font-size: 18px; cursor: pointer;
+  border-radius: 12px; color: var(--text2); font-size: 20px; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-weight: 300;
 }
-.chat-input {
-  flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 22px;
-  color: var(--text); padding: 11px 16px; font-size: 15px; resize: none; outline: none;
-  max-height: 120px; min-height: 42px; font-family: inherit; line-height: 1.4;
+.msg-input {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 22px; color: var(--text); padding: 11px 16px; font-size: 15px;
+  resize: none; outline: none; max-height: 120px; min-height: 42px;
+  font-family: inherit; line-height: 1.4; -webkit-appearance: none;
 }
-.chat-input:focus { border-color: var(--blue); }
-.chat-input::placeholder { color: var(--text3); }
+.msg-input:focus { border-color: var(--blue); }
+.msg-input::placeholder { color: var(--text3); }
 .send-btn {
   width: 42px; height: 42px; background: var(--blue); border: none; border-radius: 50%;
-  color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0; transition: opacity .15s;
 }
 .send-btn:active { opacity: .8; }
 #file-input { display: none; }
 
-.chat-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--text3); font-size: 14px; }
-
-/* Unread dot on reply button */
-.reply-unread {
-  background: #ff3b30; color: #fff; font-size: 11px; font-weight: 700;
-  min-width: 20px; height: 20px; border-radius: 10px; padding: 0 5px;
-  display: none; align-items: center; justify-content: center; margin-left: auto;
+.chat-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 10px; color: var(--text3);
 }
+.chat-empty-icon {
+  width: 52px; height: 52px; border-radius: 16px; background: var(--surface2);
+  display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text3);
+}
+.chat-empty p { font-size: 14px; }
 
 /* ── Lightbox ── */
-#lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 200; align-items: center; justify-content: center; }
+#lightbox {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.96);
+  z-index: 200; align-items: center; justify-content: center;
+}
 #lightbox.open { display: flex; }
 #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
-#lb-close { position: absolute; top: max(16px,var(--safe-top)); right: 16px; background: rgba(255,255,255,.12); border: none; color: #fff; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; }
+#lb-close {
+  position: absolute; top: max(18px, var(--safe-top)); right: 18px;
+  background: rgba(255,255,255,.1); border: none; color: #fff;
+  width: 34px; height: 34px; border-radius: 50%; font-size: 15px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 600;
+}
 
 /* ── PWA banner ── */
 #pwa-banner {
-  display: none; position: fixed; bottom: calc(var(--safe-bot) + 80px); left: 12px; right: 12px;
-  background: #0d2040; border: 1px solid var(--blue); border-radius: 16px;
-  padding: 14px 16px; z-index: 60; align-items: center; gap: 10px;
+  display: none; position: fixed; bottom: calc(var(--safe-bot) + 72px); left: 12px; right: 12px;
+  background: #0c1f3a; border: 1px solid rgba(74,158,255,.4); border-radius: 16px;
+  padding: 14px 16px; z-index: 60; align-items: center; gap: 12px;
 }
 #pwa-banner.show { display: flex; }
-#pwa-banner p { flex: 1; font-size: 13px; color: #b8d4f8; line-height: 1.4; }
-#pwa-install { background: var(--blue); border: none; border-radius: 10px; color: #fff; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
-#pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; }
+#pwa-banner p { flex: 1; font-size: 13px; color: #a8c8f0; line-height: 1.45; }
+#pwa-install { background: var(--blue); border: none; border-radius: 10px; color: #fff; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+#pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; }
 </style>
 </head>
 <body>
@@ -276,59 +306,61 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <!-- Join -->
 <div id="join-screen">
   <div class="join-card">
-    <div class="join-logo">VP</div>
-    <h1>Vision Palace</h1>
-    <p>Ange ditt namn för att gå med</p>
-    <input class="join-input" type="text" id="name-input" placeholder="Ditt namn" maxlength="40" autocomplete="off" autocapitalize="words">
-    <button class="join-btn" id="join-btn">Fortsätt</button>
+    <div class="join-wordmark">Vision Palace</div>
+    <h1>Welcome</h1>
+    <p>Choose a name to access the exclusive stock feed.</p>
+    <div class="field-label">Display name</div>
+    <input class="join-input" type="text" id="name-input" placeholder="Your name" maxlength="40" autocomplete="off" autocapitalize="words">
+    <button class="join-btn" id="join-btn">Continue</button>
     <div class="join-err" id="join-err"></div>
   </div>
 </div>
 
 <!-- App -->
 <div id="app">
-
-  <!-- Header -->
   <div class="header">
-    <div class="header-avatar">VP</div>
+    <div class="header-mark">VP</div>
     <div class="header-info">
       <div class="header-name">Vision Palace</div>
-      <div class="header-status">Lageruppdateringar</div>
+      <div class="header-sub">Stock updates</div>
     </div>
   </div>
 
-  <!-- Feed (broadcast as chat bubbles) -->
   <div id="feed-screen">
     <div class="feed-scroll" id="feed-scroll">
       <div class="feed-empty">
-        <div class="feed-empty-icon">📦</div>
-        <p>Inga uppdateringar ännu</p>
+        <div class="feed-empty-icon">[ ]</div>
+        <p>No updates yet</p>
       </div>
     </div>
 
-    <!-- Reply bar -->
     <div class="reply-bar">
       <button class="reply-btn" id="open-chat-btn">
-        <span>💬</span>
-        <span style="flex:1;text-align:left">Svara privat…</span>
+        <div class="reply-icon">→</div>
+        <span style="flex:1;text-align:left">Message privately</span>
         <span class="reply-unread" id="reply-unread"></span>
       </button>
     </div>
   </div>
-
 </div>
 
 <!-- Private chat -->
 <div id="chat-screen">
   <div class="chat-header">
-    <button class="chat-back" id="chat-back">‹</button>
+    <button class="back-btn" id="chat-back">
+      <span class="back-arrow">←</span>
+      Back
+    </button>
     <div class="chat-header-info">
       <div class="chat-header-name">Vision Palace</div>
-      <div class="chat-header-sub">Privat konversation</div>
+      <div class="chat-header-sub">Private message</div>
     </div>
   </div>
   <div class="chat-messages" id="chat-messages">
-    <div class="chat-empty"><span style="font-size:40px;opacity:.2">💬</span><span>Inga meddelanden ännu</span></div>
+    <div class="chat-empty">
+      <div class="chat-empty-icon">[ ]</div>
+      <p>No messages yet</p>
+    </div>
   </div>
   <div class="typing-row" id="typing-row">
     <div class="typing-dots"><span></span><span></span><span></span></div>
@@ -336,8 +368,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="chat-composer">
     <div class="media-prev-row" id="media-prev-row"></div>
     <div class="input-row">
-      <label class="attach-btn">📎<input type="file" id="file-input" multiple accept="image/*,video/*"></label>
-      <textarea class="chat-input" id="chat-input" placeholder="Skriv ett meddelande…" rows="1"></textarea>
+      <label class="attach-btn" title="Attach file">+<input type="file" id="file-input" multiple accept="image/*,video/*"></label>
+      <textarea class="msg-input" id="chat-input" placeholder="Type a message…" rows="1"></textarea>
       <button class="send-btn" id="send-btn">↑</button>
     </div>
   </div>
@@ -345,19 +377,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <!-- PWA Banner -->
 <div id="pwa-banner">
-  <p>Installera Vision Palace på hemskärmen</p>
-  <button id="pwa-install">Installera</button>
-  <button id="pwa-dismiss">✕</button>
+  <p>Install Vision Palace on your home screen for quick access.</p>
+  <button id="pwa-install">Install</button>
+  <button id="pwa-dismiss">×</button>
 </div>
 
 <!-- Lightbox -->
 <div id="lightbox">
-  <button id="lb-close">✕</button>
+  <button id="lb-close">×</button>
   <img id="lb-img" src="" alt="">
 </div>
 
 <script>
-const ONESIGNAL_APP_ID = '90d6532e-6887-42ce-8646-4354e6aa77fe';
 let session = JSON.parse(localStorage.getItem('vp_session') || 'null');
 let socket = null;
 let broadcasts = [];
@@ -367,7 +398,6 @@ let chatUnread = 0;
 let chatOpen = false;
 let deferredPWA = null;
 
-// ── SW & PWA ──
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 window.addEventListener('beforeinstallprompt', e => {
@@ -383,7 +413,6 @@ document.getElementById('pwa-dismiss').onclick = () => {
   document.getElementById('pwa-banner').classList.remove('show');
 };
 
-// ── Chat open/close ──
 document.getElementById('open-chat-btn').onclick = openChat;
 document.getElementById('chat-back').onclick = closeChat;
 
@@ -399,34 +428,33 @@ function closeChat() {
   document.getElementById('chat-screen').classList.remove('open');
 }
 
-// ── Join ──
 function getToken() {
   const p = location.pathname.split('/');
   return p[p.length-1] !== 'client' ? p[p.length-1] : null;
 }
+
 document.getElementById('join-btn').onclick = join;
 document.getElementById('name-input').addEventListener('keydown', e => e.key==='Enter' && join());
 async function join() {
   const name = document.getElementById('name-input').value.trim();
   const err = document.getElementById('join-err');
   err.textContent = '';
-  if (!name) { err.textContent = 'Ange ett namn'; return; }
+  if (!name) { err.textContent = 'Please enter a name.'; return; }
   const token = getToken();
-  if (!token) { err.textContent = 'Ogiltig inbjudningslänk'; return; }
+  if (!token) { err.textContent = 'Invalid invite link.'; return; }
   try {
     const r = await fetch(`/api/join/${token}`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ display_name: name })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error||'Fel uppstod'; return; }
+    if (!r.ok) { err.textContent = d.error || 'Something went wrong.'; return; }
     session = d;
     localStorage.setItem('vp_session', JSON.stringify(d));
     initApp();
-  } catch { err.textContent = 'Anslutningsfel'; }
+  } catch { err.textContent = 'Connection error.'; }
 }
 
-// ── Init ──
 function initApp() {
   document.getElementById('join-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -437,11 +465,7 @@ function initApp() {
 
 function connectSocket() {
   socket = io({ auth: { session_token: session.session_token } });
-  socket.on('admin:new_broadcast', d => {
-    broadcasts.unshift(d.broadcast);
-    renderFeed();
-    scrollFeedBottom();
-  });
+  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); scrollFeedBottom(); });
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x=>x.id===d.id);
     if (b) b.is_pinned = d.is_pinned;
@@ -461,9 +485,8 @@ function connectSocket() {
   });
 }
 
-// ── Broadcasts as chat bubbles ──
 async function loadBroadcasts() {
-  const r = await fetch('/api/broadcasts', { headers: { 'x-session-token': session.session_token } });
+  const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
   const d = await r.json();
   broadcasts = d.broadcasts || [];
   renderFeed();
@@ -473,59 +496,53 @@ async function loadBroadcasts() {
 function renderFeed() {
   const scroll = document.getElementById('feed-scroll');
   if (!broadcasts.length) {
-    scroll.innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">📦</div><p>Inga uppdateringar ännu</p></div>';
+    scroll.innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">[ ]</div><p>No updates yet</p></div>';
     return;
   }
-
-  const sorted = [...broadcasts].sort((a,b) => {
+  const sorted = [...broadcasts].sort((a,b)=>{
     if (a.is_pinned && !b.is_pinned) return -1;
     if (!a.is_pinned && b.is_pinned) return 1;
-    return new Date(a.created_at) - new Date(b.created_at);
+    return new Date(a.created_at)-new Date(b.created_at);
   });
-
   let html = '';
   let lastDate = '';
   for (const b of sorted) {
-    const d = new Date(b.created_at);
-    const dateStr = d.toLocaleDateString('sv-SE', { day:'2-digit', month:'long' });
+    const dateStr = new Date(b.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
     if (dateStr !== lastDate) {
       html += `<div class="date-pill"><span>${dateStr}</span></div>`;
       lastDate = dateStr;
     }
-    html += broadcastBubbleHTML(b);
+    html += bcBubbleHTML(b);
   }
   scroll.innerHTML = html;
 }
 
-function broadcastBubbleHTML(b) {
-  const time = new Date(b.created_at).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+function bcBubbleHTML(b) {
+  const time = new Date(b.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   const media = b.broadcast_media || [];
   const myR = myReactions[b.id];
-
   const gridClass = media.length > 1 ? 'bc-media bc-media-grid' : 'bc-media';
-  const mediaHTML = media.length ? `<div class="${gridClass}">${media.map(m =>
+  const mediaHTML = media.length ? `<div class="${gridClass}">${media.map(m=>
     m.storage_url
       ? (m.type==='video'
         ? `<video src="${m.storage_url}" controls playsinline preload="metadata"></video>`
         : `<img src="${m.thumbnail_url||m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-      : `<div class="media-expired">📷 Bild ej längre tillgänglig</div>`
+      : `<div class="media-expired">Media no longer available</div>`
   ).join('')}</div>` : '';
 
-  const hasContent = b.text || b.price;
-
   return `<div class="bc-row">
-    <div class="sender-avatar">VP</div>
+    <div class="bc-mark">VP</div>
     <div class="bc-bubble${b.is_pinned?' pinned':''}">
-      ${b.is_pinned ? '<div class="bc-pin-label">📌 Fäst meddelande</div>' : ''}
+      ${b.is_pinned ? '<div class="bc-pin-bar">Pinned</div>' : ''}
       ${mediaHTML}
-      ${hasContent ? `<div class="bc-body">
+      <div class="bc-body">
         ${b.price ? `<div class="bc-price">${esc(b.price)}</div>` : ''}
-        ${b.text ? `<div class="bc-text">${esc(b.text)}</div>` : ''}
+        ${b.text  ? `<div class="bc-text">${esc(b.text)}</div>` : ''}
         <div class="bc-time">${time}</div>
-      </div>` : `<div style="padding:4px 14px 6px"><div class="bc-time">${time}</div></div>`}
+      </div>
       <div class="bc-reactions">
-        <button class="react-btn${myR==='interested'?' yes':''}" onclick="react('${b.id}','interested')">👍 Intresserad</button>
-        <button class="react-btn${myR==='not_interested'?' no':''}" onclick="react('${b.id}','not_interested')">❌ Inte intresserad</button>
+        <button class="react-btn${myR==='interested'?' yes':''}" onclick="react('${b.id}','interested')">&#10003; Interested</button>
+        <button class="react-btn${myR==='not_interested'?' no':''}" onclick="react('${b.id}','not_interested')">&#10005; Pass</button>
       </div>
     </div>
   </div>`;
@@ -533,7 +550,7 @@ function broadcastBubbleHTML(b) {
 
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
-  requestAnimationFrame(() => s.scrollTop = s.scrollHeight);
+  requestAnimationFrame(()=>s.scrollTop=s.scrollHeight);
 }
 
 async function react(id, reaction) {
@@ -545,7 +562,6 @@ async function react(id, reaction) {
   });
 }
 
-// ── Chat messages ──
 async function loadMessages() {
   const r = await fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} });
   const d = await r.json();
@@ -569,15 +585,15 @@ function appendChatMsg(m) {
 }
 
 function chatMsgHTML(m) {
-  const time = new Date(m.created_at).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+  const time = new Date(m.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   const from = m.sender==='admin' ? 'from-admin' : 'from-me';
   const media = m.message_media || [];
-  const mediaHTML = media.map(md =>
+  const mediaHTML = media.map(md=>
     md.storage_url
       ? (md.type==='video'
         ? `<video class="bubble-vid" src="${md.storage_url}" controls playsinline></video>`
         : `<img class="bubble-img" src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-      : `<span style="font-size:12px;color:#555;font-style:italic">Bild ej tillgänglig</span>`
+      : `<span style="font-size:12px;color:var(--text3);font-style:italic">Media no longer available</span>`
   ).join('');
   return `<div class="msg-row ${from}">
     <div class="bubble">${m.text?esc(m.text):''}${mediaHTML}</div>
@@ -602,7 +618,6 @@ async function markRead() {
   if (socket) socket.emit('client:read_receipt',{client_id:session.client_id});
 }
 
-// ── Send message ──
 document.getElementById('send-btn').onclick = sendMsg;
 document.getElementById('chat-input').addEventListener('keydown', e => {
   if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); sendMsg(); }
@@ -627,12 +642,11 @@ async function sendMsg() {
   }
 }
 
-// ── File upload ──
 document.getElementById('file-input').addEventListener('change', async e => {
   const form = new FormData();
   Array.from(e.target.files).forEach(f=>form.append('files',f));
   const r = await fetch('/api/upload', { method:'POST', headers:{'x-session-token':session.session_token}, body:form });
-  if (!r.ok) { alert('Uppladdning misslyckades'); return; }
+  if (!r.ok) { alert('Upload failed. Please try again.'); return; }
   const d = await r.json();
   const row = document.getElementById('media-prev-row');
   for (const f of d.files) {
@@ -640,8 +654,8 @@ document.getElementById('file-input').addEventListener('change', async e => {
     const div = document.createElement('div');
     div.className = 'prev-thumb';
     div.innerHTML = f.type==='video'
-      ? `<video src="${f.url}" muted></video><button onclick="rmMedia(this,'${f.url}')">✕</button>`
-      : `<img src="${f.thumbUrl}"><button onclick="rmMedia(this,'${f.url}')">✕</button>`;
+      ? `<video src="${f.url}" muted></video><button onclick="rmMedia(this,'${f.url}')">×</button>`
+      : `<img src="${f.thumbUrl}"><button onclick="rmMedia(this,'${f.url}')">×</button>`;
     row.appendChild(div);
   }
   e.target.value = '';
@@ -652,7 +666,6 @@ function rmMedia(btn, url) {
   btn.closest('.prev-thumb').remove();
 }
 
-// ── Lightbox ──
 function openLightbox(src) {
   document.getElementById('lb-img').src=src;
   document.getElementById('lightbox').classList.add('open');
@@ -661,10 +674,8 @@ document.getElementById('lightbox').onclick = e => {
   if (e.target===e.currentTarget||e.target.id==='lb-close') document.getElementById('lightbox').classList.remove('open');
 };
 
-// ── Utils ──
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Boot ──
 if (session?.session_token) {
   fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} })
     .then(r => { if (r.ok) initApp(); else { session=null; localStorage.removeItem('vp_session'); } })
