@@ -10,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const path = require('path');
 const ws = require('ws');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,6 +24,22 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+
+// ─── Password helpers ─────────────────────────────────────────────────────────
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+  if (!stored) return false;
+  const [salt, hash] = stored.split(':');
+  if (!salt || !hash) return false;
+  const verify = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return verify === hash;
+}
 
 // ─── Auth helpers ────────────────────────────────────────────────────────────
 
@@ -153,19 +170,21 @@ app.post('/api/invite', adminAuth, async (req, res) => {
 // Client joins via invite
 app.post('/api/join/:token', async (req, res) => {
   const { token } = req.params;
-  const { display_name } = req.body;
-  if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'Namn krävs' });
+  const { display_name, password } = req.body;
+  if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'Name is required.' });
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
 
   const { data: invite } = await supabase.from('invites').select('*').eq('token', token).single();
-  if (!invite) return res.status(404).json({ error: 'Ogiltig länk' });
-  if (invite.used) return res.status(400).json({ error: 'Länken har redan använts' });
-  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'Länken har gått ut' });
+  if (!invite) return res.status(404).json({ error: 'Invalid invite link.' });
+  if (invite.used) return res.status(400).json({ error: 'This invite link has already been used.' });
+  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'This invite link has expired.' });
 
   const sessionToken = uuidv4();
   const { data: client, error } = await supabase.from('clients').insert({
     display_name: display_name.trim(),
     invite_token: token,
     session_token: sessionToken,
+    password_hash: hashPassword(password),
     joined_at: new Date().toISOString(),
     last_seen_at: new Date().toISOString()
   }).select().single();
@@ -176,6 +195,25 @@ app.post('/api/join/:token', async (req, res) => {
   io.to('admins').emit('client:joined', { client });
 
   res.json({ session_token: sessionToken, client_id: client.id, display_name: client.display_name });
+});
+
+// Client login (returning user)
+app.post('/api/auth/client', async (req, res) => {
+  const { display_name, password } = req.body;
+  if (!display_name || !password) return res.status(400).json({ error: 'Name and password are required.' });
+
+  const { data: matches } = await supabase.from('clients')
+    .select('*')
+    .ilike('display_name', display_name.trim());
+
+  if (!matches || matches.length === 0) return res.status(401).json({ error: 'Incorrect name or password.' });
+
+  const client = matches.find(c => verifyPassword(password, c.password_hash));
+  if (!client) return res.status(401).json({ error: 'Incorrect name or password.' });
+  if (client.is_inactive) return res.status(403).json({ error: 'Your account has been deactivated.' });
+
+  await supabase.from('clients').update({ last_seen_at: new Date().toISOString() }).eq('id', client.id);
+  res.json({ session_token: client.session_token, client_id: client.id, display_name: client.display_name });
 });
 
 // Upload media
