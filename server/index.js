@@ -425,6 +425,7 @@ app.post('/api/onesignal/register', clientAuth, async (req, res) => {
 });
 
 // SPA routes
+app.get('/', (req, res) => res.redirect('/client'));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../public/admin.html')));
 app.get('/client', (req, res) => res.sendFile(path.join(__dirname, '../public/client.html')));
 app.get('/join/:token', (req, res) => res.sendFile(path.join(__dirname, '../public/client.html')));
