@@ -11,6 +11,7 @@ const axios = require('axios');
 const path = require('path');
 const ws = require('ws');
 const crypto = require('crypto');
+const webpush = require('web-push');
 
 const app = express();
 const server = http.createServer(app);
@@ -85,6 +86,38 @@ async function anyAuth(req, res, next) {
   const client = await getClientBySession(session);
   if (client) { req.client = client; return next(); }
   return res.status(401).json({ error: 'Unauthorized' });
+}
+
+// ─── Web Push (VAPID) ─────────────────────────────────────────────────────────
+
+webpush.setVapidDetails(
+  'mailto:admin@visionpalace.se',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
+
+const pushSubs = new Map(); // clientId -> PushSubscription
+
+async function webPushClient(clientId, title, body) {
+  const sub = pushSubs.get(clientId);
+  if (!sub) return;
+  try {
+    await webpush.sendNotification(sub, JSON.stringify({ title, body }));
+  } catch(e) {
+    if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId);
+    else console.error('Web push error:', e.message);
+  }
+}
+
+async function webPushAll(title, body) {
+  const sends = [];
+  for (const [clientId, sub] of pushSubs) {
+    sends.push(
+      webpush.sendNotification(sub, JSON.stringify({ title, body }))
+        .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId); })
+    );
+  }
+  await Promise.allSettled(sends);
 }
 
 // ─── OneSignal helper ─────────────────────────────────────────────────────────
@@ -277,8 +310,8 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
 
   io.emit('admin:new_broadcast', { broadcast: full.data });
 
-  // Push notify all clients
   const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
+  webPushAll('Vision Palace', pushText).catch(() => {});
   const { data: clients } = await supabase.from('clients').select('onesignal_player_id').eq('is_inactive', false);
   const playerIds = (clients || []).map(c => c.onesignal_player_id).filter(Boolean);
   if (playerIds.length > 0) {
@@ -386,6 +419,7 @@ app.post('/api/messages/:clientId', adminAuth, async (req, res) => {
   io.to(`client:${clientId}`).emit('admin:new_message', { message: full.data });
   io.to('admins').emit('message:sent', { message: full.data });
 
+  webPushClient(clientId, 'Vision Palace', 'Nytt meddelande').catch(() => {});
   if (client.onesignal_player_id) {
     await sendPushToPlayer(client.onesignal_player_id, 'Vision Palace', 'Nytt meddelande från admin', { type: 'message', client_id: clientId });
   }
@@ -475,6 +509,21 @@ app.patch('/api/clients/:id/inactive', adminAuth, async (req, res) => {
   const { data } = await supabase.from('clients').update({ is_inactive: !current.is_inactive }).eq('id', req.params.id).select().single();
   io.to('admins').emit('client:updated', { client: data });
   res.json({ client: data });
+});
+
+// Get VAPID public key
+app.get('/api/push/vapid-key', (req, res) => {
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
+
+// Save web push subscription
+app.post('/api/push/subscribe', clientAuth, (req, res) => {
+  const { subscription } = req.body;
+  if (subscription?.endpoint) {
+    pushSubs.set(req.client.id, subscription);
+    console.log('Push subscription registered:', req.client.display_name);
+  }
+  res.json({ ok: true });
 });
 
 // Save OneSignal player ID for client

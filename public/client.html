@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Vision Palace">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300;1,400&family=Montserrat:wght@400;500&display=swap" rel="stylesheet">
 <script src="/socket.io/socket.io.js"></script>
 <style>
 :root {
@@ -34,8 +37,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 }
 .join-card { width: 100%; max-width: 340px; }
 .join-wordmark {
-  font-size: 13px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
-  color: var(--blue); margin-bottom: 32px;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic; font-weight: 300; font-size: 32px;
+  letter-spacing: 0.04em; color: var(--text); margin-bottom: 28px; line-height: 1;
 }
 .join-card h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 8px; }
 .join-card p { color: var(--text2); font-size: 15px; margin-bottom: 32px; line-height: 1.5; }
@@ -68,7 +72,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .header-mark {
   width: 36px; height: 36px; border-radius: 10px; background: var(--blue);
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 900; color: #fff; letter-spacing: 0.5px; flex-shrink: 0;
+  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
+  font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.05em; flex-shrink: 0;
 }
 .header-info { flex: 1; }
 .header-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
@@ -89,7 +94,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   color: var(--text3); transition: color .15s; position: relative;
 }
 .tab-btn.active { color: var(--blue); }
-.tab-icon { font-size: 19px; line-height: 1; }
+.tab-icon { display: flex; align-items: center; justify-content: center; height: 22px; }
+.tab-icon svg { width: 22px; height: 22px; }
 .tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
 .tab-badge {
   position: absolute; top: 6px; right: calc(50% - 22px);
@@ -118,7 +124,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .bc-mark {
   width: 30px; height: 30px; border-radius: 50%; background: var(--blue);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 900; color: #fff; flex-shrink: 0; letter-spacing: 0.3px;
+  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
+  font-size: 11px; font-weight: 600; color: #fff; flex-shrink: 0; letter-spacing: 0.05em;
 }
 .bc-bubble {
   max-width: calc(100% - 46px); background: var(--surface);
@@ -279,9 +286,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 #pwa-banner p { flex: 1; font-size: 13px; color: #a8c8f0; line-height: 1.45; }
 #pwa-install { background: var(--blue); border: none; border-radius: 10px; color: #fff; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
 #pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; }
+
+/* ── Splash ── */
+#splash {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 100; gap: 12px; transition: opacity 0.5s ease;
+}
+#splash.fade-out { opacity: 0; pointer-events: none; }
+.splash-mark {
+  width: 80px; height: 80px; border-radius: 24px; background: var(--blue);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
+  font-size: 30px; font-weight: 600; color: white; letter-spacing: 0.05em;
+  box-shadow: 0 10px 40px rgba(74,158,255,.35); margin-bottom: 4px;
+}
+.splash-wordmark {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic; font-weight: 300; font-size: 34px;
+  letter-spacing: 0.04em; color: var(--text); line-height: 1;
+}
+.splash-sub {
+  font-family: 'Montserrat', sans-serif; font-size: 9px; font-weight: 400;
+  letter-spacing: 0.28em; text-transform: uppercase; color: var(--text3);
+}
+.splash-dots { display: flex; gap: 5px; margin-top: 6px; }
+.splash-dots span {
+  width: 5px; height: 5px; background: var(--text3); border-radius: 50%;
+  animation: bounce .9s infinite;
+}
+.splash-dots span:nth-child(2) { animation-delay: .15s; }
+.splash-dots span:nth-child(3) { animation-delay: .3s; }
 </style>
 </head>
 <body>
+
+<!-- Splash -->
+<div id="splash">
+  <div class="splash-mark">VP</div>
+  <div class="splash-wordmark">Vision Palace</div>
+  <div class="splash-sub">Stock updates</div>
+  <div class="splash-dots"><span></span><span></span><span></span></div>
+</div>
 
 <!-- Join / Login -->
 <div id="join-screen">
@@ -322,7 +368,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   <div class="view active" id="broadcast-view">
     <div class="feed-scroll" id="feed-scroll">
       <div class="feed-empty">
-        <div class="feed-empty-icon">[ ]</div>
+        <div class="feed-empty-icon">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M18 8.5a4 4 0 0 1 0 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2l4 4V4L5 8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </div>
         <p>No updates yet</p>
       </div>
     </div>
@@ -332,7 +380,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   <div class="view" id="messages-view">
     <div class="chat-messages" id="chat-messages">
       <div class="chat-empty">
-        <div class="chat-empty-icon">[ ]</div>
+        <div class="chat-empty-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
         <p>No messages yet</p>
       </div>
     </div>
@@ -352,11 +402,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   <!-- Tab bar -->
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-broadcast" onclick="switchTab('broadcast')">
-      <span class="tab-icon">≡</span>
+      <span class="tab-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 8.5a4 4 0 0 1 0 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2l4 4V4L5 8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </span>
       <span class="tab-label">Broadcasts</span>
     </button>
     <button class="tab-btn" id="tab-messages" onclick="switchTab('messages')">
-      <span class="tab-icon">◉</span>
+      <span class="tab-icon">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
       <span class="tab-label">Messages</span>
       <span class="tab-badge" id="msg-badge"></span>
     </button>
@@ -501,6 +555,7 @@ function initApp() {
   loadMessages();
   setInterval(loadBroadcasts, 8000);
   setInterval(loadMessages, 5000);
+  setTimeout(setupPush, 2000);
 }
 
 function connectSocket() {
@@ -751,10 +806,55 @@ document.getElementById('lightbox').onclick = e => {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+async function setupPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (Notification.permission === 'denied') return;
+  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (perm !== 'granted') return;
+  try {
+    const kr = await fetch('/api/push/vapid-key');
+    const { publicKey } = await kr.json();
+    const sw = await navigator.serviceWorker.ready;
+    let sub = await sw.pushManager.getSubscription();
+    if (!sub) {
+      sub = await sw.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    }
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-session-token': session.session_token },
+      body: JSON.stringify({ subscription: sub.toJSON() })
+    });
+  } catch(e) { console.error('Push setup failed:', e.message); }
+}
+
+function urlBase64ToUint8Array(b64) {
+  const padding = '='.repeat((4 - b64.length % 4) % 4);
+  const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+const splashStart = Date.now();
+const MIN_SPLASH = 1400;
+
+function hideSplash(cb) {
+  const wait = Math.max(0, MIN_SPLASH - (Date.now() - splashStart));
+  setTimeout(() => {
+    const s = document.getElementById('splash');
+    s.classList.add('fade-out');
+    setTimeout(() => { s.style.display = 'none'; cb && cb(); }, 500);
+  }, wait);
+}
+
 if (session?.session_token) {
   fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} })
-    .then(r => { if (r.ok) initApp(); else { session=null; localStorage.removeItem('vp_session'); } })
-    .catch(()=>{});
+    .then(r => {
+      if (r.ok) hideSplash(initApp);
+      else { session = null; localStorage.removeItem('vp_session'); hideSplash(); }
+    })
+    .catch(() => hideSplash());
+} else {
+  hideSplash();
 }
 </script>
 </body>
