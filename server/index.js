@@ -97,6 +97,7 @@ webpush.setVapidDetails(
 );
 
 const pushSubs = new Map(); // clientId -> PushSubscription
+let adminPushSub = null;   // single admin subscription
 
 async function webPushClient(clientId, title, body) {
   const sub = pushSubs.get(clientId);
@@ -443,6 +444,13 @@ app.post('/api/messages/me/send', clientAuth, async (req, res) => {
   const full = await supabase.from('messages').select('*, message_media(*)').eq('id', msg.id).single();
   io.to('admins').emit('client:new_message', { message: full.data, client: req.client });
 
+  if (adminPushSub) {
+    webpush.sendNotification(adminPushSub, JSON.stringify({
+      title: req.client.admin_label || req.client.display_name,
+      body: text || 'Skickade ett media'
+    })).catch(e => { if (e.statusCode === 410 || e.statusCode === 404) adminPushSub = null; });
+  }
+
   res.json({ message: full.data });
 });
 
@@ -516,12 +524,22 @@ app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
 });
 
-// Save web push subscription
+// Save web push subscription (client)
 app.post('/api/push/subscribe', clientAuth, (req, res) => {
   const { subscription } = req.body;
   if (subscription?.endpoint) {
     pushSubs.set(req.client.id, subscription);
     console.log('Push subscription registered:', req.client.display_name);
+  }
+  res.json({ ok: true });
+});
+
+// Save web push subscription (admin)
+app.post('/api/push/admin-subscribe', adminAuth, (req, res) => {
+  const { subscription } = req.body;
+  if (subscription?.endpoint) {
+    adminPushSub = subscription;
+    console.log('Admin push subscription registered');
   }
   res.json({ ok: true });
 });
