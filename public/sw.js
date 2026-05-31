@@ -16,7 +16,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/') || url.pathname.startsWith('/admin')) return;
 
   e.respondWith(
     fetch(e.request)
