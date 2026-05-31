@@ -399,6 +399,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
     </div>
   </div>
 
+  <!-- Notification prompt banner -->
+  <div id="notif-banner" style="display:none;align-items:center;gap:10px;padding:10px 14px;background:#0c1f3a;border-top:1px solid rgba(74,158,255,.25);flex-shrink:0">
+    <span style="font-size:18px">🔔</span>
+    <p style="flex:1;font-size:13px;color:#a8c8f0;line-height:1.4">Aktivera notiser för meddelanden och sändningar</p>
+    <button onclick="enableNotifs()" style="background:var(--blue);border:none;border-radius:10px;color:#fff;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">Aktivera</button>
+    <button onclick="this.parentElement.style.display='none'" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button>
+  </div>
+
   <!-- Tab bar -->
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-broadcast" onclick="switchTab('broadcast')">
@@ -809,8 +817,21 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (Notification.permission === 'denied') return;
-  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (Notification.permission === 'default') {
+    document.getElementById('notif-banner').style.display = 'flex';
+    return;
+  }
+  await registerClientPushSub();
+}
+
+async function enableNotifs() {
+  const perm = await Notification.requestPermission();
+  document.getElementById('notif-banner').style.display = 'none';
   if (perm !== 'granted') return;
+  await registerClientPushSub();
+}
+
+async function registerClientPushSub() {
   try {
     const kr = await fetch('/api/push/vapid-key');
     const { publicKey } = await kr.json();

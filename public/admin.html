@@ -452,6 +452,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="header-logo">VP</div>
     <div class="header-title" id="header-title">Sändningar</div>
     <button class="icon-btn" id="search-toggle-btn" title="Sök" style="font-size:13px;font-weight:600;letter-spacing:0.3px">Sök</button>
+    <button class="hbtn" id="notif-btn" onclick="enableNotifs()" style="display:none">🔔 Notiser</button>
     <button class="hbtn primary" id="invite-open-btn">+ Bjud in</button>
     <button class="hbtn" id="logout-btn">Logga ut</button>
   </div>
@@ -669,8 +670,21 @@ function initApp() {
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (Notification.permission === 'denied') return;
-  const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+  if (Notification.permission === 'default') {
+    document.getElementById('notif-btn').style.display = '';
+    return;
+  }
+  await registerAdminPushSub();
+}
+
+async function enableNotifs() {
+  const perm = await Notification.requestPermission();
+  document.getElementById('notif-btn').style.display = 'none';
   if (perm !== 'granted') return;
+  await registerAdminPushSub();
+}
+
+async function registerAdminPushSub() {
   try {
     const kr = await fetch('/api/push/vapid-key');
     const { publicKey } = await kr.json();
