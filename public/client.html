@@ -531,6 +531,10 @@ function connectSocket() {
     if (b) b.is_pinned = d.is_pinned;
     renderFeed();
   });
+  socket.on('broadcast:deleted', d => {
+    broadcasts = broadcasts.filter(b => b.id !== d.id);
+    renderFeed();
+  });
   socket.on('admin:new_message', d => {
     appendChatMsg(d.message);
     if (!chatOpen) { chatUnread++; updateUnread(); }

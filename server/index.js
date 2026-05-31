@@ -288,6 +288,28 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
   res.json({ broadcast: full.data });
 });
 
+// Delete broadcast
+app.delete('/api/broadcasts/:id', adminAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: media } = await supabase.from('broadcast_media').select('storage_url, thumbnail_url').eq('broadcast_id', id);
+  if (media && media.length > 0) {
+    const files = [];
+    for (const m of media) {
+      if (m.storage_url) files.push(m.storage_url.split('/').pop());
+      if (m.thumbnail_url && m.thumbnail_url !== m.storage_url) files.push(m.thumbnail_url.split('/').pop());
+    }
+    if (files.length > 0) await supabase.storage.from('media').remove(files);
+  }
+
+  await supabase.from('broadcast_media').delete().eq('broadcast_id', id);
+  await supabase.from('broadcast_reactions').delete().eq('broadcast_id', id);
+  await supabase.from('broadcasts').delete().eq('id', id);
+
+  io.emit('broadcast:deleted', { id });
+  res.json({ ok: true });
+});
+
 // Toggle pin
 app.patch('/api/broadcasts/:id/pin', adminAuth, async (req, res) => {
   const { id } = req.params;
