@@ -101,7 +101,7 @@ let adminPushSub = null;   // single admin subscription
 
 async function webPushClient(clientId, title, body) {
   const sub = pushSubs.get(clientId);
-  if (!sub) return;
+  if (!sub) { console.log('No push sub for client:', clientId); return; }
   try {
     await webpush.sendNotification(sub, JSON.stringify({ title, body }));
   } catch(e) {

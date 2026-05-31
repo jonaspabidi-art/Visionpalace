@@ -746,10 +746,11 @@ function connectSocket() {
 
   socket.on('client:joined', d => { clients.unshift({ ...d.client, unread_count: 0 }); renderClients(); });
 
-  // After reconnect (e.g. server restart), reload fresh data
+  // After reconnect (e.g. server restart), reload fresh data and re-register push
   socket.on('connect', () => {
     loadBroadcasts();
     loadClients();
+    setupPush();
   });
 
   socket.on('client:updated', d => {
