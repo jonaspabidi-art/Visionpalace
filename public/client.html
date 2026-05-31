@@ -409,7 +409,6 @@ let pendingMedia = [];
 let chatUnread = 0;
 let chatOpen = false;
 let deferredPWA = null;
-let chatPollTimer = null;
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
@@ -434,15 +433,12 @@ function openChat() {
   document.getElementById('chat-screen').classList.add('open');
   chatUnread = 0; updateUnread();
   markRead();
+  loadMessages();
   scrollChat();
-  clearInterval(chatPollTimer);
-  chatPollTimer = setInterval(loadMessages, 3000);
 }
 function closeChat() {
   chatOpen = false;
   document.getElementById('chat-screen').classList.remove('open');
-  clearInterval(chatPollTimer);
-  chatPollTimer = null;
 }
 
 function getInviteToken() {
@@ -526,7 +522,8 @@ function initApp() {
   connectSocket();
   loadBroadcasts();
   loadMessages();
-  setInterval(loadBroadcasts, 10000);
+  setInterval(loadBroadcasts, 8000);
+  setInterval(loadMessages, 5000);
 }
 
 function connectSocket() {
@@ -557,13 +554,16 @@ function connectSocket() {
 }
 
 async function loadBroadcasts() {
-  const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
-  const d = await r.json();
-  const s = document.getElementById('feed-scroll');
-  const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
-  broadcasts = d.broadcasts || [];
-  renderFeed();
-  if (atBottom) scrollFeedBottom();
+  try {
+    const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
+    if (!r.ok) return;
+    const d = await r.json();
+    const s = document.getElementById('feed-scroll');
+    const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
+    broadcasts = d.broadcasts || [];
+    renderFeed();
+    if (atBottom) scrollFeedBottom();
+  } catch(e) {}
 }
 
 function renderFeed() {
@@ -636,26 +636,25 @@ async function react(id, reaction) {
 }
 
 async function loadMessages() {
-  const r = await fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} });
-  const d = await r.json();
-  const msgs = d.messages || [];
-  chatUnread = msgs.filter(m=>m.sender==='admin'&&!m.read).length;
-  updateUnread();
-  const c = document.getElementById('chat-messages');
-  const existing = new Set([...c.querySelectorAll('[data-msg-id]')].map(el=>el.dataset.msgId));
-  const newMsgs = msgs.filter(m=>!existing.has(m.id));
-  if (!existing.size) {
+  try {
+    const r = await fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} });
+    if (!r.ok) return;
+    const d = await r.json();
+    const msgs = d.messages || [];
+    chatUnread = msgs.filter(m=>m.sender==='admin'&&!m.read).length;
+    updateUnread();
+    if (!chatOpen) return;
+    const c = document.getElementById('chat-messages');
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 60;
     if (!msgs.length) return;
     c.innerHTML = msgs.map(chatMsgHTML).join('');
-    scrollChat();
-    return;
-  }
-  for (const m of newMsgs) appendChatMsg(m);
+    if (atBottom) scrollChat();
+  } catch(e) {}
 }
 
 function appendChatMsg(m) {
+  if (!chatOpen) return;
   const c = document.getElementById('chat-messages');
-  if (document.querySelector(`[data-msg-id="${m.id}"]`)) return;
   const empty = c.querySelector('.chat-empty');
   if (empty) empty.remove();
   const div = document.createElement('div');
@@ -675,7 +674,7 @@ function chatMsgHTML(m) {
         : `<img class="bubble-img" src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
       : `<span style="font-size:12px;color:var(--text3);font-style:italic">Media no longer available</span>`
   ).join('');
-  return `<div class="msg-row ${from}" data-msg-id="${m.id}">
+  return `<div class="msg-row ${from}">
     <div class="bubble">${m.text?esc(m.text):''}${mediaHTML}</div>
     <div class="msg-meta">${time}</div>
   </div>`;
@@ -717,8 +716,7 @@ async function sendMsg() {
   if (r.ok) {
     pendingMedia = [];
     document.getElementById('media-prev-row').innerHTML = '';
-    const d = await r.json();
-    appendChatMsg(d.message);
+    loadMessages();
   }
 }
 
