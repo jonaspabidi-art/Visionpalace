@@ -525,11 +525,12 @@ app.get('/api/push/vapid-key', (req, res) => {
 });
 
 // Save web push subscription (client)
-app.post('/api/push/subscribe', clientAuth, (req, res) => {
+app.post('/api/push/subscribe', clientAuth, async (req, res) => {
   const { subscription } = req.body;
   if (subscription?.endpoint) {
     pushSubs.set(req.client.id, subscription);
-    console.log('Push subscription registered:', req.client.display_name);
+    await supabase.from('clients').update({ onesignal_player_id: JSON.stringify(subscription) }).eq('id', req.client.id);
+    console.log('Push subscription saved:', req.client.display_name);
   }
   res.json({ ok: true });
 });
@@ -610,6 +611,19 @@ io.on('connection', (socket) => {
   });
 });
 
+// ─── Load persisted push subscriptions on startup ────────────────────────────
+
+async function loadPushSubs() {
+  const { data } = await supabase.from('clients').select('id, onesignal_player_id').not('onesignal_player_id', 'is', null);
+  let count = 0;
+  for (const c of data || []) {
+    if (c.onesignal_player_id?.startsWith('{')) {
+      try { pushSubs.set(c.id, JSON.parse(c.onesignal_player_id)); count++; } catch {}
+    }
+  }
+  console.log(`Loaded ${count} push subscriptions from DB`);
+}
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 process.on('uncaughtException', err => {
@@ -620,4 +634,7 @@ process.on('unhandledRejection', err => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Vision Palace running on port ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Vision Palace running on port ${PORT}`);
+  loadPushSubs();
+});
