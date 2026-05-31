@@ -526,11 +526,12 @@ function initApp() {
   connectSocket();
   loadBroadcasts();
   loadMessages();
+  setInterval(loadBroadcasts, 10000);
 }
 
 function connectSocket() {
   socket = io({ auth: { session_token: session.session_token }, transports: ['websocket', 'polling'] });
-  socket.on('connect', () => loadMessages());
+  socket.on('connect', () => { loadBroadcasts(); loadMessages(); });
   socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); scrollFeedBottom(); });
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x=>x.id===d.id);
@@ -558,9 +559,11 @@ function connectSocket() {
 async function loadBroadcasts() {
   const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
   const d = await r.json();
+  const s = document.getElementById('feed-scroll');
+  const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
   broadcasts = d.broadcasts || [];
   renderFeed();
-  scrollFeedBottom();
+  if (atBottom) scrollFeedBottom();
 }
 
 function renderFeed() {
