@@ -74,8 +74,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .header-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
 .header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; letter-spacing: 0.1px; }
 
+/* ── Views ── */
+.view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex; background: var(--surface); border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bot); flex-shrink: 0;
+}
+.tab-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 10px 0; background: none; border: none; cursor: pointer; gap: 3px;
+  color: var(--text3); transition: color .15s; position: relative;
+}
+.tab-btn.active { color: var(--blue); }
+.tab-icon { font-size: 19px; line-height: 1; }
+.tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }
+.tab-badge {
+  position: absolute; top: 6px; right: calc(50% - 22px);
+  background: #ff3b30; color: #fff; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; border-radius: 8px; display: none;
+  align-items: center; justify-content: center; padding: 0 4px;
+}
+
 /* ── Feed ── */
-#feed-screen { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .feed-scroll {
   flex: 1; overflow-y: auto; padding: 16px 14px 10px;
@@ -150,50 +173,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 }
 .feed-empty p { font-size: 14px; letter-spacing: 0.1px; }
 
-/* Reply bar */
-.reply-bar {
-  padding: 10px 14px; padding-bottom: max(10px, var(--safe-bot));
-  background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
-}
-.reply-btn {
-  width: 100%; padding: 13px 16px; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 14px; color: var(--text3); font-size: 14px; cursor: pointer;
-  display: flex; align-items: center; gap: 10px; transition: border-color .2s;
-  letter-spacing: 0.1px;
-}
-.reply-btn:active { border-color: var(--blue); }
-.reply-icon {
-  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--text3);
-  display: flex; align-items: center; justify-content: center; font-size: 12px;
-  flex-shrink: 0;
-}
-.reply-unread {
-  background: var(--blue); color: #fff; font-size: 11px; font-weight: 700;
-  min-width: 20px; height: 20px; border-radius: 10px; padding: 0 5px;
-  display: none; align-items: center; justify-content: center; margin-left: auto;
-}
-
-/* ── Private chat ── */
-#chat-screen {
-  position: fixed; inset: 0; background: var(--bg); z-index: 50;
-  display: none; flex-direction: column;
-  transform: translateY(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
-}
-#chat-screen.open { display: flex; transform: translateY(0); }
-
-.chat-header {
-  display: flex; align-items: center; gap: 12px; padding: 0 16px;
-  height: calc(58px + var(--safe-top)); padding-top: var(--safe-top);
-  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
-}
-.back-btn {
-  background: none; border: none; color: var(--blue); font-size: 16px; font-weight: 600;
-  cursor: pointer; padding: 6px 8px 6px 0; display: flex; align-items: center; gap: 4px; letter-spacing: -0.2px;
-}
-.back-arrow { font-size: 20px; line-height: 1; }
-.chat-header-info { flex: 1; }
-.chat-header-name { font-size: 15px; font-weight: 700; }
-.chat-header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+/* ── Private chat (view) ── */
 
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 14px 14px 6px;
@@ -291,7 +271,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 
 /* ── PWA banner ── */
 #pwa-banner {
-  display: none; position: fixed; bottom: calc(var(--safe-bot) + 72px); left: 12px; right: 12px;
+  display: none; position: fixed; bottom: calc(var(--safe-bot) + 62px); left: 12px; right: 12px;
   background: #0c1f3a; border: 1px solid rgba(74,158,255,.4); border-radius: 16px;
   padding: 14px 16px; z-index: 60; align-items: center; gap: 12px;
 }
@@ -334,56 +314,52 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
     <div class="header-mark">VP</div>
     <div class="header-info">
       <div class="header-name">Vision Palace</div>
-      <div class="header-sub">Stock updates</div>
+      <div class="header-sub" id="header-sub">Stock updates</div>
     </div>
   </div>
 
-  <div id="feed-screen">
+  <!-- Broadcast view -->
+  <div class="view active" id="broadcast-view">
     <div class="feed-scroll" id="feed-scroll">
       <div class="feed-empty">
         <div class="feed-empty-icon">[ ]</div>
         <p>No updates yet</p>
       </div>
     </div>
+  </div>
 
-    <div class="reply-bar">
-      <button class="reply-btn" id="open-chat-btn">
-        <div class="reply-icon">→</div>
-        <span style="flex:1;text-align:left">Message privately</span>
-        <span class="reply-unread" id="reply-unread"></span>
-      </button>
+  <!-- Messages view -->
+  <div class="view" id="messages-view">
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-empty">
+        <div class="chat-empty-icon">[ ]</div>
+        <p>No messages yet</p>
+      </div>
+    </div>
+    <div class="typing-row" id="typing-row">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    </div>
+    <div class="chat-composer">
+      <div class="media-prev-row" id="media-prev-row"></div>
+      <div class="input-row">
+        <label class="attach-btn" title="Attach file">+<input type="file" id="file-input" multiple accept="image/*,video/*"></label>
+        <textarea class="msg-input" id="chat-input" placeholder="Type a message…" rows="1"></textarea>
+        <button class="send-btn" id="send-btn">↑</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Private chat -->
-<div id="chat-screen">
-  <div class="chat-header">
-    <button class="back-btn" id="chat-back">
-      <span class="back-arrow">←</span>
-      Back
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-broadcast" onclick="switchTab('broadcast')">
+      <span class="tab-icon">≡</span>
+      <span class="tab-label">Broadcasts</span>
     </button>
-    <div class="chat-header-info">
-      <div class="chat-header-name">Vision Palace</div>
-      <div class="chat-header-sub">Private message</div>
-    </div>
-  </div>
-  <div class="chat-messages" id="chat-messages">
-    <div class="chat-empty">
-      <div class="chat-empty-icon">[ ]</div>
-      <p>No messages yet</p>
-    </div>
-  </div>
-  <div class="typing-row" id="typing-row">
-    <div class="typing-dots"><span></span><span></span><span></span></div>
-  </div>
-  <div class="chat-composer">
-    <div class="media-prev-row" id="media-prev-row"></div>
-    <div class="input-row">
-      <label class="attach-btn" title="Attach file">+<input type="file" id="file-input" multiple accept="image/*,video/*"></label>
-      <textarea class="msg-input" id="chat-input" placeholder="Type a message…" rows="1"></textarea>
-      <button class="send-btn" id="send-btn">↑</button>
-    </div>
+    <button class="tab-btn" id="tab-messages" onclick="switchTab('messages')">
+      <span class="tab-icon">◉</span>
+      <span class="tab-label">Messages</span>
+      <span class="tab-badge" id="msg-badge"></span>
+    </button>
   </div>
 </div>
 
@@ -425,20 +401,19 @@ document.getElementById('pwa-dismiss').onclick = () => {
   document.getElementById('pwa-banner').classList.remove('show');
 };
 
-document.getElementById('open-chat-btn').onclick = openChat;
-document.getElementById('chat-back').onclick = closeChat;
-
-function openChat() {
-  chatOpen = true;
-  document.getElementById('chat-screen').classList.add('open');
-  chatUnread = 0; updateUnread();
-  markRead();
-  loadMessages();
-  scrollChat();
-}
-function closeChat() {
-  chatOpen = false;
-  document.getElementById('chat-screen').classList.remove('open');
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById(tab + '-view').classList.add('active');
+  document.getElementById('header-sub').textContent = tab === 'broadcast' ? 'Stock updates' : 'Messages';
+  chatOpen = (tab === 'messages');
+  if (tab === 'messages') {
+    chatUnread = 0; updateUnread();
+    markRead();
+    loadMessages();
+    scrollChat();
+  }
 }
 
 function getInviteToken() {
@@ -686,7 +661,7 @@ function scrollChat() {
 }
 
 function updateUnread() {
-  const el = document.getElementById('reply-unread');
+  const el = document.getElementById('msg-badge');
   if (chatUnread>0) { el.textContent=chatUnread; el.style.display='flex'; }
   else el.style.display='none';
 }
