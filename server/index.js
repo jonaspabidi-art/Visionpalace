@@ -493,21 +493,25 @@ app.get('/join/:token', (req, res) => res.sendFile(path.join(__dirname, '../publ
 // ─── WebSockets ───────────────────────────────────────────────────────────────
 
 io.use(async (socket, next) => {
-  const token = socket.handshake.auth.token;
-  const sessionToken = socket.handshake.auth.session_token;
+  try {
+    const token = socket.handshake.auth.token;
+    const sessionToken = socket.handshake.auth.session_token;
 
-  if (token && verifyAdminJWT(token)) {
-    socket.isAdmin = true;
-    return next();
-  }
-  if (sessionToken) {
-    const client = await getClientBySession(sessionToken);
-    if (client) {
-      socket.client = client;
+    if (token && verifyAdminJWT(token)) {
+      socket.isAdmin = true;
       return next();
     }
+    if (sessionToken) {
+      const client = await getClientBySession(sessionToken);
+      if (client) {
+        socket.client = client;
+        return next();
+      }
+    }
+    next(new Error('Unauthorized'));
+  } catch (err) {
+    next(new Error('Unauthorized'));
   }
-  next(new Error('Unauthorized'));
 });
 
 io.on('connection', (socket) => {
@@ -538,6 +542,13 @@ io.on('connection', (socket) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+
+process.on('uncaughtException', err => {
+  console.error('Uncaught exception (server kept alive):', err.message);
+});
+process.on('unhandledRejection', err => {
+  console.error('Unhandled rejection (server kept alive):', err?.message || err);
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Vision Palace running on port ${PORT}`));
