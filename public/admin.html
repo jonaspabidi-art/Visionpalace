@@ -684,21 +684,50 @@ async function enableNotifs() {
   await registerAdminPushSub();
 }
 
+function showToast(msg, type) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:${type==='error'?'#3d1a1a':'#1a3d2a'};color:${type==='error'?'#ff8888':'#66dd99'};
+    border:1px solid ${type==='error'?'rgba(255,80,80,.4)':'rgba(80,200,120,.4)'};
+    padding:10px 18px;border-radius:12px;font-size:13px;z-index:999;
+    max-width:90vw;text-align:center;pointer-events:none;white-space:pre-wrap;word-break:break-all;`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), type === 'error' ? 8000 : 3000);
+}
+
 async function registerAdminPushSub() {
   try {
     const kr = await fetch('/api/push/vapid-key');
+    if (!kr.ok) throw new Error('vapid-key ' + kr.status);
     const { publicKey } = await kr.json();
-    const sw = await navigator.serviceWorker.ready;
+    if (!publicKey) throw new Error('no publicKey');
+
+    const sw = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 10000))
+    ]);
+
     let sub = await sw.pushManager.getSubscription();
     if (!sub) {
-      sub = await sw.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      sub = await sw.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
     }
-    await fetch('/api/push/admin-subscribe', {
+    if (!sub) throw new Error('subscribe returned null');
+
+    const r = await fetch('/api/push/admin-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ subscription: sub.toJSON() })
     });
-  } catch(e) { console.error('Admin push setup failed:', e.message); }
+    if (!r.ok) throw new Error('server ' + r.status);
+    console.log('[Push] Admin subscription saved');
+  } catch(e) {
+    console.error('[Push] Admin setup failed:', e);
+    showToast('Notiser: ' + e.message, 'error');
+  }
 }
 
 function urlBase64ToUint8Array(b64) {

@@ -99,9 +99,19 @@ webpush.setVapidDetails(
 const pushSubs = new Map(); // clientId -> PushSubscription
 let adminPushSub = null;   // single admin subscription
 
+function isValidPushSub(sub) {
+  return sub
+    && typeof sub.endpoint === 'string'
+    && sub.endpoint.startsWith('http')
+    && sub.keys
+    && typeof sub.keys.auth === 'string'
+    && typeof sub.keys.p256dh === 'string';
+}
+
 async function webPushClient(clientId, title, body) {
   const sub = pushSubs.get(clientId);
   if (!sub) { console.log(`[Push] No subscription for client ${clientId} (total: ${pushSubs.size})`); return; }
+  if (!isValidPushSub(sub)) { console.warn(`[Push] Invalid subscription for ${clientId}, removing`); pushSubs.delete(clientId); return; }
   console.log(`[Push] Sending to client ${clientId}...`);
   try {
     await webpush.sendNotification(sub, JSON.stringify({ title, body }));
@@ -116,6 +126,7 @@ async function webPushAll(title, body) {
   console.log(`[Push] Broadcasting to ${pushSubs.size} subscribers`);
   const sends = [];
   for (const [clientId, sub] of pushSubs) {
+    if (!isValidPushSub(sub)) { pushSubs.delete(clientId); continue; }
     sends.push(
       webpush.sendNotification(sub, JSON.stringify({ title, body }))
         .then(() => console.log(`[Push] Broadcast OK to ${clientId}`))
@@ -451,11 +462,14 @@ app.post('/api/messages/me/send', clientAuth, async (req, res) => {
   const full = await supabase.from('messages').select('*, message_media(*)').eq('id', msg.id).single();
   io.to('admins').emit('client:new_message', { message: full.data, client: req.client });
 
-  if (adminPushSub) {
+  if (adminPushSub && isValidPushSub(adminPushSub)) {
     webpush.sendNotification(adminPushSub, JSON.stringify({
       title: req.client.admin_label || req.client.display_name,
       body: text || 'Skickade ett media'
-    })).catch(e => { if (e.statusCode === 410 || e.statusCode === 404) adminPushSub = null; });
+    })).catch(e => {
+      console.error(`[Push] Admin push failed: ${e.statusCode} ${e.message}`);
+      if (e.statusCode === 410 || e.statusCode === 404) adminPushSub = null;
+    });
   }
 
   res.json({ message: full.data });
@@ -534,21 +548,28 @@ app.get('/api/push/vapid-key', (req, res) => {
 // Save web push subscription (client)
 app.post('/api/push/subscribe', clientAuth, async (req, res) => {
   const { subscription } = req.body;
-  if (subscription?.endpoint) {
-    pushSubs.set(req.client.id, subscription);
-    await supabase.from('clients').update({ onesignal_player_id: JSON.stringify(subscription) }).eq('id', req.client.id);
-    console.log('Push subscription saved:', req.client.display_name);
+  console.log(`[Push] Subscribe request from ${req.client.display_name}, endpoint present: ${!!subscription?.endpoint}`);
+  if (!isValidPushSub(subscription)) {
+    console.warn(`[Push] Invalid subscription body from ${req.client.display_name}:`, JSON.stringify(subscription)?.substring(0, 200));
+    return res.status(400).json({ error: 'Invalid subscription' });
   }
+  pushSubs.set(req.client.id, subscription);
+  const { error: dbErr } = await supabase.from('clients').update({ onesignal_player_id: JSON.stringify(subscription) }).eq('id', req.client.id);
+  if (dbErr) console.error(`[Push] DB save failed for ${req.client.display_name}:`, dbErr.message);
+  else console.log(`[Push] Subscription saved to DB for ${req.client.display_name}`);
   res.json({ ok: true });
 });
 
 // Save web push subscription (admin)
 app.post('/api/push/admin-subscribe', adminAuth, (req, res) => {
   const { subscription } = req.body;
-  if (subscription?.endpoint) {
-    adminPushSub = subscription;
-    console.log('Admin push subscription registered');
+  console.log(`[Push] Admin subscribe request, endpoint present: ${!!subscription?.endpoint}`);
+  if (!isValidPushSub(subscription)) {
+    console.warn('[Push] Invalid admin subscription body');
+    return res.status(400).json({ error: 'Invalid subscription' });
   }
+  adminPushSub = subscription;
+  console.log('[Push] Admin push subscription registered');
   res.json({ ok: true });
 });
 
