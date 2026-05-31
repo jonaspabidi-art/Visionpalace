@@ -708,13 +708,12 @@ async function registerAdminPushSub() {
       new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 10000))
     ]);
 
-    let sub = await sw.pushManager.getSubscription();
-    if (!sub) {
-      sub = await sw.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey)
-      });
-    }
+    const existing = await sw.pushManager.getSubscription();
+    if (existing) await existing.unsubscribe();
+    const sub = await sw.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
     if (!sub) throw new Error('subscribe returned null');
 
     const r = await fetch('/api/push/admin-subscribe', {
