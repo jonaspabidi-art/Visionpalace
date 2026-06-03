@@ -70,11 +70,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   flex-shrink: 0;
 }
 .header-mark {
-  width: 36px; height: 36px; border-radius: 10px; background: var(--blue);
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
-  font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.05em; flex-shrink: 0;
+  width: 36px; height: 36px; border-radius: 10px; background: #fff;
+  overflow: hidden; flex-shrink: 0;
 }
+.header-mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .header-info { flex: 1; }
 .header-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
 .header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; letter-spacing: 0.1px; }
@@ -122,11 +121,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 /* Broadcast bubble */
 .bc-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
 .bc-mark {
-  width: 30px; height: 30px; border-radius: 50%; background: var(--blue);
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
-  font-size: 11px; font-weight: 600; color: #fff; flex-shrink: 0; letter-spacing: 0.05em;
+  width: 30px; height: 30px; border-radius: 50%; background: #fff;
+  overflow: hidden; flex-shrink: 0;
 }
+.bc-mark img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .bc-bubble {
   max-width: calc(100% - 46px); background: var(--surface);
   border-radius: 18px 18px 18px 4px; overflow: hidden;
@@ -320,17 +318,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   z-index: 100; gap: 12px; transition: opacity 0.5s ease;
 }
 #splash.fade-out { opacity: 0; pointer-events: none; }
-.splash-mark {
-  width: 80px; height: 80px; border-radius: 24px; background: var(--blue);
-  display: flex; align-items: center; justify-content: center;
-  font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic;
-  font-size: 30px; font-weight: 600; color: white; letter-spacing: 0.05em;
-  box-shadow: 0 10px 40px rgba(74,158,255,.35); margin-bottom: 4px;
-}
-.splash-wordmark {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-style: italic; font-weight: 300; font-size: 34px;
-  letter-spacing: 0.04em; color: var(--text); line-height: 1;
+.splash-logo {
+  width: 120px; height: 120px; border-radius: 26px;
+  box-shadow: 0 12px 48px rgba(255,255,255,.12);
+  margin-bottom: 16px; display: block;
 }
 .splash-sub {
   font-family: 'Montserrat', sans-serif; font-size: 9px; font-weight: 400;
@@ -349,8 +340,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 
 <!-- Splash -->
 <div id="splash">
-  <div class="splash-mark">VP</div>
-  <div class="splash-wordmark">Vision Palace</div>
+  <img src="/logo.png" class="splash-logo" alt="Vision Palace">
   <div class="splash-sub">Stock updates</div>
   <div class="splash-dots"><span></span><span></span><span></span></div>
 </div>
@@ -358,7 +348,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 <!-- Join / Login -->
 <div id="join-screen">
   <div class="join-card">
-    <div class="join-wordmark">Vision Palace</div>
+    <img src="/logo.png" style="width:88px;height:88px;border-radius:20px;display:block;margin-bottom:20px;" alt="Vision Palace">
     <h1 id="entry-title">Welcome</h1>
     <p id="entry-sub"></p>
 
@@ -383,7 +373,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 <!-- App -->
 <div id="app">
   <div class="header">
-    <div class="header-mark">VP</div>
+    <div class="header-mark"><img src="/logo.png" alt="VP"></div>
     <div class="header-info">
       <div class="header-name">Vision Palace</div>
       <div class="header-sub" id="header-sub">Stock updates</div>
@@ -678,7 +668,7 @@ function bcBubbleHTML(b) {
   ).join('')}</div>` : '';
 
   return `<div class="bc-row">
-    <div class="bc-mark">VP</div>
+    <div class="bc-mark"><img src="/logo.png" alt="VP"></div>
     <div class="bc-bubble${b.is_pinned?' pinned':''}">
       ${b.is_pinned ? '<div class="bc-pin-bar">Pinned</div>' : ''}
       ${mediaHTML}
