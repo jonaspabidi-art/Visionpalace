@@ -183,25 +183,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 /* ── Private chat (view) ── */
 
 .chat-messages {
-  flex: 1; overflow-y: auto; padding: 14px 14px 6px;
-  display: flex; flex-direction: column; gap: 3px;
+  flex: 1; overflow-y: auto; padding: 12px 14px 8px;
+  display: flex; flex-direction: column;
   -webkit-overflow-scrolling: touch;
 }
 .chat-messages::-webkit-scrollbar { display: none; }
 
-.msg-row { display: flex; flex-direction: column; margin-bottom: 3px; }
-.msg-row.from-admin { align-items: flex-start; }
-.msg-row.from-me    { align-items: flex-end; }
+/* Message groups */
+.msg-group { display: flex; flex-direction: column; margin-bottom: 14px; }
+.msg-group.from-admin { align-items: flex-start; }
+.msg-group.from-me    { align-items: flex-end; }
+
+@keyframes msgIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
+.msg-group { animation: msgIn .18s ease; }
+
 .bubble {
-  max-width: 78%; padding: 10px 14px; border-radius: 18px;
-  font-size: 15px; line-height: 1.45; word-break: break-word; white-space: pre-wrap;
+  max-width: 75%; padding: 9px 13px; border-radius: 18px; margin-bottom: 2px;
+  font-size: 15px; line-height: 1.5; word-break: break-word; white-space: pre-wrap;
 }
-.msg-row.from-admin .bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
-.msg-row.from-me .bubble    { background: var(--blue); color: #fff; border-bottom-right-radius: 4px; }
-.msg-meta { font-size: 11px; color: var(--text3); margin: 3px 5px 4px; letter-spacing: 0.2px; }
-.msg-row.from-me .msg-meta { text-align: right; }
-.bubble-img { max-width: 220px; border-radius: 10px; display: block; margin-top: 8px; cursor: pointer; }
-.bubble-vid { max-width: 220px; border-radius: 10px; display: block; margin-top: 8px; }
+/* Received (admin) */
+.msg-group.from-admin .bubble { background: var(--surface2); color: var(--text); }
+.msg-group.from-admin .bubble:first-child  { border-top-left-radius: 4px; }
+.msg-group.from-admin .bubble:last-of-type { border-bottom-left-radius: 4px; }
+
+/* Sent (me) */
+.msg-group.from-me .bubble { background: var(--blue); color: #fff; }
+.msg-group.from-me .bubble:first-child  { border-top-right-radius: 4px; }
+.msg-group.from-me .bubble:last-of-type { border-bottom-right-radius: 4px; }
+
+.msg-meta { font-size: 11px; color: var(--text3); margin: 2px 5px 0; letter-spacing: 0.2px; }
+.msg-group.from-me .msg-meta { text-align: right; }
+.bubble-img { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
+.bubble-vid { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; }
 
 .typing-row { padding: 0 14px 10px; display: none; }
 .typing-dots {
@@ -473,10 +486,10 @@ function switchTab(tab) {
   document.getElementById('header-sub').textContent = tab === 'broadcast' ? 'Stock updates' : 'Messages';
   chatOpen = (tab === 'messages');
   if (tab === 'messages') {
-    renderedMsgIds.clear();
     chatUnread = 0; updateUnread();
     markRead();
-    loadMessages();
+    if (renderedMsgIds.size === 0) loadMessages();
+    else scrollChat();
   }
 }
 
@@ -598,11 +611,19 @@ async function loadBroadcasts() {
     const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
     if (!r.ok) return;
     const d = await r.json();
+    const newList = d.broadcasts || [];
+    const sig = b => b.id + (b.is_pinned ? 'p' : '');
+    const oldSig = broadcasts.map(sig).join();
+    const newSig = newList.map(sig).join();
+    if (oldSig === newSig) { broadcasts = newList; return; }
     const s = document.getElementById('feed-scroll');
     const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
-    broadcasts = d.broadcasts || [];
+    const prevTop = s.scrollTop;
+    const prevH = s.scrollHeight;
+    broadcasts = newList;
     renderFeed();
     if (atBottom) scrollFeedBottom();
+    else requestAnimationFrame(() => { s.scrollTop = prevTop + (s.scrollHeight - prevH); });
   } catch(e) {}
 }
 
@@ -668,11 +689,50 @@ function scrollFeedBottom() {
 
 async function react(id, reaction) {
   myReactions[id] = reaction;
+  const s = document.getElementById('feed-scroll');
+  const prevTop = s.scrollTop;
   renderFeed();
+  s.scrollTop = prevTop;
   await fetch(`/api/reactions/${id}`, {
     method:'POST', headers:{'Content-Type':'application/json','x-session-token':session.session_token},
     body: JSON.stringify({ reaction })
   });
+}
+
+function bubbleMediaHTML(m) {
+  return (m.message_media || []).map(md =>
+    md.storage_url
+      ? (md.type === 'video'
+        ? `<video class="bubble-vid" src="${md.storage_url}" controls playsinline></video>`
+        : `<img class="bubble-img" src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
+      : ''
+  ).join('');
+}
+
+function renderMessages(msgs) {
+  const c = document.getElementById('chat-messages');
+  if (!msgs.length) {
+    c.innerHTML = '<div class="chat-empty"><div class="chat-empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><p>No messages yet</p></div>';
+    return;
+  }
+  c.innerHTML = '';
+  const groups = [];
+  for (const m of msgs) {
+    const last = groups[groups.length - 1];
+    const gap = last ? new Date(m.created_at) - new Date(last.msgs[last.msgs.length-1].created_at) : Infinity;
+    if (last && last.sender === m.sender && gap < 120000) last.msgs.push(m);
+    else groups.push({ sender: m.sender, msgs: [m] });
+  }
+  for (const g of groups) {
+    const from = g.sender === 'admin' ? 'from-admin' : 'from-me';
+    const time = new Date(g.msgs[g.msgs.length-1].created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    const el = document.createElement('div');
+    el.className = `msg-group ${from}`;
+    el.innerHTML = g.msgs.map(m => `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div>`).join('')
+      + `<div class="msg-meta">${time}</div>`;
+    c.appendChild(el);
+    g.msgs.forEach(m => renderedMsgIds.add(m.id));
+  }
 }
 
 async function loadMessages() {
@@ -683,53 +743,45 @@ async function loadMessages() {
     if (!r.ok) return;
     const d = await r.json();
     const msgs = d.messages || [];
-    chatUnread = msgs.filter(m=>m.sender==='admin'&&!m.read).length;
+    chatUnread = msgs.filter(m => m.sender==='admin' && !m.read).length;
     updateUnread();
     if (!chatOpen) return;
     const newMsgs = msgs.filter(m => !renderedMsgIds.has(m.id));
     if (!newMsgs.length) return;
-    const c = document.getElementById('chat-messages');
-    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 60;
-    const wasEmpty = renderedMsgIds.size === 0;
-    const empty = c.querySelector('.chat-empty');
-    if (empty) empty.remove();
-    for (const m of newMsgs) {
-      renderedMsgIds.add(m.id);
-      const div = document.createElement('div');
-      div.innerHTML = chatMsgHTML(m);
-      c.appendChild(div.firstElementChild);
+    if (renderedMsgIds.size === 0) {
+      renderMessages(msgs);
+      scrollChat();
+    } else {
+      const c = document.getElementById('chat-messages');
+      const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 60;
+      newMsgs.forEach(m => appendChatMsg(m));
+      if (atBottom) scrollChat();
     }
-    if (wasEmpty || atBottom) scrollChat();
   } catch(e) {} finally { loadingMsgs = false; }
 }
 
 function appendChatMsg(m) {
-  if (!chatOpen || renderedMsgIds.has(m.id)) return;
+  if (renderedMsgIds.has(m.id)) return;
   renderedMsgIds.add(m.id);
   const c = document.getElementById('chat-messages');
   const empty = c.querySelector('.chat-empty');
   if (empty) empty.remove();
-  const div = document.createElement('div');
-  div.innerHTML = chatMsgHTML(m);
-  c.appendChild(div.firstElementChild);
-  scrollChat();
-}
-
-function chatMsgHTML(m) {
+  const from = m.sender === 'admin' ? 'from-admin' : 'from-me';
   const time = new Date(m.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  const from = m.sender==='admin' ? 'from-admin' : 'from-me';
-  const media = m.message_media || [];
-  const mediaHTML = media.map(md=>
-    md.storage_url
-      ? (md.type==='video'
-        ? `<video class="bubble-vid" src="${md.storage_url}" controls playsinline></video>`
-        : `<img class="bubble-img" src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-      : `<span style="font-size:12px;color:var(--text3);font-style:italic">Media no longer available</span>`
-  ).join('');
-  return `<div class="msg-row ${from}">
-    <div class="bubble">${m.text?esc(m.text):''}${mediaHTML}</div>
-    <div class="msg-meta">${time}</div>
-  </div>`;
+  const lastGroup = c.querySelector(`.msg-group:last-child`);
+  if (lastGroup && lastGroup.classList.contains(from)) {
+    const meta = lastGroup.querySelector('.msg-meta');
+    if (meta) meta.remove();
+    lastGroup.insertAdjacentHTML('beforeend',
+      `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div><div class="msg-meta">${time}</div>`
+    );
+  } else {
+    const el = document.createElement('div');
+    el.className = `msg-group ${from}`;
+    el.innerHTML = `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div><div class="msg-meta">${time}</div>`;
+    c.appendChild(el);
+  }
+  if (chatOpen) scrollChat();
 }
 
 function scrollChat() {
