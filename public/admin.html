@@ -976,7 +976,17 @@ async function postBroadcast() {
     body: JSON.stringify({ text, price, is_pinned, media })
   });
 
-  if (r.ok) loadBroadcasts();
+  if (r.ok) {
+    const d = await r.json();
+    if (d.broadcast && !broadcasts.find(x => x.id === d.broadcast.id)) {
+      broadcasts.push(d.broadcast);
+    }
+    renderFeed();
+    requestAnimationFrame(() => {
+      const f = document.getElementById('bc-feed');
+      f.scrollTop = f.scrollHeight;
+    });
+  }
 }
 
 document.getElementById('bc-send-btn').onclick = postBroadcast;
