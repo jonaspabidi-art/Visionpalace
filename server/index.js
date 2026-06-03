@@ -328,16 +328,18 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
     .single();
 
   io.emit('admin:new_broadcast', { broadcast: full.data });
+  res.json({ broadcast: full.data });
 
+  // Push notifications fire in background — never block the response
   const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
   webPushAll('Vision Palace', pushText).catch(() => {});
-  const { data: clients } = await supabase.from('clients').select('onesignal_player_id').eq('is_inactive', false);
-  const playerIds = (clients || []).map(c => c.onesignal_player_id).filter(Boolean);
-  if (playerIds.length > 0) {
-    await sendPushToAll('Vision Palace', pushText, { type: 'broadcast', id: broadcast.id });
-  }
-
-  res.json({ broadcast: full.data });
+  supabase.from('clients').select('onesignal_player_id').eq('is_inactive', false)
+    .then(({ data: clients }) => {
+      const playerIds = (clients || []).map(c => c.onesignal_player_id).filter(Boolean);
+      if (playerIds.length > 0) {
+        sendPushToAll('Vision Palace', pushText, { type: 'broadcast', id: broadcast.id }).catch(() => {});
+      }
+    });
 });
 
 // Delete broadcast
