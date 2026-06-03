@@ -194,8 +194,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-group.from-admin { align-items: flex-start; }
 .msg-group.from-me    { align-items: flex-end; }
 
-@keyframes msgIn { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
-.msg-group { animation: msgIn .18s ease; }
+@keyframes msgSlideLeft {
+  from { opacity: 0; transform: translateX(-16px) scale(0.93); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes msgSlideRight {
+  from { opacity: 0; transform: translateX(16px) scale(0.93); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes bubblePop {
+  from { opacity: 0; transform: translateY(6px) scale(0.95); }
+  to   { opacity: 1; transform: none; }
+}
+.msg-group.anim-in.from-admin { animation: msgSlideLeft  .28s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.msg-group.anim-in.from-me    { animation: msgSlideRight .28s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.bubble.anim-in               { animation: bubblePop     .22s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
 
 .bubble {
   max-width: 75%; padding: 9px 13px; border-radius: 18px; margin-bottom: 2px;
@@ -768,16 +781,21 @@ function appendChatMsg(m) {
   if (empty) empty.remove();
   const from = m.sender === 'admin' ? 'from-admin' : 'from-me';
   const time = new Date(m.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  const lastGroup = c.querySelector(`.msg-group:last-child`);
+  const lastGroup = c.querySelector('.msg-group:last-child');
   if (lastGroup && lastGroup.classList.contains(from)) {
     const meta = lastGroup.querySelector('.msg-meta');
     if (meta) meta.remove();
-    lastGroup.insertAdjacentHTML('beforeend',
-      `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div><div class="msg-meta">${time}</div>`
-    );
+    const bbl = document.createElement('div');
+    bbl.className = 'bubble anim-in';
+    bbl.innerHTML = (m.text ? esc(m.text) : '') + bubbleMediaHTML(m);
+    lastGroup.appendChild(bbl);
+    const metaEl = document.createElement('div');
+    metaEl.className = 'msg-meta';
+    metaEl.textContent = time;
+    lastGroup.appendChild(metaEl);
   } else {
     const el = document.createElement('div');
-    el.className = `msg-group ${from}`;
+    el.className = `msg-group ${from} anim-in`;
     el.innerHTML = `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div><div class="msg-meta">${time}</div>`;
     c.appendChild(el);
   }
