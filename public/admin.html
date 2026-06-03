@@ -874,24 +874,14 @@ function renderFeed() {
 }
 
 function appendBroadcast(b) {
+  if (document.querySelector(`.bc-msg-row[data-id="${b.id}"]`)) return;
   const feed = document.getElementById('bc-feed');
   const empty = feed.querySelector('.feed-empty');
   if (empty) empty.remove();
-
-  const d = new Date(b.created_at);
-  const dateStr = d.toLocaleDateString('sv-SE', { day: '2-digit', month: 'short', year: 'numeric' });
-  const lastSep = feed.querySelector('.bc-date-sep:last-of-type');
-  const lastDate = lastSep ? lastSep.textContent.trim() : '';
-  if (dateStr !== lastDate) {
-    const sep = document.createElement('div');
-    sep.innerHTML = `<div class="bc-date-sep"><span>${dateStr}</span></div>`;
-    feed.appendChild(sep.firstElementChild);
-  }
-
   const div = document.createElement('div');
   div.innerHTML = bcBubbleHTML(b);
   feed.appendChild(div.firstElementChild);
-  feed.scrollTop = feed.scrollHeight;
+  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
 }
 
 function bcBubbleHTML(b) {
@@ -978,14 +968,10 @@ async function postBroadcast() {
 
   if (r.ok) {
     const d = await r.json();
-    if (d.broadcast && !broadcasts.find(x => x.id === d.broadcast.id)) {
-      broadcasts.push(d.broadcast);
+    if (d.broadcast) {
+      if (!broadcasts.find(x => x.id === d.broadcast.id)) broadcasts.push(d.broadcast);
+      appendBroadcast(d.broadcast);
     }
-    renderFeed();
-    requestAnimationFrame(() => {
-      const f = document.getElementById('bc-feed');
-      f.scrollTop = f.scrollHeight;
-    });
   }
 }
 
