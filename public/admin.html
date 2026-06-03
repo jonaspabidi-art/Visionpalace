@@ -238,6 +238,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   background: rgba(0,0,0,.8); border: none; color: #fff; border-radius: 50%;
   font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
+.prev-sm.uploading::after {
+  content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 1;
+}
+.prev-sm.uploading::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite; z-index: 2;
+}
 
 .bc-extras {
   display: flex; align-items: center; gap: 10px;
@@ -596,6 +606,8 @@ let clients = [];
 let currentClientId = null;
 let pendingBcMedia = [];
 let pendingChatMedia = [];
+let bcUploadPromise = Promise.resolve();
+let chatUploadPromise = Promise.resolve();
 let totalUnread = 0;
 let extrasOpen = false;
 let searchVisible = false;
@@ -930,10 +942,14 @@ async function postBroadcast() {
   const text = document.getElementById('bc-text').value.trim();
   const price = document.getElementById('bc-price').value.trim();
   const is_pinned = document.getElementById('bc-pin').checked;
-  if (!text && !price && !pendingBcMedia.length) return;
+  const hasPrev = document.getElementById('bc-media-prev').children.length > 0;
+  if (!text && !price && !hasPrev) return;
 
   const btn = document.getElementById('bc-send-btn');
   btn.disabled = true;
+
+  await bcUploadPromise;
+  bcUploadPromise = Promise.resolve();
 
   const r = await api('/api/broadcasts', {
     method: 'POST',
@@ -1094,9 +1110,14 @@ async function markRead(clientId) {
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  if (!text && !pendingChatMedia.length) return;
+  const hasPrev = document.getElementById('chat-media-prev').children.length > 0;
+  if (!text && !hasPrev) return;
   input.value = '';
   autoResize(input);
+
+  await chatUploadPromise;
+  chatUploadPromise = Promise.resolve();
+
   const r = await api(`/api/messages/${currentClientId}`, {
     method: 'POST', body: JSON.stringify({ text, media: pendingChatMedia })
   });
@@ -1132,28 +1153,49 @@ document.getElementById('toggle-inactive-btn').onclick = async () => {
 };
 
 // ── Media upload ──
-async function uploadFiles(files, arr, prevEl, isBc) {
-  const form = new FormData();
-  files.forEach(f => form.append('files', f));
-  const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
-  if (!r.ok) { alert('Uppladdning misslyckades'); return; }
-  const d = await r.json();
-  for (const f of d.files) {
-    arr.push(f);
+function uploadFiles(files, arr, prevEl, isBc) {
+  const items = Array.from(files).map(file => {
+    const localUrl = URL.createObjectURL(file);
     const div = document.createElement('div');
-    div.className = 'prev-sm';
-    div.innerHTML = f.type === 'video'
-      ? `<video src="${f.url}" muted></video><button onclick="rmFile(this,'${f.url}',${isBc})">✕</button>`
-      : `<img src="${f.thumbUrl}"><button onclick="rmFile(this,'${f.url}',${isBc})">✕</button>`;
+    div.className = 'prev-sm uploading';
+    div.innerHTML = file.type.startsWith('video')
+      ? `<video src="${localUrl}" muted></video><button>✕</button>`
+      : `<img src="${localUrl}" alt=""><button>✕</button>`;
+    div.querySelector('button').onclick = () => {
+      const idx = arr.findIndex(f => f._div === div);
+      if (idx >= 0) arr.splice(idx, 1);
+      div.remove();
+    };
     prevEl.appendChild(div);
-  }
-}
+    return { file, div };
+  });
 
-function rmFile(btn, url, isBc) {
-  const arr = isBc ? pendingBcMedia : pendingChatMedia;
-  const i = arr.findIndex(f => f.url === url);
-  if (i >= 0) arr.splice(i, 1);
-  btn.closest('.prev-sm').remove();
+  const up = (async () => {
+    const form = new FormData();
+    items.forEach(({ file }) => form.append('files', file));
+    try {
+      const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      if (!r.ok) throw new Error('failed');
+      const d = await r.json();
+      d.files.forEach((f, i) => {
+        const { div } = items[i];
+        if (!div.parentElement) return;
+        div.classList.remove('uploading');
+        div.querySelector('button').onclick = () => {
+          const idx = arr.findIndex(x => x.url === f.url);
+          if (idx >= 0) arr.splice(idx, 1);
+          div.remove();
+        };
+        arr.push(f);
+      });
+    } catch {
+      items.forEach(({ div }) => { if (div.parentElement) div.classList.remove('uploading'); });
+      alert('Uppladdning misslyckades');
+    }
+  })();
+
+  if (isBc) bcUploadPromise = Promise.allSettled([bcUploadPromise, up]);
+  else chatUploadPromise = Promise.allSettled([chatUploadPromise, up]);
 }
 
 document.getElementById('bc-file').addEventListener('change', async e => {
