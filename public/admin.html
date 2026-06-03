@@ -608,6 +608,7 @@ let pendingBcMedia = [];
 let pendingChatMedia = [];
 let bcUploadPromise = Promise.resolve();
 let chatUploadPromise = Promise.resolve();
+let bcLoadGen = 0;
 let totalUnread = 0;
 let extrasOpen = false;
 let searchVisible = false;
@@ -841,10 +842,12 @@ function api(url, opts = {}) {
 
 // ── Broadcasts ──
 async function loadBroadcasts(q = '') {
+  const gen = ++bcLoadGen;
   const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
   const r = await api(url);
+  if (gen !== bcLoadGen) return; // a newer call is already in flight — discard this result
   const d = await r.json();
-  // Sort chronologically for chat view
+  if (gen !== bcLoadGen) return;
   broadcasts = (d.broadcasts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   renderFeed();
 }
