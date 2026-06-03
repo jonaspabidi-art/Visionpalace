@@ -937,7 +937,7 @@ function bcBubbleHTML(b) {
   if (pending) {
     footerHTML = `<span class="bc-bubble-time">Skickar… <span class="bc-sending-dot"></span></span>`;
   } else if (failed) {
-    footerHTML = `<span class="bc-bubble-time" style="color:#ffb3b3">Misslyckades</span>
+    footerHTML = `<span class="bc-bubble-time" style="color:#ffb3b3" title="${esc(b._failReason || '')}">Fel: ${esc(b._failReason || 'okänt')}</span>
       <button class="bc-retry-btn" onclick="retryBroadcast('${b.id}')">Försök igen</button>
       <button class="bc-del-btn" onclick="discardFailedBroadcast('${b.id}')" title="Släng">✕</button>`;
   } else {
@@ -1013,14 +1013,17 @@ function postBroadcast() {
 async function sendBroadcast(optimistic) {
   const tempId = optimistic.id;
   try {
-    // Wait for any uploads in this draft to finish
+    // Wait for all uploads in this draft (silenced promises — never throw)
     const promises = [...new Set(optimistic._items.map(i => i.uploadPromise).filter(Boolean))];
     if (promises.length) await Promise.all(promises);
 
-    // After uploads, every item must have a remote URL
-    if (optimistic._items.some(i => !i.url)) throw new Error('upload incomplete');
+    // Check upload results via item.url (set by uploadFiles on success)
+    const failedUploads = optimistic._items.filter(i => !i.removed && !i.url);
+    if (failedUploads.length) throw new Error('upload incomplete');
 
-    const media = optimistic._items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
+    // Only include items that successfully uploaded
+    const media = optimistic._items.filter(i => !i.removed && i.url)
+      .map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
 
     const r = await api('/api/broadcasts', {
       method: 'POST',
@@ -1032,16 +1035,30 @@ async function sendBroadcast(optimistic) {
         client_temp_id: tempId
       })
     });
-    if (!r.ok) throw new Error('post failed');
+    if (!r.ok) {
+      const errBody = await r.json().catch(() => ({}));
+      throw new Error(`server ${r.status}: ${errBody.error || 'unknown'}`);
+    }
     const d = await r.json();
-    if (!d.broadcast) throw new Error('no broadcast in response');
 
-    replaceOptimisticBroadcast(tempId, d.broadcast);
+    if (d.broadcast) {
+      replaceOptimisticBroadcast(tempId, d.broadcast);
+    } else {
+      // Broadcast was saved but server couldn't return full data — reload to show it
+      discardOptimisticBroadcast(tempId);
+      loadBroadcasts();
+    }
   } catch (e) {
-    markBroadcastFailed(tempId);
+    markBroadcastFailed(tempId, e.message);
   } finally {
     inFlightBcTempIds.delete(tempId);
   }
+}
+
+function discardOptimisticBroadcast(tempId) {
+  broadcasts = broadcasts.filter(b => b.id !== tempId);
+  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
+  if (row) row.remove();
 }
 
 function replaceOptimisticBroadcast(tempId, real) {
@@ -1051,15 +1068,18 @@ function replaceOptimisticBroadcast(tempId, real) {
   if (row) {
     const div = document.createElement('div');
     div.innerHTML = bcBubbleHTML(real);
-    row.replaceWith(div.firstElementChild);
+    const el = div.firstElementChild;
+    if (el) row.replaceWith(el);
+    else loadBroadcasts(); // fallback — shouldn't happen but be safe
   }
 }
 
-function markBroadcastFailed(tempId) {
+function markBroadcastFailed(tempId, reason) {
   const b = broadcasts.find(x => x.id === tempId);
   if (!b) return;
   b._pending = false;
   b._failed = true;
+  b._failReason = reason || 'okänt fel';
   const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
   if (row) {
     const div = document.createElement('div');
@@ -1322,14 +1342,20 @@ function uploadFiles(files, arr, prevEl) {
     });
   })();
 
-  up.catch(() => {
-    items.forEach(({ item }) => {
-      if (item._div.parentElement) item._div.classList.remove('uploading');
-    });
-    alert('Uppladdning misslyckades');
+  // Silenced promise: never rejects, so await Promise.all([uploadPromise]) only throws
+  // if the JS engine itself is broken. Failure is detected via item.url being null.
+  const upSilenced = up.catch(() => {});
+  upSilenced.then(() => {
+    // Show alert only if items actually failed (url not set)
+    if (items.some(({ item }) => !item.url && !item.removed)) {
+      items.forEach(({ item }) => {
+        if (item._div.parentElement) item._div.classList.remove('uploading');
+      });
+      alert('Uppladdning misslyckades');
+    }
   });
 
-  items.forEach(({ item }) => item.uploadPromise = up);
+  items.forEach(({ item }) => item.uploadPromise = upSilenced);
 }
 
 document.getElementById('bc-file').addEventListener('change', e => {
