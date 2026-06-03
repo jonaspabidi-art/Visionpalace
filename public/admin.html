@@ -213,6 +213,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .bc-del-btn:active { color: #ff5555; }
 
+/* Optimistic / pending broadcast bubble */
+.bc-msg-row.pending .bc-bubble { opacity: 0.62; }
+.bc-msg-row.pending .bc-bubble-footer .bc-react-btn,
+.bc-msg-row.pending .bc-bubble-footer .bc-pin-btn,
+.bc-msg-row.pending .bc-bubble-footer .bc-del-btn { display: none; }
+.bc-sending-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.55); border-top-color: transparent;
+  animation: spin .7s linear infinite; vertical-align: middle;
+}
+.bc-msg-row.failed .bc-bubble { background: #802929; opacity: 1; }
+.bc-msg-row.failed .bc-bubble-footer .bc-retry-btn {
+  background: rgba(255,255,255,.18); border: none; color: #fff;
+  border-radius: 10px; padding: 3px 9px; font-size: 11px;
+  cursor: pointer; font-family: inherit;
+}
+
 /* Date separator */
 .bc-date-sep { text-align: center; margin: 10px 0 8px; }
 .bc-date-sep span {
@@ -606,8 +623,7 @@ let clients = [];
 let currentClientId = null;
 let pendingBcMedia = [];
 let pendingChatMedia = [];
-let bcUploadPromise = Promise.resolve();
-let chatUploadPromise = Promise.resolve();
+let inFlightBcTempIds = new Set();
 let bcLoadGen = 0;
 let totalUnread = 0;
 let extrasOpen = false;
@@ -756,6 +772,8 @@ function connectSocket() {
   socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
 
   socket.on('admin:new_broadcast', d => {
+    // Our own optimistic POST is still in flight — let the HTTP response replace the pending bubble
+    if (d.client_temp_id && inFlightBcTempIds.has(d.client_temp_id)) return;
     if (broadcasts.find(x => x.id === d.broadcast.id)) return;
     broadcasts.push(d.broadcast);
     appendBroadcast(d.broadcast);
@@ -848,7 +866,9 @@ async function loadBroadcasts(q = '') {
   if (gen !== bcLoadGen) return; // a newer call is already in flight — discard this result
   const d = await r.json();
   if (gen !== bcLoadGen) return;
-  broadcasts = (d.broadcasts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const pending = broadcasts.filter(b => b._pending || b._failed);
+  const fresh = (d.broadcasts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  broadcasts = [...fresh, ...pending];
   renderFeed();
 }
 
@@ -889,35 +909,52 @@ function bcBubbleHTML(b) {
   const media = b.broadcast_media || [];
   const interested = (b.broadcast_reactions || []).filter(r => r.reaction === 'interested').length;
   const notInt = (b.broadcast_reactions || []).filter(r => r.reaction === 'not_interested').length;
+  const pending = !!b._pending;
+  const failed = !!b._failed;
+
+  const imgSrc = m => m.thumbnail_url || m.storage_url || '';
+  const imgAttrs = m => (pending || failed)
+    ? ''
+    : `data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)"`;
 
   let mediaHTML = '';
   if (media.length === 1) {
     const m = media[0];
     mediaHTML = m.storage_url
       ? (m.type === 'video'
-        ? `<video src="${m.storage_url}" controls style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px"></video>`
-        : `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:pointer" loading="lazy">`)
+        ? `<video src="${m.storage_url}" ${pending ? '' : 'controls'} style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px"></video>`
+        : `<img src="${imgSrc(m)}" ${imgAttrs(m)} style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:${pending ? 'default' : 'pointer'}" loading="lazy">`)
       : '';
   } else if (media.length > 1) {
     const imgs = media.map(m => m.storage_url && m.type !== 'video'
-      ? `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`
+      ? `<img src="${imgSrc(m)}" ${imgAttrs(m)} loading="lazy">`
       : ''
     ).join('');
     mediaHTML = `<div class="bc-media-grid" style="margin-bottom:6px">${imgs}</div>`;
   }
 
-  return `<div class="bc-msg-row" data-id="${b.id}">
+  let footerHTML;
+  if (pending) {
+    footerHTML = `<span class="bc-bubble-time">Skickar… <span class="bc-sending-dot"></span></span>`;
+  } else if (failed) {
+    footerHTML = `<span class="bc-bubble-time" style="color:#ffb3b3">Misslyckades</span>
+      <button class="bc-retry-btn" onclick="retryBroadcast('${b.id}')">Försök igen</button>
+      <button class="bc-del-btn" onclick="discardFailedBroadcast('${b.id}')" title="Släng">✕</button>`;
+  } else {
+    footerHTML = `<span class="bc-bubble-time">${time}</span>
+      <button class="bc-react-btn" onclick="showReactions('${b.id}')">✓ ${interested} &nbsp; ✕ ${notInt}</button>
+      <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">◈</button>
+      <button class="bc-del-btn" onclick="deleteBroadcast('${b.id}')" title="Ta bort">✕</button>`;
+  }
+
+  const rowCls = `bc-msg-row${pending ? ' pending' : ''}${failed ? ' failed' : ''}`;
+  return `<div class="${rowCls}" data-id="${b.id}">
     ${b.is_pinned ? '<div class="bc-pin-tag">◈ Fäst</div>' : ''}
     <div class="bc-bubble">
       ${mediaHTML}
       ${b.price ? `<div class="bc-bubble-price">${esc(b.price)}</div>` : ''}
       ${b.text ? `<div class="bc-bubble-text">${esc(b.text)}</div>` : ''}
-      <div class="bc-bubble-footer">
-        <span class="bc-bubble-time">${time}</span>
-        <button class="bc-react-btn" onclick="showReactions('${b.id}')">✓ ${interested} &nbsp; ✕ ${notInt}</button>
-        <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">◈</button>
-        <button class="bc-del-btn" onclick="deleteBroadcast('${b.id}')" title="Ta bort">✕</button>
-      </div>
+      <div class="bc-bubble-footer">${footerHTML}</div>
     </div>
   </div>`;
 }
@@ -931,23 +968,14 @@ function updateReactionUI(broadcastId, reactions) {
   if (btn) btn.innerHTML = `✓ ${interested} &nbsp; ✕ ${notInt}`;
 }
 
-async function postBroadcast() {
+function postBroadcast() {
   const text = document.getElementById('bc-text').value.trim();
   const price = document.getElementById('bc-price').value.trim();
   const is_pinned = document.getElementById('bc-pin').checked;
-  const hasPrev = document.getElementById('bc-media-prev').children.length > 0;
-  if (!text && !price && !hasPrev) return;
+  const items = pendingBcMedia.filter(i => !i.removed);
+  if (!text && !price && items.length === 0) return;
 
-  const btn = document.getElementById('bc-send-btn');
-  btn.disabled = true;
-
-  // Wait for any in-progress upload, then capture media before clearing
-  const upPromise = bcUploadPromise;
-  bcUploadPromise = Promise.resolve();
-  await upPromise;
-  const media = [...pendingBcMedia];
-
-  // Clear composer immediately — feels instant
+  // Clear composer instantly — gives immediate feedback regardless of network speed
   document.getElementById('bc-text').value = '';
   document.getElementById('bc-price').value = '';
   document.getElementById('bc-pin').checked = false;
@@ -959,20 +987,106 @@ async function postBroadcast() {
     document.getElementById('bc-extras-btn').classList.remove('active');
   }
   autoResize(document.getElementById('bc-text'));
-  btn.disabled = false;
 
-  const r = await api('/api/broadcasts', {
-    method: 'POST',
-    body: JSON.stringify({ text, price, is_pinned, media })
-  });
+  // Build optimistic broadcast and show it in the feed immediately
+  const tempId = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  inFlightBcTempIds.add(tempId);
+  const optimistic = {
+    id: tempId,
+    text, price, is_pinned,
+    created_at: new Date().toISOString(),
+    broadcast_media: items.map(i => ({
+      storage_url: i.url || i.localUrl,
+      thumbnail_url: i.thumbUrl || i.localUrl,
+      type: i.type
+    })),
+    broadcast_reactions: [],
+    _pending: true,
+    _items: items
+  };
+  broadcasts.push(optimistic);
+  appendBroadcast(optimistic);
 
-  if (r.ok) {
+  sendBroadcast(optimistic);
+}
+
+async function sendBroadcast(optimistic) {
+  const tempId = optimistic.id;
+  try {
+    // Wait for any uploads in this draft to finish
+    const promises = [...new Set(optimistic._items.map(i => i.uploadPromise).filter(Boolean))];
+    if (promises.length) await Promise.all(promises);
+
+    // After uploads, every item must have a remote URL
+    if (optimistic._items.some(i => !i.url)) throw new Error('upload incomplete');
+
+    const media = optimistic._items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
+
+    const r = await api('/api/broadcasts', {
+      method: 'POST',
+      body: JSON.stringify({
+        text: optimistic.text,
+        price: optimistic.price,
+        is_pinned: optimistic.is_pinned,
+        media,
+        client_temp_id: tempId
+      })
+    });
+    if (!r.ok) throw new Error('post failed');
     const d = await r.json();
-    if (d.broadcast) {
-      if (!broadcasts.find(x => x.id === d.broadcast.id)) broadcasts.push(d.broadcast);
-      appendBroadcast(d.broadcast);
-    }
+    if (!d.broadcast) throw new Error('no broadcast in response');
+
+    replaceOptimisticBroadcast(tempId, d.broadcast);
+  } catch (e) {
+    markBroadcastFailed(tempId);
+  } finally {
+    inFlightBcTempIds.delete(tempId);
   }
+}
+
+function replaceOptimisticBroadcast(tempId, real) {
+  const idx = broadcasts.findIndex(b => b.id === tempId);
+  if (idx >= 0) broadcasts[idx] = real;
+  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
+  if (row) {
+    const div = document.createElement('div');
+    div.innerHTML = bcBubbleHTML(real);
+    row.replaceWith(div.firstElementChild);
+  }
+}
+
+function markBroadcastFailed(tempId) {
+  const b = broadcasts.find(x => x.id === tempId);
+  if (!b) return;
+  b._pending = false;
+  b._failed = true;
+  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
+  if (row) {
+    const div = document.createElement('div');
+    div.innerHTML = bcBubbleHTML(b);
+    row.replaceWith(div.firstElementChild);
+  }
+}
+
+function retryBroadcast(tempId) {
+  const b = broadcasts.find(x => x.id === tempId);
+  if (!b) return;
+  b._pending = true;
+  b._failed = false;
+  inFlightBcTempIds.add(tempId);
+  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
+  if (row) {
+    const div = document.createElement('div');
+    div.innerHTML = bcBubbleHTML(b);
+    row.replaceWith(div.firstElementChild);
+  }
+  sendBroadcast(b);
+}
+
+function discardFailedBroadcast(tempId) {
+  broadcasts = broadcasts.filter(b => b.id !== tempId);
+  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
+  if (row) row.remove();
 }
 
 document.getElementById('bc-send-btn').onclick = postBroadcast;
@@ -1117,16 +1231,21 @@ async function markRead(clientId) {
 async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  const hasPrev = document.getElementById('chat-media-prev').children.length > 0;
-  if (!text && !hasPrev) return;
+  const items = pendingChatMedia.filter(i => !i.removed);
+  if (!text && items.length === 0) return;
   input.value = '';
   autoResize(input);
 
-  await chatUploadPromise;
-  chatUploadPromise = Promise.resolve();
+  // Wait for any uploads in this draft
+  const promises = [...new Set(items.map(i => i.uploadPromise).filter(Boolean))];
+  if (promises.length) {
+    try { await Promise.all(promises); }
+    catch { return; } // alert already shown by uploadFiles
+  }
+  const media = items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
 
   const r = await api(`/api/messages/${currentClientId}`, {
-    method: 'POST', body: JSON.stringify({ text, media: pendingChatMedia })
+    method: 'POST', body: JSON.stringify({ text, media })
   });
   if (r.ok) {
     pendingChatMedia = [];
@@ -1160,57 +1279,65 @@ document.getElementById('toggle-inactive-btn').onclick = async () => {
 };
 
 // ── Media upload ──
-function uploadFiles(files, arr, prevEl, isBc) {
+function uploadFiles(files, arr, prevEl) {
   const items = Array.from(files).map(file => {
     const localUrl = URL.createObjectURL(file);
+    const isVideo = file.type.startsWith('video');
     const div = document.createElement('div');
     div.className = 'prev-sm uploading';
-    div.innerHTML = file.type.startsWith('video')
+    div.innerHTML = isVideo
       ? `<video src="${localUrl}" muted></video><button>✕</button>`
       : `<img src="${localUrl}" alt=""><button>✕</button>`;
+    const item = {
+      localUrl,
+      type: isVideo ? 'video' : 'image',
+      url: null,
+      thumbUrl: null,
+      uploadPromise: null,
+      removed: false,
+      _div: div
+    };
     div.querySelector('button').onclick = () => {
-      const idx = arr.findIndex(f => f._div === div);
+      item.removed = true;
+      const idx = arr.indexOf(item);
       if (idx >= 0) arr.splice(idx, 1);
       div.remove();
     };
     prevEl.appendChild(div);
-    return { file, div };
+    arr.push(item);
+    return { item, file };
   });
 
   const up = (async () => {
     const form = new FormData();
     items.forEach(({ file }) => form.append('files', file));
-    try {
-      const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
-      if (!r.ok) throw new Error('failed');
-      const d = await r.json();
-      d.files.forEach((f, i) => {
-        const { div } = items[i];
-        if (!div.parentElement) return;
-        div.classList.remove('uploading');
-        div.querySelector('button').onclick = () => {
-          const idx = arr.findIndex(x => x.url === f.url);
-          if (idx >= 0) arr.splice(idx, 1);
-          div.remove();
-        };
-        arr.push(f);
-      });
-    } catch {
-      items.forEach(({ div }) => { if (div.parentElement) div.classList.remove('uploading'); });
-      alert('Uppladdning misslyckades');
-    }
+    const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!r.ok) throw new Error('upload failed');
+    const d = await r.json();
+    d.files.forEach((f, i) => {
+      const { item } = items[i];
+      item.url = f.url;
+      item.thumbUrl = f.thumbUrl;
+      if (item._div.parentElement) item._div.classList.remove('uploading');
+    });
   })();
 
-  if (isBc) bcUploadPromise = Promise.allSettled([bcUploadPromise, up]);
-  else chatUploadPromise = Promise.allSettled([chatUploadPromise, up]);
+  up.catch(() => {
+    items.forEach(({ item }) => {
+      if (item._div.parentElement) item._div.classList.remove('uploading');
+    });
+    alert('Uppladdning misslyckades');
+  });
+
+  items.forEach(({ item }) => item.uploadPromise = up);
 }
 
-document.getElementById('bc-file').addEventListener('change', async e => {
-  await uploadFiles(Array.from(e.target.files), pendingBcMedia, document.getElementById('bc-media-prev'), true);
+document.getElementById('bc-file').addEventListener('change', e => {
+  uploadFiles(Array.from(e.target.files), pendingBcMedia, document.getElementById('bc-media-prev'));
   e.target.value = '';
 });
-document.getElementById('chat-file-input').addEventListener('change', async e => {
-  await uploadFiles(Array.from(e.target.files), pendingChatMedia, document.getElementById('chat-media-prev'), false);
+document.getElementById('chat-file-input').addEventListener('change', e => {
+  uploadFiles(Array.from(e.target.files), pendingChatMedia, document.getElementById('chat-media-prev'));
   e.target.value = '';
 });
 

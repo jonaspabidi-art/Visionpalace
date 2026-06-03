@@ -304,7 +304,7 @@ app.get('/api/broadcasts/search', adminAuth, async (req, res) => {
 
 // Post broadcast
 app.post('/api/broadcasts', adminAuth, async (req, res) => {
-  const { text, price, is_pinned, media } = req.body;
+  const { text, price, is_pinned, media, client_temp_id } = req.body;
   if (!text && (!media || media.length === 0)) return res.status(400).json({ error: 'Text eller media krävs' });
 
   const { data: broadcast, error } = await supabase.from('broadcasts').insert({
@@ -327,8 +327,8 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
     .eq('id', broadcast.id)
     .single();
 
-  io.emit('admin:new_broadcast', { broadcast: full.data });
-  res.json({ broadcast: full.data });
+  io.emit('admin:new_broadcast', { broadcast: full.data, client_temp_id: client_temp_id || null });
+  res.json({ broadcast: full.data, client_temp_id: client_temp_id || null });
 
   // Push notifications fire in background — never block the response
   const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
