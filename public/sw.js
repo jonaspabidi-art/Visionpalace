@@ -1,4 +1,4 @@
-const CACHE = 'vp-v3';
+const CACHE = 'vp-v4';
 const SHELL = ['/client', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -45,5 +45,12 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  e.waitUntil(clients.openWindow('/client'));
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wins => {
+      for (const w of wins) {
+        if ('focus' in w) return w.focus();
+      }
+      return clients.openWindow('/client');
+    })
+  );
 });
