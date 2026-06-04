@@ -281,6 +281,15 @@ app.post('/api/upload', anyAuth, upload.array('files', 10), async (req, res) => 
   res.json({ files: results });
 });
 
+// Get inventory items (from existing vision-palace-stock Supabase table)
+app.get('/api/inventory', adminAuth, async (req, res) => {
+  const { data, error } = await supabase.from('inventory')
+    .select('id, ref_code, name, sell_price, notes, image, added_at')
+    .order('added_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ items: data || [] });
+});
+
 // Get broadcasts
 app.get('/api/broadcasts', anyAuth, async (req, res) => {
   const { data } = await supabase
@@ -420,13 +429,16 @@ app.get('/api/messages/me/thread', clientAuth, async (req, res) => {
 // Admin sends message to client
 app.post('/api/messages/:clientId', adminAuth, async (req, res) => {
   const { clientId } = req.params;
-  const { text, media } = req.body;
+  const { text, media, message_type, metadata } = req.body;
 
   const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).single();
   if (!client) return res.status(404).json({ error: 'Klient hittades inte' });
 
   const { data: msg, error } = await supabase.from('messages').insert({
-    client_id: clientId, sender: 'admin', text, created_at: new Date().toISOString()
+    client_id: clientId, sender: 'admin', text: text || null,
+    message_type: message_type || 'text',
+    metadata: metadata || null,
+    created_at: new Date().toISOString()
   }).select().single();
   if (error) return res.status(500).json({ error: error.message });
 

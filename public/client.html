@@ -227,6 +227,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .bubble-img { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
 .bubble-vid { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; }
 
+/* Product card in chat */
+.pc-card { background: var(--surface2); border-radius: 14px; overflow: hidden; max-width: 220px; border: 1px solid var(--border); margin-bottom: 2px; }
+.pc-card-img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; cursor: pointer; }
+.pc-card-img-ph { width: 100%; aspect-ratio: 1; background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--text3); font-size: 11px; }
+.pc-card-body { padding: 10px 12px 12px; }
+.pc-card-ref { font-size: 10px; color: var(--text3); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 2px; }
+.pc-card-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; line-height: 1.3; }
+.pc-card-price { font-size: 16px; font-weight: 800; color: var(--blue); }
+
 .typing-row { padding: 0 14px 10px; display: none; }
 .typing-dots {
   display: inline-flex; gap: 4px; padding: 10px 14px;
@@ -712,6 +721,26 @@ function bubbleMediaHTML(m) {
   ).join('');
 }
 
+function productCardHTML(m) {
+  const meta = m.metadata || {};
+  const img = meta.image
+    ? `<img class="pc-card-img" src="${meta.image}" alt="${esc(meta.name||'')}" loading="lazy" onclick="openLightbox(this.src)">`
+    : `<div class="pc-card-img-ph">Ingen bild</div>`;
+  return `<div class="pc-card">
+    ${img}
+    <div class="pc-card-body">
+      ${meta.ref_code ? `<div class="pc-card-ref">${esc(meta.ref_code)}</div>` : ''}
+      <div class="pc-card-name">${esc(meta.name || m.text || '')}</div>
+      ${meta.price != null ? `<div class="pc-card-price">${esc(String(meta.price))} kr</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function bubbleHTML(m) {
+  if (m.message_type === 'product_card') return productCardHTML(m);
+  return `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div>`;
+}
+
 function renderMessages(msgs) {
   const c = document.getElementById('chat-messages');
   if (!msgs.length) {
@@ -731,7 +760,7 @@ function renderMessages(msgs) {
     const time = new Date(g.msgs[g.msgs.length-1].created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     const el = document.createElement('div');
     el.className = `msg-group ${from}`;
-    el.innerHTML = g.msgs.map(m => `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div>`).join('')
+    el.innerHTML = g.msgs.map(m => bubbleHTML(m)).join('')
       + `<div class="msg-meta">${time}</div>`;
     c.appendChild(el);
     g.msgs.forEach(m => renderedMsgIds.add(m.id));
@@ -776,8 +805,13 @@ function appendChatMsg(m) {
     const meta = lastGroup.querySelector('.msg-meta');
     if (meta) meta.remove();
     const bbl = document.createElement('div');
-    bbl.className = 'bubble anim-in';
-    bbl.innerHTML = (m.text ? esc(m.text) : '') + bubbleMediaHTML(m);
+    if (m.message_type === 'product_card') {
+      bbl.className = 'anim-in';
+      bbl.innerHTML = productCardHTML(m);
+    } else {
+      bbl.className = 'bubble anim-in';
+      bbl.innerHTML = (m.text ? esc(m.text) : '') + bubbleMediaHTML(m);
+    }
     lastGroup.appendChild(bbl);
     const metaEl = document.createElement('div');
     metaEl.className = 'msg-meta';
@@ -786,7 +820,7 @@ function appendChatMsg(m) {
   } else {
     const el = document.createElement('div');
     el.className = `msg-group ${from} anim-in`;
-    el.innerHTML = `<div class="bubble">${m.text ? esc(m.text) : ''}${bubbleMediaHTML(m)}</div><div class="msg-meta">${time}</div>`;
+    el.innerHTML = bubbleHTML(m) + `<div class="msg-meta">${time}</div>`;
     c.appendChild(el);
   }
   if (chatOpen) scrollChat();
