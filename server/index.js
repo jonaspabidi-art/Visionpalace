@@ -21,7 +21,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
   realtime: { transport: ws }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -281,13 +281,45 @@ app.post('/api/upload', anyAuth, upload.array('files', 10), async (req, res) => 
   res.json({ files: results });
 });
 
-// Get inventory items (from existing vision-palace-stock Supabase table)
+// Get inventory items
 app.get('/api/inventory', adminAuth, async (req, res) => {
   const { data, error } = await supabase.from('inventory')
-    .select('id, ref_code, name, sell_price, notes, image, added_at')
+    .select('id, ref_code, name, buy_price, sell_price, notes, image, added_at')
     .order('added_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ items: data || [] });
+});
+
+// Add inventory item
+app.post('/api/inventory', adminAuth, async (req, res) => {
+  const { ref_code, name, buy_price, sell_price, notes, image } = req.body;
+  if (!name) return res.status(400).json({ error: 'Namn krävs' });
+  const { data, error } = await supabase.from('inventory').insert({
+    ref_code: ref_code || null, name, buy_price: buy_price || null,
+    sell_price: sell_price || null, notes: notes || null,
+    image: image || null, added_at: new Date().toISOString()
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ item: data });
+});
+
+// Update inventory item
+app.patch('/api/inventory/:id', adminAuth, async (req, res) => {
+  const { ref_code, name, buy_price, sell_price, notes, image } = req.body;
+  const update = { ref_code: ref_code || null, name, buy_price: buy_price || null,
+    sell_price: sell_price || null, notes: notes || null };
+  if (image !== undefined) update.image = image || null;
+  const { data, error } = await supabase.from('inventory').update(update)
+    .eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ item: data });
+});
+
+// Delete inventory item
+app.delete('/api/inventory/:id', adminAuth, async (req, res) => {
+  const { error } = await supabase.from('inventory').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 // Get broadcasts

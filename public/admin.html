@@ -156,6 +156,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .inv-send-btn:active { opacity: 0.8; }
 .inv-empty { margin: auto; color: var(--text3); font-size: 14px; text-align: center; padding: 40px; }
 
+/* Inventory card actions */
+.inv-card-actions { display: flex; gap: 6px; margin-top: 6px; }
+.inv-edit-btn { flex: 1; padding: 8px 0; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.inv-edit-btn:active { opacity: 0.75; }
+.inv-del-btn { width: 34px; padding: 8px 0; background: none; border: 1px solid var(--border); color: #ff5555; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit; }
+.inv-del-btn:active { background: rgba(255,80,80,.12); }
+
+/* FAB — add item */
+.inv-fab { position: absolute; bottom: 16px; right: 16px; width: 52px; height: 52px; background: var(--blue); border: none; border-radius: 50%; color: #fff; font-size: 26px; font-weight: 300; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(74,158,255,.4); z-index: 10; }
+.inv-fab:active { opacity: 0.85; }
+#inventory-view { position: relative; }
+
+/* Inventory form modal */
+#inv-form-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: flex-end; }
+#inv-form-modal.open { display: flex; }
+.inv-form-sheet { width: 100%; background: var(--surface); border-radius: 20px 20px 0 0; max-height: 92dvh; display: flex; flex-direction: column; padding-bottom: max(16px, var(--safe-bot)); }
+.inv-form-header { display: flex; align-items: center; padding: 16px 16px 0; gap: 12px; flex-shrink: 0; }
+.inv-form-title { flex: 1; font-size: 17px; font-weight: 700; }
+.inv-form-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; -webkit-overflow-scrolling: touch; }
+.inv-form-body::-webkit-scrollbar { display: none; }
+
+/* Image picker in form */
+.inv-img-pick { width: 100%; aspect-ratio: 1; background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; overflow: hidden; position: relative; }
+.inv-img-pick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.inv-img-pick-label { font-size: 13px; color: var(--text3); }
+.inv-img-pick input { display: none; }
+
 /* Client picker modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200;
@@ -631,6 +658,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           <div class="inv-empty">Laddar lager…</div>
         </div>
       </div>
+      <button class="inv-fab" onclick="openInvForm(null)">+</button>
     </div>
 
     <!-- Invoice view -->
@@ -801,6 +829,47 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div style="font-size:15px;font-weight:700;padding:0 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0">Skicka till klient</div>
     <div id="client-picker-list" style="flex:1;overflow-y:auto"></div>
     <button onclick="closeClientPicker()" style="margin:12px 16px 0;padding:14px;text-align:center;background:var(--surface2);border:none;border-radius:12px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">Avbryt</button>
+  </div>
+</div>
+
+<!-- Inventory add/edit form -->
+<div id="inv-form-modal" onclick="if(event.target===this)closeInvForm()">
+  <div class="inv-form-sheet">
+    <div class="inv-form-header">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;position:absolute;top:10px;left:50%;transform:translateX(-50%)"></div>
+      <div class="inv-form-title" id="inv-form-title">Ny vara</div>
+      <button onclick="closeInvForm()" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:4px;line-height:1">✕</button>
+    </div>
+    <div class="inv-form-body">
+      <label class="inv-img-pick" id="inv-img-pick">
+        <input type="file" id="inv-img-input" accept="image/*" onchange="handleInvImg(this)">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span class="inv-img-pick-label">Tryck för att lägga till bild</span>
+      </label>
+      <div class="inv-field">
+        <label>Namn *</label>
+        <input class="inv-input" id="invf-name" type="text" placeholder="ex. Solglasögon Ray-Ban">
+      </div>
+      <div class="inv-row-grid">
+        <div class="inv-field">
+          <label>Ref-kod</label>
+          <input class="inv-input" id="invf-ref" type="text" placeholder="ex. RB-001">
+        </div>
+        <div class="inv-field">
+          <label>Säljpris (kr)</label>
+          <input class="inv-input" id="invf-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="inv-field">
+        <label>Inköpspris (kr)</label>
+        <input class="inv-input" id="invf-buy" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="inv-field">
+        <label>Anteckningar</label>
+        <textarea class="inv-input" id="invf-notes" rows="3" placeholder="Fritext…"></textarea>
+      </div>
+      <button class="inv-gen-btn" onclick="saveInvItem()">Spara</button>
+    </div>
   </div>
 </div>
 
@@ -1655,8 +1724,112 @@ function renderInventory(items) {
         <div class="inv-card-name">${esc(item.name)}</div>
         ${item.sell_price != null ? `<div class="inv-card-price">${esc(String(item.sell_price))} kr</div>` : ''}
         <button class="inv-send-btn" onclick="showClientPicker('${esc(String(item.id))}')">Skicka till klient</button>
+        <div class="inv-card-actions">
+          <button class="inv-edit-btn" onclick="openInvForm('${item.id}')">Redigera</button>
+          <button class="inv-del-btn" onclick="deleteInvItem('${item.id}')" title="Ta bort">🗑</button>
+        </div>
       </div>
     </div>`).join('');
+}
+
+// ── Inventory CRUD ──
+let invFormItemId = null;
+let invFormImage = null; // base64 or null (undefined = unchanged on edit)
+
+function openInvForm(itemId) {
+  invFormItemId = itemId;
+  invFormImage = undefined;
+  const item = itemId ? invItemsMap[itemId] : null;
+  document.getElementById('inv-form-title').textContent = item ? 'Redigera vara' : 'Ny vara';
+  document.getElementById('invf-name').value = item?.name || '';
+  document.getElementById('invf-ref').value = item?.ref_code || '';
+  document.getElementById('invf-sell').value = item?.sell_price ?? '';
+  document.getElementById('invf-buy').value = item?.buy_price ?? '';
+  document.getElementById('invf-notes').value = item?.notes || '';
+  // Show existing image or placeholder
+  const pick = document.getElementById('inv-img-pick');
+  const existing = pick.querySelector('img.inv-preview-img');
+  if (existing) existing.remove();
+  if (item?.image) {
+    const img = document.createElement('img');
+    img.className = 'inv-preview-img';
+    img.src = item.image;
+    pick.appendChild(img);
+  }
+  document.getElementById('inv-img-input').value = '';
+  document.getElementById('inv-form-modal').classList.add('open');
+}
+
+function closeInvForm() {
+  document.getElementById('inv-form-modal').classList.remove('open');
+  invFormItemId = null;
+  invFormImage = undefined;
+}
+
+function handleInvImg(input) {
+  const file = input.files[0];
+  if (!file) return;
+  compressInvImage(file, base64 => {
+    invFormImage = base64;
+    const pick = document.getElementById('inv-img-pick');
+    let img = pick.querySelector('img.inv-preview-img');
+    if (!img) { img = document.createElement('img'); img.className = 'inv-preview-img'; pick.appendChild(img); }
+    img.src = base64;
+  });
+}
+
+function compressInvImage(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const image = new Image();
+    image.onload = () => {
+      const MAX = 400;
+      const scale = Math.min(1, MAX / Math.max(image.width, image.height));
+      const w = Math.round(image.width * scale);
+      const h = Math.round(image.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(image, 0, 0, w, h);
+      cb(canvas.toDataURL('image/jpeg', 0.65));
+    };
+    image.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveInvItem() {
+  const name = document.getElementById('invf-name').value.trim();
+  if (!name) { document.getElementById('invf-name').focus(); return; }
+  const body = {
+    name,
+    ref_code: document.getElementById('invf-ref').value.trim() || null,
+    sell_price: parseFloat(document.getElementById('invf-sell').value) || null,
+    buy_price: parseFloat(document.getElementById('invf-buy').value) || null,
+    notes: document.getElementById('invf-notes').value.trim() || null,
+  };
+  // Only include image if changed (new image selected, or new item)
+  if (invFormImage !== undefined) body.image = invFormImage;
+
+  const btn = document.querySelector('#inv-form-modal .inv-gen-btn');
+  btn.textContent = 'Sparar…'; btn.disabled = true;
+
+  const r = invFormItemId
+    ? await api(`/api/inventory/${invFormItemId}`, { method: 'PATCH', body: JSON.stringify(body) })
+    : await api('/api/inventory', { method: 'POST', body: JSON.stringify(body) });
+
+  btn.textContent = 'Spara'; btn.disabled = false;
+
+  if (!r.ok) { showToast('Kunde inte spara varan', 'error'); return; }
+  closeInvForm();
+  loadInventory();
+}
+
+async function deleteInvItem(id) {
+  if (!confirm('Ta bort denna vara permanent?')) return;
+  const r = await api(`/api/inventory/${id}`, { method: 'DELETE' });
+  if (!r.ok) { showToast('Kunde inte ta bort varan', 'error'); return; }
+  delete invItemsMap[id];
+  loadInventory();
 }
 
 function showClientPicker(itemId) {
