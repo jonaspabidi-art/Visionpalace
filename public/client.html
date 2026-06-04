@@ -731,7 +731,7 @@ function productCardHTML(m) {
     <div class="pc-card-body">
       ${meta.ref_code ? `<div class="pc-card-ref">${esc(meta.ref_code)}</div>` : ''}
       <div class="pc-card-name">${esc(meta.name || m.text || '')}</div>
-      ${meta.price != null ? `<div class="pc-card-price">${esc(String(meta.price))} kr</div>` : ''}
+      ${meta.price != null ? `<div class="pc-card-price">€ ${esc(String(meta.price))}</div>` : ''}
     </div>
   </div>`;
 }

@@ -1722,7 +1722,7 @@ function renderInventory(items) {
       <div class="inv-card-body">
         ${item.ref_code ? `<div class="inv-card-ref">${esc(item.ref_code)}</div>` : ''}
         <div class="inv-card-name">${esc(item.name)}</div>
-        ${item.sell_price != null ? `<div class="inv-card-price">${esc(String(item.sell_price))} kr</div>` : ''}
+        ${item.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
         <button class="inv-send-btn" onclick="showClientPicker('${esc(String(item.id))}')">Skicka till klient</button>
         <div class="inv-card-actions">
           <button class="inv-edit-btn" onclick="openInvForm('${item.id}')">Redigera</button>
@@ -1855,20 +1855,42 @@ function closeClientPicker() {
   invPendingItem = null;
 }
 
+function dataURItoBlob(dataURI) {
+  const [header, data] = dataURI.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const bin = atob(data);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
 async function sendProductToClient(clientId) {
   const item = invPendingItem;
   closeClientPicker();
   if (!item) return;
+
+  // Upload the base64 image to Storage so the client gets a clean URL
+  let imageUrl = null;
+  if (item.image) {
+    try {
+      const blob = dataURItoBlob(item.image);
+      const form = new FormData();
+      form.append('files', blob, 'product.jpg');
+      const up = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+      if (up.ok) { const ud = await up.json(); imageUrl = ud.files?.[0]?.url || null; }
+    } catch {}
+  }
+
   const r = await api(`/api/messages/${clientId}`, {
     method: 'POST',
     body: JSON.stringify({
-      text: item.name + (item.sell_price != null ? '\n' + item.sell_price + ' kr' : ''),
+      text: item.name + (item.sell_price != null ? '\n€ ' + item.sell_price : ''),
       message_type: 'product_card',
       metadata: {
         ref_code: item.ref_code || null,
         name: item.name,
         price: item.sell_price != null ? item.sell_price : null,
-        image: item.image || null,
+        image: imageUrl,
         notes: item.notes || null
       }
     })
