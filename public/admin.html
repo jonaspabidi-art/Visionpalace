@@ -2033,7 +2033,8 @@ async function sendCatalogToClient(clientId) {
       method: 'POST',
       body: JSON.stringify({
         text: 'Vision Palace – Katalog',
-        media: [{ url: pdfUrl, thumbUrl: null, type: 'pdf' }]
+        message_type: 'pdf',
+        metadata: { url: pdfUrl }
       })
     });
     if (r.ok) {
