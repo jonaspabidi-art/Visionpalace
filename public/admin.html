@@ -517,6 +517,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .read-tick { color: rgba(255,255,255,.6); }
 .bubble-media img { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
 .bubble-media video { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; }
+.bubble-pdf { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; text-decoration: none; color: var(--text); max-width: 220px; }
+.bubble-pdf-icon { font-size: 24px; flex-shrink: 0; }
+.bubble-pdf-label { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.bubble-pdf-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 .typing-row { padding: 4px 16px 8px; }
 .typing-dots { display: inline-flex; gap: 4px; padding: 10px 14px; background: var(--surface2); border-radius: 18px; border-bottom-left-radius: 5px; }
 .typing-dots span { width: 6px; height: 6px; background: var(--text3); border-radius: 50%; animation: bounce .9s infinite; }
@@ -1509,16 +1513,28 @@ function appendMsg(m) {
 function msgHTML(m) {
   const time = new Date(m.created_at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
   const from = m.sender === 'admin' ? 'from-admin' : 'from-client';
-  const media = m.message_media || [];
-  const mediaHTML = media.map(md => md.storage_url
-    ? (md.type === 'video'
-      ? `<video src="${md.storage_url}" controls style="max-width:200px;border-radius:10px;margin-top:6px;display:block"></video>`
-      : `<img src="${md.thumbnail_url || md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:200px;border-radius:10px;margin-top:6px;cursor:pointer;display:block" loading="lazy">`)
-    : `<span style="font-size:12px;color:#555;font-style:italic">Bild ej tillgänglig</span>`
-  ).join('');
   const tick = m.sender === 'admin' ? `<span class="read-tick">${m.read ? '✓✓' : '✓'}</span>` : '';
+  let bubbleInner;
+  if (m.message_type === 'pdf' && m.metadata?.url) {
+    bubbleInner = `<a class="bubble-pdf" href="${m.metadata.url}" target="_blank" rel="noopener">
+      <span class="bubble-pdf-icon">📄</span>
+      <span>
+        <div class="bubble-pdf-label">Vision Palace Catalogue</div>
+        <div class="bubble-pdf-sub">Tap to open PDF</div>
+      </span>
+    </a>`;
+  } else {
+    const media = m.message_media || [];
+    const mediaHTML = media.map(md => md.storage_url
+      ? (md.type === 'video'
+        ? `<video src="${md.storage_url}" controls style="max-width:200px;border-radius:10px;margin-top:6px;display:block"></video>`
+        : `<img src="${md.thumbnail_url || md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:200px;border-radius:10px;margin-top:6px;cursor:pointer;display:block" loading="lazy">`)
+      : `<span style="font-size:12px;color:#555;font-style:italic">Bild ej tillgänglig</span>`
+    ).join('');
+    bubbleInner = `<div class="bubble">${m.text ? esc(m.text) : ''}${mediaHTML ? `<div class="bubble-media">${mediaHTML}</div>` : ''}</div>`;
+  }
   return `<div class="msg-row ${from}">
-    <div class="bubble">${m.text ? esc(m.text) : ''}${mediaHTML ? `<div class="bubble-media">${mediaHTML}</div>` : ''}</div>
+    ${bubbleInner}
     <div class="msg-meta">${time} ${tick}</div>
   </div>`;
 }
