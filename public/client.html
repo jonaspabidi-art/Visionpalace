@@ -15,14 +15,14 @@
 <script src="/socket.io/socket.io.js"></script>
 <style>
 :root {
-  --bg: #0a0a0a;
-  --surface: #141414;
-  --surface2: #1e1e1e;
-  --border: #252525;
-  --blue: #4a9eff;
-  --text: #f0f0f0;
-  --text2: #888;
-  --text3: #4a4a4a;
+  --bg: #0c0a08;
+  --surface: #131110;
+  --surface2: #1b1915;
+  --border: #272320;
+  --blue: #c9a96e;
+  --text: #f0ede8;
+  --text2: #7a7268;
+  --text3: #48443e;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bot: env(safe-area-inset-bottom, 0px);
 }
@@ -53,7 +53,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .join-input::placeholder { color: var(--text3); }
 .join-btn {
   width: 100%; margin-top: 14px; padding: 16px; background: var(--blue); border: none;
-  border-radius: 14px; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  border-radius: 14px; color: #1a1409; font-size: 16px; font-weight: 700; cursor: pointer;
   letter-spacing: -0.2px; transition: opacity .15s;
 }
 .join-btn:active { opacity: .85; }
@@ -74,7 +74,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .success-inner > p { color: var(--text2); font-size: 15px; margin-bottom: 28px; line-height: 1.5; }
 .success-btn {
   width: 100%; padding: 15px 16px; background: var(--blue); border: none;
-  border-radius: 14px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+  border-radius: 14px; color: #1a1409; font-size: 15px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;
 }
 .success-btn.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-weight: 600; }
@@ -94,7 +94,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .dl-step:last-child { border-bottom: none; padding-bottom: 0; }
 .dl-step-num {
   width: 22px; height: 22px; border-radius: 50%; background: var(--blue);
-  color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center;
+  color: #1a1409; font-size: 11px; font-weight: 700; display: flex; align-items: center;
   justify-content: center; flex-shrink: 0; margin-top: 1px;
 }
 .dl-step-text { color: var(--text2); }
@@ -259,7 +259,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-group.from-admin .bubble:last-of-type { border-bottom-left-radius: 4px; }
 
 /* Sent (me) */
-.msg-group.from-me .bubble { background: var(--blue); color: #fff; }
+.msg-group.from-me .bubble { background: var(--blue); color: #1a1409; }
 .msg-group.from-me .bubble:first-child  { border-top-right-radius: 4px; }
 .msg-group.from-me .bubble:last-of-type { border-bottom-right-radius: 4px; }
 
@@ -329,7 +329,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-input::placeholder { color: var(--text3); }
 .send-btn {
   width: 42px; height: 42px; background: var(--blue); border: none; border-radius: 50%;
-  color: #fff; font-size: 17px; cursor: pointer; display: flex; align-items: center;
+  color: #1a1409; font-size: 17px; cursor: pointer; display: flex; align-items: center;
   justify-content: center; flex-shrink: 0; transition: opacity .15s;
 }
 .send-btn:active { opacity: .8; }
