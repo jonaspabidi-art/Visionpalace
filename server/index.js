@@ -222,18 +222,21 @@ app.post('/api/invite', adminAuth, async (req, res) => {
 // Client joins via invite
 app.post('/api/join/:token', async (req, res) => {
   const { token } = req.params;
-  const { display_name, password } = req.body;
-  if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'Name is required.' });
-  if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
+  const { username, full_name, address, phone, password } = req.body;
+  if (!username || !username.trim()) return res.status(400).json({ error: 'Användarnamn krävs.' });
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Lösenordet måste vara minst 4 tecken.' });
 
   const { data: invite } = await supabase.from('invites').select('*').eq('token', token).single();
-  if (!invite) return res.status(404).json({ error: 'Invalid invite link.' });
-  if (invite.used) return res.status(400).json({ error: 'This invite link has already been used.' });
-  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'This invite link has expired.' });
+  if (!invite) return res.status(404).json({ error: 'Ogiltig inbjudningslänk.' });
+  if (invite.used) return res.status(400).json({ error: 'Den här länken har redan använts.' });
+  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'Inbjudningslänken har gått ut.' });
 
   const sessionToken = uuidv4();
   const { data: client, error } = await supabase.from('clients').insert({
-    display_name: display_name.trim(),
+    display_name: username.trim(),
+    full_name: full_name?.trim() || null,
+    address: address?.trim() || null,
+    phone: phone?.trim() || null,
     invite_token: token,
     session_token: sessionToken,
     password_hash: hashPassword(password),
@@ -246,7 +249,7 @@ app.post('/api/join/:token', async (req, res) => {
 
   io.to('admins').emit('client:joined', { client });
 
-  res.json({ session_token: sessionToken, client_id: client.id, display_name: client.display_name });
+  res.json({ ok: true });
 });
 
 // Client login (returning user)

@@ -59,6 +59,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .join-btn:active { opacity: .85; }
 .join-err { color: #ff5555; font-size: 13px; margin-top: 12px; }
 
+/* ── Success screen ── */
+#success-screen {
+  display: none; align-items: center; justify-content: center;
+  height: 100dvh; padding: 32px 24px; text-align: center;
+}
+.success-check {
+  width: 64px; height: 64px; background: #1a3a1a; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;
+}
+.success-check svg { width: 32px; height: 32px; color: #4caf50; }
+#success-screen h1 { font-size: 26px; font-weight: 800; margin-bottom: 10px; }
+#success-screen p { color: var(--text2); font-size: 15px; margin-bottom: 32px; line-height: 1.5; }
+.success-btn {
+  width: 100%; padding: 16px; background: var(--blue); border: none;
+  border-radius: 14px; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  max-width: 340px; display: block; margin: 0 auto 12px;
+}
+.success-btn.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.success-btn:active { opacity: .85; }
+
 /* ── App shell ── */
 #app { display: none; height: 100dvh; flex-direction: column; }
 
@@ -354,28 +374,73 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   <div class="splash-dots"><span></span><span></span><span></span></div>
 </div>
 
-<!-- Join / Login -->
+<!-- Register (invite link) -->
+<div id="register-screen" style="display:none;align-items:center;justify-content:center;height:100dvh;padding:24px;overflow-y:auto">
+  <div class="join-card">
+    <img src="/logo.png" style="width:72px;height:72px;border-radius:18px;display:block;margin-bottom:16px;" alt="Vision Palace">
+    <div class="join-wordmark">Vision Palace</div>
+    <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Skapa konto</h1>
+    <p style="color:var(--text2);font-size:14px;margin-bottom:24px;line-height:1.5;">Fyll i dina uppgifter för att få tillgång.</p>
+
+    <div class="field-label">Namn</div>
+    <input class="join-input" type="text" id="reg-name" placeholder="Ditt fulla namn" autocapitalize="words" maxlength="80">
+
+    <div style="margin-top:14px">
+      <div class="field-label">Adress</div>
+      <input class="join-input" type="text" id="reg-address" placeholder="Gatuadress, stad" autocomplete="street-address">
+    </div>
+
+    <div style="margin-top:14px">
+      <div class="field-label">Telefonnummer</div>
+      <input class="join-input" type="tel" id="reg-phone" placeholder="+46 70 000 00 00" autocomplete="tel">
+    </div>
+
+    <div style="margin:20px 0;border-top:1px solid var(--border)"></div>
+
+    <div class="field-label">Användarnamn</div>
+    <input class="join-input" type="text" id="reg-username" placeholder="Välj ett användarnamn" autocomplete="username" maxlength="40" autocapitalize="none">
+
+    <div style="margin-top:14px">
+      <div class="field-label">Lösenord</div>
+      <input class="join-input" type="password" id="reg-password" placeholder="Minst 4 tecken" autocomplete="new-password">
+    </div>
+
+    <button class="join-btn" id="reg-btn" style="margin-top:20px">Skapa konto</button>
+    <div class="join-err" id="reg-err"></div>
+  </div>
+</div>
+
+<!-- Login -->
 <div id="join-screen">
   <div class="join-card">
-    <img src="/logo.png" style="width:88px;height:88px;border-radius:20px;display:block;margin-bottom:20px;" alt="Vision Palace">
-    <h1 id="entry-title">Welcome</h1>
-    <p id="entry-sub"></p>
+    <img src="/logo.png" style="width:72px;height:72px;border-radius:18px;display:block;margin-bottom:16px;" alt="Vision Palace">
+    <div class="join-wordmark">Vision Palace</div>
+    <h1 style="font-size:24px;font-weight:800;margin-bottom:6px;">Logga in</h1>
+    <p style="color:var(--text2);font-size:14px;margin-bottom:24px;">Välkommen tillbaka.</p>
 
-    <div class="field-label">Display name</div>
-    <input class="join-input" type="text" id="name-input" placeholder="Your name" maxlength="40" autocomplete="username" autocapitalize="words">
+    <div class="field-label">Användarnamn</div>
+    <input class="join-input" type="text" id="name-input" placeholder="Ditt användarnamn" maxlength="40" autocomplete="username" autocapitalize="none">
 
-    <div style="margin-top:16px">
-      <div class="field-label">Password</div>
-      <input class="join-input" type="password" id="password-input" placeholder="Password" autocomplete="current-password">
+    <div style="margin-top:14px">
+      <div class="field-label">Lösenord</div>
+      <input class="join-input" type="password" id="password-input" placeholder="Lösenord" autocomplete="current-password">
     </div>
 
-    <div id="confirm-field" style="margin-top:16px;display:none">
-      <div class="field-label">Confirm password</div>
-      <input class="join-input" type="password" id="confirm-input" placeholder="Confirm password" autocomplete="new-password">
-    </div>
-
-    <button class="join-btn" id="action-btn">Continue</button>
+    <button class="join-btn" id="action-btn" style="margin-top:20px">Logga in</button>
     <div class="join-err" id="join-err"></div>
+  </div>
+</div>
+
+<!-- Success (post-registration) -->
+<div id="success-screen">
+  <div style="width:100%;max-width:340px">
+    <div class="success-check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <h1>Konto skapat!</h1>
+    <p>Du kan nu logga in med ditt användarnamn och lösenord.</p>
+    <button id="pwa-reg-install" class="success-btn" style="display:none">Lägg till på hemskärm</button>
+    <button class="success-btn secondary" onclick="goToLogin()">Gå till inloggning</button>
   </div>
 </div>
 
@@ -511,73 +576,84 @@ function getInviteToken() {
   return (last && last !== 'client') ? last : null;
 }
 
-// Set up entry screen based on whether this is a register or login flow
 const inviteToken = getInviteToken();
 if (inviteToken) {
-  document.getElementById('entry-title').textContent = 'Welcome';
-  document.getElementById('entry-sub').textContent = 'Create your account to access the exclusive stock feed.';
-  document.getElementById('confirm-field').style.display = '';
-  document.getElementById('password-input').autocomplete = 'new-password';
-  document.getElementById('password-input').placeholder = 'Create a password';
-  document.getElementById('action-btn').textContent = 'Continue';
-} else {
-  document.getElementById('entry-title').textContent = 'Sign in';
-  document.getElementById('entry-sub').textContent = 'Welcome back.';
-  document.getElementById('confirm-field').style.display = 'none';
-  document.getElementById('action-btn').textContent = 'Sign in';
+  document.getElementById('join-screen').style.display = 'none';
+  document.getElementById('register-screen').style.display = 'flex';
 }
 
-document.getElementById('action-btn').onclick = () => inviteToken ? register() : loginClient();
-document.getElementById('name-input').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('password-input').focus());
-document.getElementById('password-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    if (inviteToken) document.getElementById('confirm-input').focus();
-    else loginClient();
-  }
-});
-document.getElementById('confirm-input').addEventListener('keydown', e => e.key === 'Enter' && register());
+// Register flow
+document.getElementById('reg-btn').onclick = register;
+document.getElementById('reg-name').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('reg-address').focus());
+document.getElementById('reg-address').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('reg-phone').focus());
+document.getElementById('reg-phone').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('reg-username').focus());
+document.getElementById('reg-username').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('reg-password').focus());
+document.getElementById('reg-password').addEventListener('keydown', e => e.key === 'Enter' && register());
 
 async function register() {
-  const name = document.getElementById('name-input').value.trim();
-  const password = document.getElementById('password-input').value;
-  const confirm = document.getElementById('confirm-input').value;
-  const err = document.getElementById('join-err');
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const err = document.getElementById('reg-err');
   err.textContent = '';
-  if (!name) { err.textContent = 'Please enter a name.'; return; }
-  if (password.length < 4) { err.textContent = 'Password must be at least 4 characters.'; return; }
-  if (password !== confirm) { err.textContent = 'Passwords do not match.'; return; }
+  if (!username) { err.textContent = 'Fyll i ett användarnamn.'; return; }
+  if (password.length < 4) { err.textContent = 'Lösenordet måste vara minst 4 tecken.'; return; }
+  const btn = document.getElementById('reg-btn');
+  btn.textContent = 'Skapar konto…'; btn.disabled = true;
   try {
     const r = await fetch(`/api/join/${inviteToken}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display_name: name, password })
+      body: JSON.stringify({
+        username,
+        full_name: document.getElementById('reg-name').value.trim() || null,
+        address: document.getElementById('reg-address').value.trim() || null,
+        phone: document.getElementById('reg-phone').value.trim() || null,
+        password
+      })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Something went wrong.'; return; }
-    session = d;
-    localStorage.setItem('vp_session', JSON.stringify(d));
+    if (!r.ok) { err.textContent = d.error || 'Något gick fel.'; btn.textContent = 'Skapa konto'; btn.disabled = false; return; }
     history.replaceState(null, '', '/client');
-    initApp();
-  } catch { err.textContent = 'Connection error.'; }
+    document.getElementById('register-screen').style.display = 'none';
+    document.getElementById('success-screen').style.display = 'flex';
+    if (deferredPWA) document.getElementById('pwa-reg-install').style.display = 'block';
+  } catch { err.textContent = 'Anslutningsfel.'; btn.textContent = 'Skapa konto'; btn.disabled = false; }
 }
+
+document.getElementById('pwa-reg-install').onclick = async () => {
+  if (deferredPWA) { deferredPWA.prompt(); await deferredPWA.userChoice; deferredPWA = null; }
+  document.getElementById('pwa-reg-install').style.display = 'none';
+};
+
+function goToLogin() {
+  document.getElementById('success-screen').style.display = 'none';
+  document.getElementById('join-screen').style.display = 'flex';
+}
+
+// Login flow
+document.getElementById('action-btn').onclick = loginClient;
+document.getElementById('name-input').addEventListener('keydown', e => e.key === 'Enter' && document.getElementById('password-input').focus());
+document.getElementById('password-input').addEventListener('keydown', e => e.key === 'Enter' && loginClient());
 
 async function loginClient() {
   const name = document.getElementById('name-input').value.trim();
   const password = document.getElementById('password-input').value;
   const err = document.getElementById('join-err');
   err.textContent = '';
-  if (!name) { err.textContent = 'Please enter your name.'; return; }
-  if (!password) { err.textContent = 'Please enter your password.'; return; }
+  if (!name) { err.textContent = 'Fyll i ditt användarnamn.'; return; }
+  if (!password) { err.textContent = 'Fyll i ditt lösenord.'; return; }
+  const btn = document.getElementById('action-btn');
+  btn.textContent = 'Loggar in…'; btn.disabled = true;
   try {
     const r = await fetch('/api/auth/client', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ display_name: name, password })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Something went wrong.'; return; }
+    if (!r.ok) { err.textContent = d.error || 'Fel användarnamn eller lösenord.'; btn.textContent = 'Logga in'; btn.disabled = false; return; }
     session = d;
     localStorage.setItem('vp_session', JSON.stringify(d));
     initApp();
-  } catch { err.textContent = 'Connection error.'; }
+  } catch { err.textContent = 'Anslutningsfel.'; btn.textContent = 'Logga in'; btn.disabled = false; }
 }
 
 function initApp() {
