@@ -32,7 +32,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 
 /* ── Join ── */
 #join-screen {
-  display: flex; align-items: center; justify-content: center;
+  display: none; align-items: center; justify-content: center;
   height: 100dvh; padding: 32px 24px;
 }
 .join-card { width: 100%; max-width: 340px; }
@@ -1346,15 +1346,19 @@ function hideSplash(cb) {
   }, wait);
 }
 
+function showLogin() {
+  document.getElementById('join-screen').style.display = 'flex';
+}
+
 if (session?.session_token) {
   fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} })
     .then(r => {
       if (r.ok) hideSplash(initApp);
-      else { session = null; localStorage.removeItem('vp_session'); hideSplash(); }
+      else { session = null; localStorage.removeItem('vp_session'); hideSplash(showLogin); }
     })
-    .catch(() => hideSplash());
+    .catch(() => hideSplash(showLogin));
 } else {
-  hideSplash();
+  hideSplash(showLogin);
 }
 </script>
 </body>
