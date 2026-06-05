@@ -9,7 +9,7 @@ const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 const path = require('path');
-const ws = require('ws');
+
 const crypto = require('crypto');
 const webpush = require('web-push');
 
@@ -17,9 +17,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
-  realtime: { transport: ws }
-});
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
