@@ -223,13 +223,13 @@ app.post('/api/invite', adminAuth, async (req, res) => {
 app.post('/api/join/:token', async (req, res) => {
   const { token } = req.params;
   const { username, full_name, address, phone, password } = req.body;
-  if (!username || !username.trim()) return res.status(400).json({ error: 'Användarnamn krävs.' });
-  if (!password || password.length < 4) return res.status(400).json({ error: 'Lösenordet måste vara minst 4 tecken.' });
+  if (!username || !username.trim()) return res.status(400).json({ error: 'Username is required.' });
+  if (!password || password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
 
   const { data: invite } = await supabase.from('invites').select('*').eq('token', token).single();
-  if (!invite) return res.status(404).json({ error: 'Ogiltig inbjudningslänk.' });
-  if (invite.used) return res.status(400).json({ error: 'Den här länken har redan använts.' });
-  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'Inbjudningslänken har gått ut.' });
+  if (!invite) return res.status(404).json({ error: 'Invalid invite link.' });
+  if (invite.used) return res.status(400).json({ error: 'This invite link has already been used.' });
+  if (new Date(invite.expires_at) < new Date()) return res.status(400).json({ error: 'This invite link has expired.' });
 
   const sessionToken = uuidv4();
   const { data: client, error } = await supabase.from('clients').insert({
