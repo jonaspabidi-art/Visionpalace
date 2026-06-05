@@ -22,6 +22,12 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 });
 
 app.use(express.json({ limit: '10mb' }));
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, '../public')));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
@@ -469,13 +475,14 @@ app.post('/api/messages/:clientId', adminAuth, async (req, res) => {
   const { data: client } = await supabase.from('clients').select('*').eq('id', clientId).single();
   if (!client) return res.status(404).json({ error: 'Klient hittades inte' });
 
+  console.log('[msg] type=%s metadata=%j', message_type, metadata);
   const { data: msg, error } = await supabase.from('messages').insert({
     client_id: clientId, sender: 'admin', text: text || null,
     message_type: message_type || 'text',
     metadata: metadata || null,
     created_at: new Date().toISOString()
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) { console.error('[msg] insert error:', error); return res.status(500).json({ error: error.message }); }
 
   if (media && media.length > 0) {
     const rows = media.map(m => ({ message_id: msg.id, storage_url: m.url, thumbnail_url: m.thumbUrl, type: m.type }));
