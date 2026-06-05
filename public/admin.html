@@ -149,12 +149,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .inv-card-ref { font-size: 10px; color: var(--text3); letter-spacing: 0.15em; text-transform: uppercase; }
 .inv-card-name { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.3; flex: 1; }
 .inv-card-price { font-size: 15px; font-weight: 700; color: var(--blue); margin-top: 4px; }
-.inv-send-btn {
-  width: 100%; padding: 9px 0; margin-top: 6px; background: var(--blue); border: none;
-  color: #fff; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit;
-}
-.inv-send-btn:active { opacity: 0.8; }
 .inv-empty { margin: auto; color: var(--text3); font-size: 14px; text-align: center; padding: 40px; }
+
+/* Inventory toolbar */
+.inv-toolbar { display: flex; align-items: center; justify-content: flex-end; padding: 10px 14px 0; flex-shrink: 0; }
+.inv-catalog-btn { padding: 8px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.inv-catalog-btn:active { opacity: 0.75; }
 
 /* Inventory card actions */
 .inv-card-actions { display: flex; gap: 6px; margin-top: 6px; }
@@ -653,6 +653,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
     <!-- Inventory view -->
     <div class="view" id="inventory-view">
+      <div class="inv-toolbar">
+        <button class="inv-catalog-btn" onclick="generateCatalogPDF()">Katalog PDF</button>
+      </div>
       <div class="inv-scroll">
         <div class="inv-grid" id="inv-grid">
           <div class="inv-empty">Laddar lager…</div>
@@ -822,16 +825,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 </div>
 
-<!-- Client picker (send product) -->
-<div id="client-picker-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-end" onclick="if(event.target===this)closeClientPicker()">
-  <div style="width:100%;background:var(--surface);border-radius:20px 20px 0 0;padding:16px 0 max(24px,var(--safe-bot));max-height:70vh;display:flex;flex-direction:column">
-    <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
-    <div style="font-size:15px;font-weight:700;padding:0 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0">Skicka till klient</div>
-    <div id="client-picker-list" style="flex:1;overflow-y:auto"></div>
-    <button onclick="closeClientPicker()" style="margin:12px 16px 0;padding:14px;text-align:center;background:var(--surface2);border:none;border-radius:12px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">Avbryt</button>
-  </div>
-</div>
-
 <!-- Inventory add/edit form -->
 <div id="inv-form-modal" onclick="if(event.target===this)closeInvForm()">
   <div class="inv-form-sheet">
@@ -898,7 +891,6 @@ let invItemsMap = {};
 let invLineItems = [];
 let invLineNextId = 0;
 let invCustType = 'company';
-let invPendingItem = null;
 
 // ── Auth ──
 document.getElementById('login-btn').onclick = login;
@@ -1723,7 +1715,6 @@ function renderInventory(items) {
         ${item.ref_code ? `<div class="inv-card-ref">${esc(item.ref_code)}</div>` : ''}
         <div class="inv-card-name">${esc(item.name)}</div>
         ${item.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
-        <button class="inv-send-btn" onclick="showClientPicker('${esc(String(item.id))}')">Skicka till klient</button>
         <div class="inv-card-actions">
           <button class="inv-edit-btn" onclick="openInvForm('${item.id}')">Redigera</button>
           <button class="inv-del-btn" onclick="deleteInvItem('${item.id}')" title="Ta bort">🗑</button>
@@ -1832,76 +1823,68 @@ async function deleteInvItem(id) {
   loadInventory();
 }
 
-function showClientPicker(itemId) {
-  invPendingItem = invItemsMap[itemId];
-  const list = document.getElementById('client-picker-list');
-  const active = clients.filter(c => !c.is_inactive);
-  if (!active.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:14px">Inga aktiva klienter</div>';
-  } else {
-    list.innerHTML = active.map(c => `
-      <div style="display:flex;align-items:center;padding:14px 16px;gap:12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="sendProductToClient('${c.id}')">
+async function generateCatalogPDF() {
+  const items = Object.values(invItemsMap);
+  if (!items.length) { showToast('Lagret är tomt', 'error'); return; }
+
+  showToast('Genererar katalog…', 'success');
+
+  // Lazy-load html2pdf
+  if (!window.html2pdf) {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  const today = new Date().toLocaleDateString('sv-SE');
+
+  const cardStyle = `
+    display:inline-block;width:170px;vertical-align:top;
+    border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;
+    margin:8px;background:#fff;font-family:Arial,sans-serif;
+  `;
+  const cards = items.map(item => {
+    const imgPart = item.image
+      ? `<img src="${item.image}" style="width:170px;height:170px;object-fit:cover;display:block;">`
+      : `<div style="width:170px;height:170px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px;">Ingen bild</div>`;
+    return `<div style="${cardStyle}">
+      ${imgPart}
+      <div style="padding:8px 10px 10px;">
+        ${item.ref_code ? `<div style="font-size:9px;color:#aaa;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:2px;">${item.ref_code}</div>` : ''}
+        <div style="font-size:12px;font-weight:700;color:#111;line-height:1.3;">${item.name}</div>
+        ${item.sell_price != null ? `<div style="font-size:14px;font-weight:700;color:#111;margin-top:4px;">€ ${item.sell_price}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;padding:32px;background:#fff;max-width:794px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:14px;margin-bottom:24px;">
         <div>
-          <div style="font-size:15px;font-weight:500">${esc(c.admin_label || c.display_name)}</div>
-          ${c.admin_label ? `<div style="font-size:12px;color:var(--text3)">${esc(c.display_name)}</div>` : ''}
+          <div style="font-size:22px;font-weight:700;letter-spacing:0.04em;">C.lunettes AB</div>
+          <div style="font-size:13px;color:#666;margin-top:2px;">Produktkatalog</div>
         </div>
-      </div>`).join('');
-  }
-  document.getElementById('client-picker-modal').style.display = 'flex';
-}
+        <div style="font-size:12px;color:#888;text-align:right;">${today}</div>
+      </div>
+      <div style="text-align:center;">${cards}</div>
+    </div>`;
 
-function closeClientPicker() {
-  document.getElementById('client-picker-modal').style.display = 'none';
-  invPendingItem = null;
-}
+  const el = document.createElement('div');
+  el.innerHTML = html;
+  document.body.appendChild(el);
 
-function dataURItoBlob(dataURI) {
-  const [header, data] = dataURI.split(',');
-  const mime = header.match(/:(.*?);/)[1];
-  const bin = atob(data);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
+  await html2pdf().set({
+    margin: 0,
+    filename: `katalog-clunettes-${today}.pdf`,
+    image: { type: 'jpeg', quality: 0.92 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).from(el.firstElementChild).save();
 
-async function sendProductToClient(clientId) {
-  const item = invPendingItem;
-  closeClientPicker();
-  if (!item) return;
-
-  // Upload the base64 image to Storage so the client gets a clean URL
-  let imageUrl = null;
-  if (item.image) {
-    try {
-      const blob = dataURItoBlob(item.image);
-      const form = new FormData();
-      form.append('files', blob, 'product.jpg');
-      const up = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
-      if (up.ok) { const ud = await up.json(); imageUrl = ud.files?.[0]?.url || null; }
-    } catch {}
-  }
-
-  const r = await api(`/api/messages/${clientId}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      text: item.name + (item.sell_price != null ? '\n€ ' + item.sell_price : ''),
-      message_type: 'product_card',
-      metadata: {
-        ref_code: item.ref_code || null,
-        name: item.name,
-        price: item.sell_price != null ? item.sell_price : null,
-        image: imageUrl,
-        notes: item.notes || null
-      }
-    })
-  });
-  if (r.ok) {
-    const d = await r.json();
-    if (currentClientId === clientId) appendMsg(d.message);
-    showToast('Produkt skickad till klienten', 'success');
-  } else {
-    showToast('Kunde inte skicka produkten', 'error');
-  }
+  document.body.removeChild(el);
 }
 
 // ── Invoice ──
