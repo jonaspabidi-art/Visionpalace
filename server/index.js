@@ -12,12 +12,15 @@ const path = require('path');
 
 const crypto = require('crypto');
 const webpush = require('web-push');
+const ws = require('ws');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
+  realtime: { transport: ws }
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
