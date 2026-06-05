@@ -1520,7 +1520,7 @@ async function openChat(clientId) {
     }
   });
   attachAdminImgFade(c);
-  c.scrollTop = c.scrollHeight;
+  requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
   await markRead(clientId);
   const cl = clients.find(x => x.id === clientId);
   if (cl) { cl.unread_count = 0; renderClients(); updateUnreadBadge(); }
