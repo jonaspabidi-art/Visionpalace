@@ -597,6 +597,16 @@ app.patch('/api/clients/:id/inactive', adminAuth, async (req, res) => {
   res.json({ client: data });
 });
 
+// Delete client entirely
+app.delete('/api/clients/:id', adminAuth, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from('clients').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  pushSubs.delete(id);
+  io.to('admins').emit('client:deleted', { client_id: id });
+  res.json({ ok: true });
+});
+
 // Get VAPID public key
 app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });

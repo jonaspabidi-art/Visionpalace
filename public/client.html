@@ -265,8 +265,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 
 .msg-meta { font-size: 11px; color: var(--text3); margin: 2px 5px 0; letter-spacing: 0.2px; }
 .msg-group.from-me .msg-meta { text-align: right; }
-.bubble-img { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; }
-.bubble-vid { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; }
+.media-wrap { position: relative; display: inline-block; margin-top: 6px; }
+.bubble-img { max-width: 200px; border-radius: 10px; display: block; cursor: pointer; }
+.bubble-vid { max-width: 200px; border-radius: 10px; display: block; }
+.media-save-btn {
+  position: absolute; top: 6px; right: 6px;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(0,0,0,.55); border: none; color: #fff;
+  font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity .2s;
+}
+.media-wrap:hover .media-save-btn,
+.media-wrap:focus-within .media-save-btn { opacity: 1; }
+@media (pointer: coarse) { .media-save-btn { opacity: 1; } }
 .bubble-pdf {
   display: flex; align-items: center; gap: 10px; margin-top: 6px;
   background: var(--surface2); border: 1px solid var(--border);
@@ -874,9 +886,32 @@ async function react(id, reaction) {
 function bubbleMediaHTML(m) {
   return (m.message_media || []).map(md => {
     if (!md.storage_url) return '';
-    if (md.type === 'video') return `<video class="bubble-vid" src="${md.storage_url}" controls playsinline></video>`;
-    return `<img class="bubble-img" src="${md.thumbnail_url||md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`;
+    const full = md.storage_url;
+    if (md.type === 'video') return `<div class="media-wrap">
+      <video class="bubble-vid" src="${full}" controls playsinline></video>
+      <button class="media-save-btn" onclick="saveMedia('${full}')" title="Save">↓</button>
+    </div>`;
+    return `<div class="media-wrap">
+      <img class="bubble-img" src="${md.thumbnail_url||full}" data-full="${full}" onclick="openLightbox(this.dataset.full)" loading="lazy">
+      <button class="media-save-btn" onclick="saveMedia('${full}')" title="Save">↓</button>
+    </div>`;
   }).join('');
+}
+
+async function saveMedia(url) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = url.split('/').pop().split('?')[0] || 'media';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch {
+    window.open(url, '_blank');
+  }
 }
 
 function pdfBubbleHTML(m) {
