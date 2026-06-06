@@ -1136,7 +1136,10 @@ function appendChatMsg(m) {
     c.appendChild(el);
   }
   attachImgFade(c);
-  if (chatOpen) scrollChat(true);
+  if (chatOpen) {
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+    if (atBottom) scrollChat(true);
+  }
 }
 
 function scrollChat(smooth = false) {

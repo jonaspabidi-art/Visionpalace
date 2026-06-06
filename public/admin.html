@@ -1172,21 +1172,25 @@ function api(url, opts = {}) {
 }
 
 // ── Broadcasts ──
+let bcInitialLoad = true;
 async function loadBroadcasts(q = '') {
   const gen = ++bcLoadGen;
   const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
   const r = await api(url);
-  if (gen !== bcLoadGen) return; // a newer call is already in flight — discard this result
+  if (gen !== bcLoadGen) return;
   const d = await r.json();
   if (gen !== bcLoadGen) return;
   const pending = broadcasts.filter(b => b._pending || b._failed);
   const fresh = (d.broadcasts || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   broadcasts = [...fresh, ...pending];
-  renderFeed();
+  const scrollDown = bcInitialLoad;
+  bcInitialLoad = false;
+  renderFeed(scrollDown);
 }
 
-function renderFeed() {
+function renderFeed(scrollToBottom = false) {
   const feed = document.getElementById('bc-feed');
+  const prevScrollBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight;
   if (!broadcasts.length) {
     feed.innerHTML = '<div class="feed-empty">Inga sändningar ännu</div>';
     return;
@@ -1203,7 +1207,11 @@ function renderFeed() {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
-  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
+  requestAnimationFrame(() => {
+    if (scrollToBottom || prevScrollBottom < 60) {
+      feed.scrollTop = feed.scrollHeight;
+    }
+  });
 }
 
 function appendBroadcast(b) {
@@ -1520,7 +1528,7 @@ async function openChat(clientId) {
     }
   });
   attachAdminImgFade(c);
-  requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
+  requestAnimationFrame(() => requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; }));
   await markRead(clientId);
   const cl = clients.find(x => x.id === clientId);
   if (cl) { cl.unread_count = 0; renderClients(); updateUnreadBadge(); }
@@ -1544,7 +1552,10 @@ function appendMsg(m) {
   el.classList.add('anim-in');
   c.appendChild(el);
   attachAdminImgFade(el);
-  requestAnimationFrame(() => c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }));
+  requestAnimationFrame(() => {
+    const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+    if (atBottom) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+  });
 }
 
 function attachAdminImgFade(container) {
