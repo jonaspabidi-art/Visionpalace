@@ -272,7 +272,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-group.from-me .msg-meta { text-align: right; }
 .msg-group.anim-in .msg-meta { animation: msgFadeUp .25s ease .14s both; }
 .media-wrap { position: relative; display: inline-block; margin-top: 6px; }
-.bubble-img { max-width: 200px; border-radius: 10px; display: block; cursor: pointer; opacity: 0; transition: opacity .3s ease; }
+.bubble-img { max-width: 200px; min-width: 80px; min-height: 60px; border-radius: 10px; display: block; cursor: pointer; opacity: 0; transition: opacity .3s ease; background: var(--surface2); }
 .bubble-img.loaded { opacity: 1; }
 .bubble-vid { max-width: 200px; border-radius: 10px; display: block; }
 .media-save-btn {
@@ -605,7 +605,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
       <div class="media-prev-row" id="media-prev-row"></div>
       <div class="input-row">
         <label class="attach-btn" title="Attach file">+<input type="file" id="file-input" multiple accept="image/*,video/*"></label>
-        <textarea class="msg-input" id="chat-input" placeholder="Type a message…" rows="1"></textarea>
+        <textarea class="msg-input" id="chat-input" placeholder="Type a message…" rows="1" enterkeyhint="send"></textarea>
         <button class="send-btn" id="send-btn">↑</button>
       </div>
     </div>
@@ -1152,22 +1152,32 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 });
 document.getElementById('chat-input').addEventListener('input', function(){ autoResize(this); });
 
+let sending = false;
 async function sendMsg() {
+  if (sending) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text && !pendingMedia.length) return;
+  sending = true;
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
   input.value = '';
   autoResize(input);
-  const r = await fetch('/api/messages/me/send', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-session-token':session.session_token},
-    body: JSON.stringify({ text, media: pendingMedia })
-  });
-  if (r.ok) {
-    pendingMedia = [];
-    document.getElementById('media-prev-row').innerHTML = '';
-    const d = await r.json();
-    appendChatMsg(d.message);
+  try {
+    const r = await fetch('/api/messages/me/send', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-session-token':session.session_token},
+      body: JSON.stringify({ text, media: pendingMedia })
+    });
+    if (r.ok) {
+      pendingMedia = [];
+      document.getElementById('media-prev-row').innerHTML = '';
+      const d = await r.json();
+      appendChatMsg(d.message);
+    }
+  } finally {
+    sending = false;
+    btn.disabled = false;
   }
 }
 
@@ -1224,6 +1234,7 @@ function closeLightbox() { document.getElementById('lightbox').classList.remove(
 const _lb = document.getElementById('lightbox');
 const _lbImg = document.getElementById('lb-img');
 _lb.addEventListener('click', e => { if (e.target === _lb || e.target.id === 'lb-close') closeLightbox(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 _lb.addEventListener('touchstart', e => {
   if (e.touches.length === 1) lbTouchStartX = e.touches[0].clientX;
   else if (e.touches.length === 2)

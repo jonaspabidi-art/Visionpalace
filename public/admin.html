@@ -531,7 +531,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .msg-meta { font-size: 11px; color: var(--text3); margin: 3px 4px 6px; display: flex; align-items: center; gap: 4px; }
 .msg-row.from-admin .msg-meta { align-self: flex-end; }
 .read-tick { color: rgba(26,20,9,.45); font-style: italic; }
-.bubble-media img { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; opacity: 0; transition: opacity .3s ease; }
+.bubble-media img { max-width: 200px; min-width: 80px; min-height: 60px; border-radius: 10px; display: block; margin-top: 6px; cursor: pointer; opacity: 0; transition: opacity .3s ease; background: var(--surface); }
 .bubble-media img.loaded { opacity: 1; }
 .bubble-media video { max-width: 200px; border-radius: 10px; display: block; margin-top: 6px; }
 .bubble-pdf { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; text-decoration: none; color: var(--text); max-width: 220px; }
@@ -1591,30 +1591,37 @@ async function markRead(clientId) {
   await api(`/api/messages/${clientId}/read`, { method: 'POST' });
 }
 
+let sending = false;
 async function sendMessage() {
+  if (sending) return;
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   const items = pendingChatMedia.filter(i => !i.removed);
   if (!text && items.length === 0) return;
+  sending = true;
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
   input.value = '';
   autoResize(input);
-
-  // Wait for any uploads in this draft
-  const promises = [...new Set(items.map(i => i.uploadPromise).filter(Boolean))];
-  if (promises.length) {
-    try { await Promise.all(promises); }
-    catch { return; } // alert already shown by uploadFiles
-  }
-  const media = items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
-
-  const r = await api(`/api/messages/${currentClientId}`, {
-    method: 'POST', body: JSON.stringify({ text, media })
-  });
-  if (r.ok) {
-    pendingChatMedia = [];
-    document.getElementById('chat-media-prev').innerHTML = '';
-    const d = await r.json();
-    appendMsg(d.message);
+  try {
+    const promises = [...new Set(items.map(i => i.uploadPromise).filter(Boolean))];
+    if (promises.length) {
+      try { await Promise.all(promises); }
+      catch { return; }
+    }
+    const media = items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
+    const r = await api(`/api/messages/${currentClientId}`, {
+      method: 'POST', body: JSON.stringify({ text, media })
+    });
+    if (r.ok) {
+      pendingChatMedia = [];
+      document.getElementById('chat-media-prev').innerHTML = '';
+      const d = await r.json();
+      appendMsg(d.message);
+    }
+  } finally {
+    sending = false;
+    btn.disabled = false;
   }
 }
 
@@ -1759,6 +1766,9 @@ document.getElementById('lightbox').onclick = e => {
   if (e.target === e.currentTarget || e.target.id === 'lb-close')
     document.getElementById('lightbox').classList.remove('open');
 };
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('open');
+});
 
 // ── Auto-resize textareas ──
 function autoResize(el) {
