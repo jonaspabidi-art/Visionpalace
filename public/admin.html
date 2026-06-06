@@ -1238,11 +1238,11 @@ function renderFeed(scrollToBottom = false) {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
-  requestAnimationFrame(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
     if (scrollToBottom || prevScrollBottom < 60) {
       feed.scrollTop = feed.scrollHeight;
     }
-  });
+  }));
 }
 
 function appendBroadcast(b) {
