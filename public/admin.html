@@ -1203,7 +1203,7 @@ function renderFeed() {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
-  feed.scrollTop = feed.scrollHeight;
+  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
 }
 
 function appendBroadcast(b) {
