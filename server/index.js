@@ -105,6 +105,7 @@ webpush.setVapidDetails(
 
 const pushSubs = new Map(); // clientId -> PushSubscription
 let adminPushSub = null;   // single admin subscription
+const onlineClients = new Set(); // clientIds currently connected
 
 function isValidPushSub(sub) {
   return sub
@@ -595,7 +596,7 @@ app.get('/api/clients', adminAuth, async (req, res) => {
   const unread = {};
   (unreadData || []).forEach(m => { unread[m.client_id] = (unread[m.client_id] || 0) + 1; });
 
-  const result = (clients || []).map(c => ({ ...c, unread_count: unread[c.id] || 0 }));
+  const result = (clients || []).map(c => ({ ...c, unread_count: unread[c.id] || 0, is_online: onlineClients.has(c.id) }));
   res.json({ clients: result });
 });
 
@@ -665,6 +666,62 @@ app.post('/api/onesignal/register', clientAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Sales ───────────────────────────────────────────────────────────────────
+
+// Create a sale (admin records items sold to a client)
+app.post('/api/sales', adminAuth, async (req, res) => {
+  const { client_id, items, invoice_number, notes } = req.body;
+  if (!client_id || !items?.length) return res.status(400).json({ error: 'client_id och items krävs' });
+  const { data: sale, error } = await supabase.from('sales').insert({
+    client_id, invoice_number: invoice_number || null, notes: notes || null,
+    created_at: new Date().toISOString()
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  const rows = items.map(i => ({
+    sale_id: sale.id,
+    inventory_id: i.inventory_id || null,
+    name: i.name, ref_code: i.ref_code || null,
+    sell_price: i.sell_price ?? null, qty: i.qty || 1,
+    image: i.image || null
+  }));
+  const { error: itemErr } = await supabase.from('sale_items').insert(rows);
+  if (itemErr) return res.status(500).json({ error: itemErr.message });
+  const { data: full } = await supabase.from('sales').select('*, sale_items(*)').eq('id', sale.id).single();
+  res.json({ sale: full });
+});
+
+// List all sales (admin)
+app.get('/api/sales', adminAuth, async (req, res) => {
+  const { data } = await supabase.from('sales')
+    .select('*, sale_items(*), clients(display_name, admin_label)')
+    .order('created_at', { ascending: false });
+  res.json({ sales: data || [] });
+});
+
+// Sales for one client (admin)
+app.get('/api/sales/client/:clientId', adminAuth, async (req, res) => {
+  const { data } = await supabase.from('sales')
+    .select('*, sale_items(*)')
+    .eq('client_id', req.params.clientId)
+    .order('created_at', { ascending: false });
+  res.json({ sales: data || [] });
+});
+
+// Client: own purchase history (flattened to individual items)
+app.get('/api/purchases/me', clientAuth, async (req, res) => {
+  const { data } = await supabase.from('sales')
+    .select('*, sale_items(*)')
+    .eq('client_id', req.client.id)
+    .order('created_at', { ascending: false });
+  const purchases = [];
+  (data || []).forEach(sale => {
+    (sale.sale_items || []).forEach(item => {
+      purchases.push({ ...item, purchased_at: sale.created_at, invoice_number: sale.invoice_number });
+    });
+  });
+  res.json({ purchases });
+});
+
 // SPA routes
 app.get('/', (req, res) => res.redirect('/client'));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../public/admin.html')));
@@ -704,14 +761,17 @@ io.on('connection', (socket) => {
   } else if (socket.client) {
     socket.join(`client:${socket.client.id}`);
     console.log('Client connected:', socket.client.display_name);
+    onlineClients.add(socket.client.id);
     supabase.from('clients').update({ last_seen_at: new Date().toISOString() }).eq('id', socket.client.id);
-    io.to('admins').emit('client:last_seen', { client_id: socket.client.id, last_seen_at: new Date().toISOString() });
+    io.to('admins').emit('client:online', { client_id: socket.client.id });
   }
 
   socket.on('disconnect', () => {
     if (socket.client) {
-      supabase.from('clients').update({ last_seen_at: new Date().toISOString() }).eq('id', socket.client.id);
-      io.to('admins').emit('client:last_seen', { client_id: socket.client.id, last_seen_at: new Date().toISOString() });
+      onlineClients.delete(socket.client.id);
+      const now = new Date().toISOString();
+      supabase.from('clients').update({ last_seen_at: now }).eq('id', socket.client.id);
+      io.to('admins').emit('client:offline', { client_id: socket.client.id, last_seen_at: now });
     }
   });
 

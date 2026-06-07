@@ -562,7 +562,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .bubble-pdf-icon { font-size: 24px; flex-shrink: 0; }
 .bubble-pdf-label { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .bubble-pdf-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
-.typing-row { padding: 4px 16px 8px; }
+.typing-row { padding: 4px 16px 8px; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
 .typing-dots { display: inline-flex; gap: 4px; padding: 10px 14px; background: var(--surface2); border-radius: 18px; border-bottom-left-radius: 5px; }
 .typing-dots span { width: 6px; height: 6px; background: var(--text3); border-radius: 50%; animation: bounce .9s infinite; }
 .typing-dots span:nth-child(2) { animation-delay: .15s; }
@@ -624,6 +624,56 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .reaction-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; font-size: 13px; }
 .reaction-name { font-weight: 600; }
 .reaction-val { color: var(--text2); }
+
+/* ── Online status ── */
+.client-avatar { position: relative; }
+.online-dot {
+  position: absolute; bottom: 1px; right: 1px;
+  width: 12px; height: 12px; background: #34c759;
+  border-radius: 50%; border: 2px solid var(--bg);
+}
+.last-seen-online { color: #34c759 !important; }
+
+/* ── Sale modal ── */
+#sale-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: flex-end; }
+#sale-modal.open { display: flex; }
+.sale-sheet { width: 100%; background: var(--surface); border-radius: 20px 20px 0 0; max-height: 88dvh; display: flex; flex-direction: column; }
+.sale-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sale-sheet-header span { font-size: 17px; font-weight: 700; }
+.sale-sheet-header button { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; padding: 4px; line-height: 1; }
+.sale-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; -webkit-overflow-scrolling: touch; }
+.sale-body::-webkit-scrollbar { display: none; }
+.sale-sec-title { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+.sale-cart-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; }
+.sale-item-img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--border); flex-shrink: 0; }
+.sale-item-info { flex: 1; min-width: 0; }
+.sale-item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sale-item-price { font-size: 12px; color: var(--blue); margin-top: 1px; }
+.sale-qty-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sale-qty-btn { width: 26px; height: 26px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sale-qty-num { font-size: 14px; font-weight: 700; min-width: 18px; text-align: center; }
+.sale-rm-btn { background: none; border: none; color: var(--text3); font-size: 16px; cursor: pointer; padding: 4px; line-height: 1; }
+.sale-inv-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sale-inv-add { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); border: none; color: #1a1409; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; }
+.sale-total-bar { padding: 12px 14px; background: var(--surface2); border-radius: 10px; text-align: right; font-size: 15px; font-weight: 700; color: var(--blue); }
+.inv-sell-btn { padding: 8px 10px; background: var(--blue); border: none; color: #1a1409; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.inv-sell-btn:active { opacity: 0.75; }
+
+/* ── Client purchase history sheet ── */
+#client-purchases-sheet { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: flex-end; }
+#client-purchases-sheet.open { display: flex; }
+.purchases-sheet { width: 100%; background: var(--surface); border-radius: 20px 20px 0 0; max-height: 80dvh; display: flex; flex-direction: column; }
+.purchases-sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.purchases-sheet-header span { font-size: 16px; font-weight: 700; }
+.purchases-sheet-header button { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; padding: 4px; line-height: 1; }
+.purchases-sheet-body { flex: 1; overflow-y: auto; padding: 8px 16px 16px; -webkit-overflow-scrolling: touch; }
+.purchases-sheet-body::-webkit-scrollbar { display: none; }
+.purchase-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.purchase-row-img { width: 46px; height: 46px; border-radius: 8px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
+.purchase-row-info { flex: 1; min-width: 0; }
+.purchase-row-name { font-size: 13px; font-weight: 600; }
+.purchase-row-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.purchase-row-price { font-size: 14px; font-weight: 700; color: var(--blue); flex-shrink: 0; }
 
 /* ── Lightbox ── */
 #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 999; align-items: center; justify-content: center; }
@@ -714,7 +764,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div class="view" id="inventory-view">
       <div class="inv-toolbar">
         <button class="inv-catalog-btn" onclick="generateCatalogPDF()">Katalog PDF</button>
-        <button class="inv-catalog-btn primary" onclick="showCatalogClientPicker()">Skicka till klient</button>
+        <button class="inv-catalog-btn" onclick="showCatalogClientPicker()">Skicka katalog</button>
+        <button class="inv-catalog-btn primary" id="inv-sell-open-btn" onclick="openSaleModal(null)" style="display:none">
+          Sälj varor <span id="sale-cart-badge" style="background:#1a1409;color:var(--blue);border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px"></span>
+        </button>
       </div>
       <div class="inv-scroll">
         <div class="inv-grid" id="inv-grid">
@@ -838,6 +891,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div class="chat-panel-name" id="cp-name"></div>
       <div class="chat-panel-sub" id="cp-sub"></div>
     </div>
+    <button class="hbtn" onclick="openClientPurchases()" style="font-size:12px;padding:6px 10px">Köphistorik</button>
     <button class="danger-btn" id="delete-client-btn">Ta bort</button>
   </div>
   <div class="label-bar">
@@ -847,7 +901,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   <div class="chat-messages" id="chat-messages">
     <div class="chat-empty">Ingen konversation ännu</div>
   </div>
-  <div class="typing-row" id="typing-row" style="display:none">
+  <div class="typing-row" id="typing-row">
     <div class="typing-dots"><span></span><span></span><span></span></div>
   </div>
   <div class="chat-composer">
@@ -933,6 +987,45 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div style="font-size:15px;font-weight:700;padding:0 16px 12px;border-bottom:1px solid var(--border);flex-shrink:0">Skicka katalog till klient</div>
     <div class="cat-picker-list" id="cat-picker-list"></div>
     <button onclick="closeCatalogClientPicker()" style="margin:12px 16px 0;padding:14px;text-align:center;background:var(--surface2);border:none;border-radius:12px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;flex-shrink:0">Avbryt</button>
+  </div>
+</div>
+
+<!-- Sale modal -->
+<div id="sale-modal" onclick="if(event.target===this)closeSaleModal()">
+  <div class="sale-sheet">
+    <div class="sale-sheet-header">
+      <span>Ny försäljning</span>
+      <button onclick="closeSaleModal()">✕</button>
+    </div>
+    <div class="sale-body">
+      <div>
+        <div class="sale-sec-title">Klient</div>
+        <select class="inv-input" id="sale-client-pick">
+          <option value="">Välj klient…</option>
+        </select>
+      </div>
+      <div>
+        <div class="sale-sec-title">Valda varor</div>
+        <div id="sale-cart-list"></div>
+        <div class="sale-total-bar" id="sale-total">Totalt: € 0,00</div>
+      </div>
+      <div>
+        <div class="sale-sec-title">Lägg till från lager</div>
+        <div id="sale-inv-list"></div>
+      </div>
+      <button class="inv-gen-btn" onclick="createSale()">Skapa försäljning</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client purchase history sheet -->
+<div id="client-purchases-sheet" onclick="if(event.target===this)closeClientPurchases()">
+  <div class="purchases-sheet">
+    <div class="purchases-sheet-header">
+      <span id="purchases-sheet-title">Köphistorik</span>
+      <button onclick="closeClientPurchases()">✕</button>
+    </div>
+    <div class="purchases-sheet-body" id="purchases-sheet-body"></div>
   </div>
 </div>
 
@@ -1183,10 +1276,23 @@ function connectSocket() {
   socket.on('client:typing', d => {
     if (currentClientId === d.client_id) {
       const row = document.getElementById('typing-row');
-      row.style.display = 'block';
+      row.style.opacity = '1';
+      row.style.pointerEvents = '';
       clearTimeout(window._tt);
-      window._tt = setTimeout(() => row.style.display = 'none', 3000);
+      window._tt = setTimeout(() => { row.style.opacity = '0'; row.style.pointerEvents = 'none'; }, 3000);
+      const c = document.getElementById('chat-messages');
+      if (c.scrollHeight - c.scrollTop - c.clientHeight < 80) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
     }
+  });
+
+  socket.on('client:online', d => {
+    const c = clients.find(x => x.id === d.client_id);
+    if (c) { c.is_online = true; renderClients(); }
+  });
+
+  socket.on('client:offline', d => {
+    const c = clients.find(x => x.id === d.client_id);
+    if (c) { c.is_online = false; c.last_seen_at = d.last_seen_at; renderClients(); }
   });
 
   socket.on('client:read_receipt', d => {
@@ -1507,17 +1613,19 @@ function renderClients() {
   }
   list.innerHTML = [...active, ...inactive].map(c => {
     const init = (c.admin_label || c.display_name || '?')[0].toUpperCase();
-    const seen = c.last_seen_at ? timeAgo(c.last_seen_at) : '';
+    const seen = c.is_online ? 'Online' : (c.last_seen_at ? timeAgo(c.last_seen_at) : '');
+    const seenStyle = c.is_online ? 'color:#34c759' : '';
     const unread = c.unread_count > 0 ? `<div class="unread-badge">${c.unread_count}</div>` : '';
+    const dot = c.is_online ? '<span class="online-dot"></span>' : '';
     return `<div class="client-row${c.is_inactive ? ' client-inactive' : ''}" onclick="openChat('${c.id}')">
-      <div class="client-avatar">${init}</div>
+      <div class="client-avatar">${init}${dot}</div>
       <div class="client-body">
         <div class="client-name">${esc(c.admin_label || c.display_name)}</div>
         <div class="client-label">${c.admin_label ? esc(c.display_name) : ''}</div>
       </div>
       <div class="client-right">
         ${unread}
-        <div class="last-seen-txt">${seen}</div>
+        <div class="last-seen-txt" style="${seenStyle}">${seen}</div>
       </div>
     </div>`;
   }).join('');
@@ -1856,6 +1964,7 @@ function renderInventory(items) {
         ${item.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
         <div class="inv-card-actions">
           <button class="inv-edit-btn" onclick="openInvForm('${item.id}')">Redigera</button>
+          <button class="inv-sell-btn" onclick="addToSaleCartFromCard('${item.id}')">+ Sälj</button>
           <button class="inv-del-btn" onclick="deleteInvItem('${item.id}')" title="Ta bort">🗑</button>
         </div>
       </div>
@@ -2200,7 +2309,8 @@ function fillInvClient(clientId) {
   if (!clientId) return;
   const c = clients.find(x => x.id === clientId);
   if (!c) return;
-  document.getElementById('inv-cust-name').value = c.admin_label || c.display_name;
+  document.getElementById('inv-cust-name').value = c.full_name || c.admin_label || c.display_name;
+  if (c.address) document.getElementById('inv-cust-addr').value = c.address;
 }
 
 function setInvCustType(type) {
@@ -2452,6 +2562,238 @@ async function saveInvPDF() {
   inner.style.minHeight = '';
   if (outer) outer.style.height = savedOuterHeight;
   scaleInvDoc();
+}
+
+// ── Sale cart ──
+let saleCartItems = []; // { id, name, ref_code, sell_price, qty, image }
+let _lastSaleClientId = null;
+let _lastSaleItems = null;
+
+function addToSaleCartFromCard(invId) {
+  const item = invItemsMap[invId];
+  if (!item) return;
+  const existing = saleCartItems.find(i => i.id === invId);
+  if (existing) existing.qty++;
+  else saleCartItems.push({ ...item, qty: 1 });
+  updateSaleCartBadge();
+  showToast(`${item.name} tillagd i försäljning`, 'success');
+}
+
+function updateSaleCartBadge() {
+  const total = saleCartItems.reduce((s, i) => s + i.qty, 0);
+  const btn = document.getElementById('inv-sell-open-btn');
+  const badge = document.getElementById('sale-cart-badge');
+  btn.style.display = total > 0 ? '' : 'none';
+  badge.textContent = total > 0 ? total : '';
+}
+
+function openSaleModal(invId) {
+  if (invId && invItemsMap[invId] && !saleCartItems.find(i => i.id === invId)) {
+    saleCartItems.push({ ...invItemsMap[invId], qty: 1 });
+  }
+  const sel = document.getElementById('sale-client-pick');
+  sel.innerHTML = '<option value="">Välj klient…</option>' +
+    clients.filter(c => !c.is_inactive).map(c =>
+      `<option value="${c.id}">${esc(c.admin_label || c.display_name)}</option>`
+    ).join('');
+  renderSaleCart();
+  renderSaleInvList();
+  document.getElementById('sale-modal').classList.add('open');
+}
+
+function closeSaleModal() {
+  document.getElementById('sale-modal').classList.remove('open');
+}
+
+function updateSaleQty(invId, delta) {
+  const item = saleCartItems.find(i => i.id === invId);
+  if (!item) return;
+  item.qty = Math.max(1, item.qty + delta);
+  renderSaleCart();
+}
+
+function removeFromSaleCart(invId) {
+  saleCartItems = saleCartItems.filter(i => i.id !== invId);
+  renderSaleCart();
+  renderSaleInvList();
+  updateSaleCartBadge();
+}
+
+function renderSaleCart() {
+  const list = document.getElementById('sale-cart-list');
+  if (!list) return;
+  if (!saleCartItems.length) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Inga varor valda ännu</div>';
+    document.getElementById('sale-total').textContent = 'Totalt: € 0,00';
+    return;
+  }
+  list.innerHTML = saleCartItems.map(item => `
+    <div class="sale-cart-item">
+      ${item.image
+        ? `<img class="sale-item-img" src="${item.image}" alt="">`
+        : `<div class="sale-item-img"></div>`}
+      <div class="sale-item-info">
+        <div class="sale-item-name">${esc(item.name)}</div>
+        <div class="sale-item-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
+      </div>
+      <div class="sale-qty-row">
+        <button class="sale-qty-btn" onclick="updateSaleQty('${item.id}',-1)">−</button>
+        <span class="sale-qty-num">${item.qty}</span>
+        <button class="sale-qty-btn" onclick="updateSaleQty('${item.id}',1)">+</button>
+        <button class="sale-rm-btn" onclick="removeFromSaleCart('${item.id}')">✕</button>
+      </div>
+    </div>`).join('');
+  const total = saleCartItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0);
+  document.getElementById('sale-total').textContent = `Totalt: € ${total.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderSaleInvList() {
+  const list = document.getElementById('sale-inv-list');
+  if (!list) return;
+  const items = Object.values(invItemsMap);
+  if (!items.length) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Lagret är tomt</div>';
+    return;
+  }
+  const inCart = new Set(saleCartItems.map(i => i.id));
+  list.innerHTML = items.map(item => `
+    <div class="sale-inv-item">
+      ${item.image
+        ? `<img class="sale-item-img" src="${item.image}" alt="">`
+        : `<div class="sale-item-img"></div>`}
+      <div class="sale-item-info" style="flex:1;min-width:0">
+        <div class="sale-item-name">${esc(item.name)}</div>
+        <div class="sale-item-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
+      </div>
+      ${inCart.has(item.id)
+        ? `<span style="color:var(--blue);font-size:12px;font-weight:700;flex-shrink:0">✓ Vald</span>`
+        : `<button class="sale-inv-add" onclick="addToSaleCartFromModal('${item.id}')">+</button>`}
+    </div>`).join('');
+}
+
+function addToSaleCartFromModal(invId) {
+  const item = invItemsMap[invId];
+  if (!item) return;
+  const existing = saleCartItems.find(i => i.id === invId);
+  if (existing) existing.qty++;
+  else saleCartItems.push({ ...item, qty: 1 });
+  renderSaleCart();
+  renderSaleInvList();
+}
+
+async function createSale() {
+  const clientId = document.getElementById('sale-client-pick').value;
+  if (!clientId) { showToast('Välj en klient', 'error'); return; }
+  if (!saleCartItems.length) { showToast('Inga varor valda', 'error'); return; }
+  const btn = document.querySelector('#sale-modal .inv-gen-btn');
+  btn.textContent = 'Skapar…'; btn.disabled = true;
+  try {
+    const items = saleCartItems.map(i => ({
+      inventory_id: i.id,
+      name: i.name, ref_code: i.ref_code || null,
+      sell_price: i.sell_price ?? null, qty: i.qty,
+      image: i.image || null
+    }));
+    const r = await api('/api/sales', { method: 'POST', body: JSON.stringify({ client_id: clientId, items }) });
+    if (!r.ok) { const d = await r.json(); showToast(d.error || 'Fel', 'error'); return; }
+    _lastSaleClientId = clientId;
+    _lastSaleItems = [...saleCartItems];
+    saleCartItems = [];
+    updateSaleCartBadge();
+    closeSaleModal();
+    showSaleSuccessBanner();
+  } catch { showToast('Anslutningsfel', 'error'); }
+  finally { btn.textContent = 'Skapa försäljning'; btn.disabled = false; }
+}
+
+function showSaleSuccessBanner() {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:20px;left:12px;right:12px;
+    background:#1a3a2a;color:#66dd99;border:1px solid rgba(80,200,120,.4);
+    padding:14px 16px;border-radius:14px;font-size:14px;z-index:999;
+    display:flex;align-items:center;gap:12px;`;
+  const fillBtn = document.createElement('button');
+  fillBtn.textContent = 'Generera faktura →';
+  fillBtn.style.cssText = 'background:var(--blue);border:none;border-radius:10px;color:#1a1409;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0';
+  fillBtn.onclick = () => { fillInvoiceFromSale(_lastSaleClientId, _lastSaleItems); t.remove(); };
+  const msg = document.createElement('span');
+  msg.textContent = 'Försäljning skapad!';
+  msg.style.flex = '1';
+  const close = document.createElement('button');
+  close.textContent = '×';
+  close.style.cssText = 'background:none;border:none;color:#66dd99;font-size:22px;cursor:pointer;padding:0;line-height:1;flex-shrink:0';
+  close.onclick = () => t.remove();
+  t.append(msg, fillBtn, close);
+  document.body.appendChild(t);
+  setTimeout(() => { if (t.parentElement) t.remove(); }, 10000);
+}
+
+function fillInvoiceFromSale(clientId, items) {
+  switchTab('invoice');
+  populateInvClientPicker();
+  setTimeout(() => {
+    const sel = document.getElementById('inv-client-pick');
+    sel.value = clientId;
+    fillInvClient(clientId);
+    invLineItems = [];
+    invLineNextId = 0;
+    items.forEach(item => addInvLine(
+      item.ref_code ? `${item.name} (${item.ref_code})` : item.name,
+      String(item.qty || 1),
+      item.sell_price != null ? String(item.sell_price) : '',
+      '0'
+    ));
+    renderInvLines();
+    generateInvoice();
+  }, 50);
+}
+
+// ── Client purchase history ──
+async function openClientPurchases() {
+  if (!currentClientId) return;
+  const c = clients.find(x => x.id === currentClientId);
+  document.getElementById('purchases-sheet-title').textContent =
+    `Köphistorik — ${c?.admin_label || c?.display_name || ''}`;
+  const body = document.getElementById('purchases-sheet-body');
+  body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Laddar…</div>';
+  document.getElementById('client-purchases-sheet').classList.add('open');
+  try {
+    const r = await api(`/api/sales/client/${currentClientId}`);
+    const d = await r.json();
+    const sales = d.sales || [];
+    if (!sales.length) {
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3);font-size:14px">Inga köp ännu</div>';
+      return;
+    }
+    body.innerHTML = sales.map(sale => {
+      const date = new Date(sale.created_at).toLocaleDateString('sv-SE', { day: '2-digit', month: 'short', year: 'numeric' });
+      const saleTotal = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
+      const itemRows = (sale.sale_items || []).map(item => `
+        <div class="purchase-row">
+          ${item.image
+            ? `<img class="purchase-row-img" src="${item.image}" alt="">`
+            : `<div class="purchase-row-img"></div>`}
+          <div class="purchase-row-info">
+            <div class="purchase-row-name">${esc(item.name)}${item.qty > 1 ? ` ×${item.qty}` : ''}</div>
+            ${item.ref_code ? `<div class="purchase-row-meta">${esc(item.ref_code)}</div>` : ''}
+          </div>
+          <div class="purchase-row-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
+        </div>`).join('');
+      return `<div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);padding:10px 0 4px;border-top:1px solid var(--border)">
+          ${date}${sale.invoice_number ? ` · #${esc(sale.invoice_number)}` : ''}
+          ${(sale.sale_items||[]).length > 1 ? ` · € ${saleTotal.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}
+        </div>
+        ${itemRows}
+      </div>`;
+    }).join('');
+  } catch {
+    body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">Kunde inte hämta köphistorik</div>';
+  }
+}
+
+function closeClientPurchases() {
+  document.getElementById('client-purchases-sheet').classList.remove('open');
 }
 
 // ── Boot ──
