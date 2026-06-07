@@ -432,7 +432,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 #pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; }
 
 /* ── Purchases view ── */
-.purchases-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; }
+.purchases-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
 .purchases-scroll::-webkit-scrollbar { display: none; }
 .purchase-card { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .purchase-card-img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface2); flex-shrink: 0; display: block; }
@@ -901,7 +901,8 @@ function connectSocket() {
     row.style.pointerEvents = '';
     clearTimeout(window._tt);
     window._tt = setTimeout(() => { row.style.opacity = '0'; row.style.pointerEvents = 'none'; }, 3000);
-    scrollChat();
+    const c = document.getElementById('chat-messages');
+    if (c.scrollHeight - c.scrollTop - c.clientHeight < 80) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
   });
 }
 
