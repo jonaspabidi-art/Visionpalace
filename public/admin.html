@@ -1967,13 +1967,15 @@ document.addEventListener('keydown', e => {
 
 // ── Broadcast strip directional scroll lock ──
 (function() {
-  let startX, startY, startScroll, strip, locked;
+  let startX, startY, stripScroll, feedScroll, strip, locked;
   document.addEventListener('touchstart', e => {
     strip = e.target.closest('.bc-media-strip-admin');
     if (!strip) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    startScroll = strip.scrollLeft;
+    stripScroll = strip.scrollLeft;
+    const feed = document.querySelector('.bc-feed');
+    feedScroll = feed ? feed.scrollTop : 0;
     locked = null;
   }, { passive: true });
   document.addEventListener('touchmove', e => {
@@ -1981,7 +1983,13 @@ document.addEventListener('keydown', e => {
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
     if (!locked) locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-    if (locked === 'x') { e.preventDefault(); strip.scrollLeft = startScroll - dx; }
+    e.preventDefault();
+    if (locked === 'x') {
+      strip.scrollLeft = stripScroll - dx;
+    } else {
+      const feed = document.querySelector('.bc-feed');
+      if (feed) feed.scrollTop = feedScroll - dy;
+    }
   }, { passive: false });
   document.addEventListener('touchend', () => { strip = null; locked = null; }, { passive: true });
 })();

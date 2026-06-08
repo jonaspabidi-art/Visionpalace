@@ -1457,15 +1457,17 @@ _lb.addEventListener('touchend', e => {
 });
 
 // ── Broadcast strip directional scroll lock ──
-// Horizontal → scroll the strip. Vertical → let the feed scroll.
+// Horizontal → scroll strip. Vertical → manually scroll feed.
 (function() {
-  let startX, startY, startScroll, strip, locked;
+  let startX, startY, stripScroll, feedScroll, strip, locked;
   document.addEventListener('touchstart', e => {
     strip = e.target.closest('.bc-media-strip');
     if (!strip) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    startScroll = strip.scrollLeft;
+    stripScroll = strip.scrollLeft;
+    const feed = document.getElementById('feed-scroll');
+    feedScroll = feed ? feed.scrollTop : 0;
     locked = null;
   }, { passive: true });
   document.addEventListener('touchmove', e => {
@@ -1473,9 +1475,12 @@ _lb.addEventListener('touchend', e => {
     const dx = e.touches[0].clientX - startX;
     const dy = e.touches[0].clientY - startY;
     if (!locked) locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    e.preventDefault();
     if (locked === 'x') {
-      e.preventDefault();
-      strip.scrollLeft = startScroll - dx;
+      strip.scrollLeft = stripScroll - dx;
+    } else {
+      const feed = document.getElementById('feed-scroll');
+      if (feed) feed.scrollTop = feedScroll - dy;
     }
   }, { passive: false });
   document.addEventListener('touchend', () => { strip = null; locked = null; }, { passive: true });
