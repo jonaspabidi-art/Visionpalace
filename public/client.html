@@ -192,7 +192,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .bc-media-strip {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; gap: 3px;
-  touch-action: pan-x pinch-zoom;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   border-radius: 18px 18px 0 0;
@@ -202,7 +201,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .bc-media-strip img {
   flex-shrink: 0; width: 82%; aspect-ratio: 1; object-fit: cover;
   cursor: pointer; scroll-snap-align: start; display: block;
-  touch-action: pan-x;
 }
 .bc-media-strip video {
   flex-shrink: 0; width: 82%; aspect-ratio: 1; object-fit: cover;
@@ -1457,6 +1455,31 @@ _lb.addEventListener('touchend', e => {
   }
   lbInitDist = 0;
 });
+
+// ── Broadcast strip directional scroll lock ──
+// Horizontal → scroll the strip. Vertical → let the feed scroll.
+(function() {
+  let startX, startY, startScroll, strip, locked;
+  document.addEventListener('touchstart', e => {
+    strip = e.target.closest('.bc-media-strip');
+    if (!strip) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    startScroll = strip.scrollLeft;
+    locked = null;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!strip) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!locked) locked = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (locked === 'x') {
+      e.preventDefault();
+      strip.scrollLeft = startScroll - dx;
+    }
+  }, { passive: false });
+  document.addEventListener('touchend', () => { strip = null; locked = null; }, { passive: true });
+})();
 
 // ── Settings ──
 async function openSettings() {
