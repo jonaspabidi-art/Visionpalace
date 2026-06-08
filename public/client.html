@@ -628,6 +628,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
     </div>
     <div class="chat-composer">
       <div class="bc-quote-bar" id="bc-quote-bar">
+        <img class="bc-quote-img" id="bc-quote-img" style="display:none;width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0">
         <div class="bc-quote-content">
           <div class="bc-quote-label">Vision Palace</div>
           <div class="bc-quote-preview" id="bc-quote-preview"></div>
@@ -987,13 +988,21 @@ function scrollFeedBottom() {
 }
 
 let quotedBroadcast = null;
+let quotedBroadcastMedia = [];
 
 function replyToBroadcast(id) {
   const b = broadcasts.find(x => x.id === id);
   if (!b) return;
   quotedBroadcast = b;
+  quotedBroadcastMedia = (b.broadcast_media || [])
+    .filter(m => m.storage_url)
+    .map(m => ({ url: m.storage_url, thumbUrl: m.thumbnail_url || m.storage_url, type: m.type || 'image' }));
   const preview = [b.price, b.text].filter(Boolean).join(' · ').slice(0, 60) || 'Stock update';
   document.getElementById('bc-quote-preview').textContent = preview;
+  const img = document.getElementById('bc-quote-img');
+  const firstImg = quotedBroadcastMedia.find(m => m.type === 'image');
+  if (firstImg) { img.src = firstImg.thumbUrl; img.style.display = 'block'; }
+  else img.style.display = 'none';
   document.getElementById('bc-quote-bar').classList.add('visible');
   switchTab('messages');
   setTimeout(() => document.getElementById('chat-input').focus(), 150);
@@ -1001,6 +1010,8 @@ function replyToBroadcast(id) {
 
 function dismissQuote() {
   quotedBroadcast = null;
+  quotedBroadcastMedia = [];
+  document.getElementById('bc-quote-img').style.display = 'none';
   document.getElementById('bc-quote-bar').classList.remove('visible');
 }
 
@@ -1218,12 +1229,13 @@ async function sendMsg() {
   if (sending) return;
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
-  if (!text && !pendingMedia.length) return;
+  if (!text && !pendingMedia.length && !quotedBroadcastMedia.length) return;
   sending = true;
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
 
   let fullText = text;
+  const broadcastMedia = [...quotedBroadcastMedia];
   if (quotedBroadcast) {
     const ref = [quotedBroadcast.price, quotedBroadcast.text].filter(Boolean).join(' · ').slice(0, 80);
     fullText = `↩ ${ref}\n\n${text}`.trim();
@@ -1236,7 +1248,7 @@ async function sendMsg() {
     const r = await fetch('/api/messages/me/send', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-session-token':session.session_token},
-      body: JSON.stringify({ text: fullText, media: pendingMedia })
+      body: JSON.stringify({ text: fullText, media: [...broadcastMedia, ...pendingMedia] })
     });
     if (r.ok) {
       pendingMedia = [];
