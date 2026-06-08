@@ -963,12 +963,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           <input class="inv-input" id="invf-ref" type="text" placeholder="ex. RB-001">
         </div>
         <div class="inv-field">
-          <label>Säljpris (kr)</label>
+          <label>Säljpris (€)</label>
           <input class="inv-input" id="invf-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
         </div>
       </div>
       <div class="inv-field">
-        <label>Inköpspris (kr)</label>
+        <label>Inköpspris (€)</label>
         <input class="inv-input" id="invf-buy" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
       </div>
       <div class="inv-field">
@@ -1008,6 +1008,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <div class="sale-sec-title">Valda varor</div>
         <div id="sale-cart-list"></div>
         <div class="sale-total-bar" id="sale-total">Totalt: € 0,00</div>
+      </div>
+      <div>
+        <div class="sale-sec-title">Frakt</div>
+        <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+          <span style="font-size:14px;color:var(--text2);flex-shrink:0">€</span>
+          <input id="sale-shipping" type="number" min="0" step="any" inputmode="decimal" placeholder="0" style="background:none;border:none;outline:none;font-size:15px;color:var(--text);font-family:inherit;width:100%" oninput="renderSaleCart()">
+        </div>
       </div>
       <div>
         <div class="sale-sec-title">Lägg till från lager</div>
@@ -2613,6 +2620,8 @@ function openSaleModal(invId) {
 
 function closeSaleModal() {
   document.getElementById('sale-modal').classList.remove('open');
+  const s = document.getElementById('sale-shipping');
+  if (s) s.value = '';
 }
 
 function updateSaleQty(invId, delta) {
@@ -2653,7 +2662,8 @@ function renderSaleCart() {
         <button class="sale-rm-btn" onclick="removeFromSaleCart('${item.id}')">✕</button>
       </div>
     </div>`).join('');
-  const total = saleCartItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0);
+  const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
+  const total = saleCartItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0) + shipping;
   document.getElementById('sale-total').textContent = `Totalt: € ${total.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -2698,16 +2708,18 @@ async function createSale() {
   const btn = document.querySelector('#sale-modal .inv-gen-btn');
   btn.textContent = 'Skapar…'; btn.disabled = true;
   try {
+    const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
     const items = saleCartItems.map(i => ({
       inventory_id: i.id,
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, qty: i.qty,
       image: i.image || null
     }));
+    if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });
     const r = await api('/api/sales', { method: 'POST', body: JSON.stringify({ client_id: clientId, items }) });
     if (!r.ok) { const d = await r.json(); showToast(d.error || 'Fel', 'error'); return; }
     _lastSaleClientId = clientId;
-    _lastSaleItems = [...saleCartItems];
+    _lastSaleItems = shipping > 0 ? [...saleCartItems, { name: 'Frakt', sell_price: shipping, qty: 1 }] : [...saleCartItems];
     saleCartItems = [];
     updateSaleCartBadge();
     closeSaleModal();
