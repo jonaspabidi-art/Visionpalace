@@ -671,12 +671,25 @@ app.post('/api/onesignal/register', clientAuth, async (req, res) => {
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
 
+async function generateInvoiceNumber() {
+  const mm = String(new Date().getMonth() + 1).padStart(2, '0');
+  const prefix = `VP${mm}-`;
+  const { data } = await supabase.from('sales').select('invoice_number').ilike('invoice_number', `${prefix}%`);
+  let max = 0;
+  (data || []).forEach(row => {
+    const n = parseInt((row.invoice_number || '').slice(prefix.length)) || 0;
+    if (n > max) max = n;
+  });
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
+}
+
 // Create a sale (admin records items sold to a client)
 app.post('/api/sales', adminAuth, async (req, res) => {
-  const { client_id, items, invoice_number, notes } = req.body;
+  const { client_id, items, notes } = req.body;
   if (!client_id || !items?.length) return res.status(400).json({ error: 'client_id och items krävs' });
+  const invoice_number = await generateInvoiceNumber();
   const { data: sale, error } = await supabase.from('sales').insert({
-    client_id, invoice_number: invoice_number || null, notes: notes || null,
+    client_id, invoice_number, notes: notes || null,
     created_at: new Date().toISOString()
   }).select().single();
   if (error) return res.status(500).json({ error: error.message });
