@@ -2856,9 +2856,12 @@ async function loadSalesHistory() {
               <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''}</div>
             </div>
-            <div style="text-align:right;flex-shrink:0;margin-left:12px">
-              <div style="font-size:14px;font-weight:700;color:var(--text)">€ ${saleRev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-              ${hasCost ? `<div style="font-size:12px;color:${saleProfit>=0?'#66dd99':'#ff7a7a'}">vinst € ${saleProfit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+            <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;margin-left:12px">
+              <div style="text-align:right">
+                <div style="font-size:14px;font-weight:700;color:var(--text)">€ ${saleRev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                ${hasCost ? `<div style="font-size:12px;color:${saleProfit>=0?'#66dd99':'#ff7a7a'}">vinst € ${saleProfit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+              </div>
+              <button onclick="deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:none;color:#ff7a7a;font-size:16px;cursor:pointer;padding:0;line-height:1;margin-top:1px" title="Ta bort">✕</button>
             </div>
           </div>
           ${itemLines}
@@ -2873,6 +2876,16 @@ async function loadSalesHistory() {
       </div>`;
     }).join('');
   } catch { listEl.innerHTML = '<div style="color:#ff7a7a;text-align:center;padding:40px 0">Fel vid laddning</div>'; }
+}
+
+async function deleteSale(saleId, onDone) {
+  if (!confirm('Ta bort denna försäljning?')) return;
+  try {
+    const r = await api(`/api/sales/${saleId}`, { method: 'DELETE' });
+    if (!r.ok) { showToast('Kunde inte ta bort', 'error'); return; }
+    showToast('Försäljning borttagen', 'ok');
+    onDone();
+  } catch { showToast('Anslutningsfel', 'error'); }
 }
 
 // ── Client purchase history ──
@@ -2907,9 +2920,12 @@ async function openClientPurchases() {
           <div class="purchase-row-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
         </div>`).join('');
       return `<div style="margin-bottom:16px">
-        <div style="font-size:11px;font-weight:600;color:var(--text3);padding:10px 0 4px;border-top:1px solid var(--border)">
-          ${date}${sale.invoice_number ? ` · #${esc(sale.invoice_number)}` : ''}
-          ${(sale.sale_items||[]).length > 1 ? ` · € ${saleTotal.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 4px;border-top:1px solid var(--border)">
+          <span style="font-size:11px;font-weight:600;color:var(--text3)">
+            ${date}${sale.invoice_number ? ` · #${esc(sale.invoice_number)}` : ''}
+            ${(sale.sale_items||[]).length > 1 ? ` · € ${saleTotal.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}
+          </span>
+          <button onclick="deleteSale('${sale.id}', openClientPurchases)" style="background:none;border:none;color:#ff7a7a;font-size:14px;cursor:pointer;padding:0 0 0 8px;line-height:1" title="Ta bort">✕</button>
         </div>
         ${itemRows}
       </div>`;

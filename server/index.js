@@ -725,6 +725,13 @@ app.post('/api/sales', adminAuth, async (req, res) => {
   res.json({ sale: full });
 });
 
+// Delete a sale (admin)
+app.delete('/api/sales/:id', adminAuth, async (req, res) => {
+  const { error } = await supabase.from('sales').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // List all sales (admin)
 app.get('/api/sales', adminAuth, async (req, res) => {
   const { data } = await supabase.from('sales')
