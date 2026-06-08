@@ -1370,7 +1370,7 @@ function bcBubbleHTML(b) {
   const pending = !!b._pending;
   const failed = !!b._failed;
 
-  const imgSrc = m => m.thumbnail_url || m.storage_url || '';
+  const imgSrc = m => m.storage_url || '';
   const imgAttrs = m => (pending || failed)
     ? ''
     : `data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)"`;

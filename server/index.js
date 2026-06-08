@@ -193,7 +193,7 @@ async function uploadMedia(buffer, originalname, mimetype) {
   let thumbUrl = null;
   if (!isVideo) {
     try {
-      const thumbBuffer = await sharp(buffer).resize(400, 400, { fit: 'inside' }).jpeg({ quality: 70 }).toBuffer();
+      const thumbBuffer = await sharp(buffer).resize(800, 800, { fit: 'inside' }).jpeg({ quality: 85 }).toBuffer();
       await supabase.storage.from('media').upload(thumbName, thumbBuffer, { contentType: 'image/jpeg' });
       const { data: { publicUrl: tu } } = supabase.storage.from('media').getPublicUrl(thumbName);
       thumbUrl = tu;
