@@ -2840,31 +2840,41 @@ async function loadSalesHistory() {
         }, 0);
         const hasCost = (sale.sale_items || []).some(i => i.buy_price != null);
         const date = new Date(sale.created_at).toLocaleDateString('sv-SE', { day: '2-digit', month: 'short' });
+        const itemCount = (sale.sale_items || []).length;
         const itemLines = (sale.sale_items || []).map(item => {
           const rev = (parseFloat(item.sell_price) || 0) * (item.qty || 1);
           const cost = item.buy_price != null ? (parseFloat(item.buy_price) || 0) * (item.qty || 1) : null;
           const margin = cost != null ? (rev - cost) : null;
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-            <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name)}${item.qty > 1 ? ` ×${item.qty}` : ''}</span>
-            <span style="color:var(--text);margin-left:8px;flex-shrink:0">€ ${rev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-            ${margin != null ? `<span style="color:${margin>=0?'#66dd99':'#ff7a7a'};margin-left:8px;font-size:12px;flex-shrink:0">+€ ${margin.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : ''}
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+              ${item.image ? `<img src="${item.image}" style="width:32px;height:32px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
+              <span style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name)}${item.qty > 1 ? ` ×${item.qty}` : ''}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">
+              <span style="color:var(--text)">€ ${rev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+              ${margin != null ? `<span style="color:${margin>=0?'#66dd99':'#ff7a7a'};font-size:12px;min-width:60px;text-align:right">${margin>=0?'+':''}€ ${margin.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : ''}
+            </div>
           </div>`;
         }).join('');
-        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-            <div>
+        const sid = sale.id.replace(/-/g,'');
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
+          <div onclick="toggleSaleDetail('${sid}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">
+            <div style="flex:1;min-width:0">
               <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''} · ${itemCount} vara${itemCount !== 1 ? 'r' : ''}</div>
             </div>
-            <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;margin-left:12px">
+            <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:12px">
               <div style="text-align:right">
                 <div style="font-size:14px;font-weight:700;color:var(--text)">€ ${saleRev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-                ${hasCost ? `<div style="font-size:12px;color:${saleProfit>=0?'#66dd99':'#ff7a7a'}">vinst € ${saleProfit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+                ${hasCost ? `<div style="font-size:12px;color:${saleProfit>=0?'#66dd99':'#ff7a7a'}">${saleProfit>=0?'+':''}€ ${saleProfit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
               </div>
-              <button onclick="deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:none;color:#ff7a7a;font-size:16px;cursor:pointer;padding:0;line-height:1;margin-top:1px" title="Ta bort">✕</button>
+              <span id="chev-${sid}" style="color:var(--text3);font-size:12px;transition:transform .2s">▼</span>
             </div>
           </div>
-          ${itemLines}
+          <div id="detail-${sid}" style="display:none;padding:0 14px 10px;border-top:1px solid var(--border)">
+            ${itemLines}
+            <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="margin-top:10px;background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
+          </div>
         </div>`;
       }).join('');
       return `<div style="margin-bottom:24px">
@@ -2876,6 +2886,15 @@ async function loadSalesHistory() {
       </div>`;
     }).join('');
   } catch { listEl.innerHTML = '<div style="color:#ff7a7a;text-align:center;padding:40px 0">Fel vid laddning</div>'; }
+}
+
+function toggleSaleDetail(sid) {
+  const detail = document.getElementById('detail-' + sid);
+  const chev = document.getElementById('chev-' + sid);
+  if (!detail) return;
+  const open = detail.style.display === 'none';
+  detail.style.display = open ? 'block' : 'none';
+  if (chev) chev.style.transform = open ? 'rotate(180deg)' : '';
 }
 
 async function deleteSale(saleId, onDone) {
