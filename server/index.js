@@ -107,6 +107,17 @@ const pushSubs = new Map(); // clientId -> PushSubscription
 let adminPushSub = null;   // single admin subscription
 const onlineClients = new Set(); // clientIds currently connected
 
+// Load admin push subscription from DB on startup so it survives server restarts
+supabase.from('app_settings').select('value').eq('key', 'admin_push_sub').single()
+  .then(({ data }) => {
+    if (data?.value) {
+      try {
+        const sub = JSON.parse(data.value);
+        if (isValidPushSub(sub)) { adminPushSub = sub; console.log('[Push] Admin push subscription loaded from DB'); }
+      } catch {}
+    }
+  });
+
 function isValidPushSub(sub) {
   return sub
     && typeof sub.endpoint === 'string'
@@ -534,7 +545,7 @@ app.post('/api/messages/me/send', clientAuth, async (req, res) => {
       body: text || 'Skickade ett media'
     })).catch(e => {
       console.error(`[Push] Admin push failed: ${e.statusCode} ${e.message}`);
-      if (e.statusCode === 410 || e.statusCode === 404) adminPushSub = null;
+      if (e.statusCode === 410 || e.statusCode === 404) { adminPushSub = null; supabase.from('app_settings').delete().eq('key', 'admin_push_sub').then(() => {}); }
     });
   }
 
@@ -669,7 +680,7 @@ app.post('/api/push/subscribe', clientAuth, async (req, res) => {
 });
 
 // Save web push subscription (admin)
-app.post('/api/push/admin-subscribe', adminAuth, (req, res) => {
+app.post('/api/push/admin-subscribe', adminAuth, async (req, res) => {
   const { subscription } = req.body;
   console.log(`[Push] Admin subscribe request, endpoint present: ${!!subscription?.endpoint}`);
   if (!isValidPushSub(subscription)) {
@@ -677,7 +688,8 @@ app.post('/api/push/admin-subscribe', adminAuth, (req, res) => {
     return res.status(400).json({ error: 'Invalid subscription' });
   }
   adminPushSub = subscription;
-  console.log('[Push] Admin push subscription registered');
+  await supabase.from('app_settings').upsert({ key: 'admin_push_sub', value: JSON.stringify(subscription), updated_at: new Date().toISOString() });
+  console.log('[Push] Admin push subscription registered and saved to DB');
   res.json({ ok: true });
 });
 
