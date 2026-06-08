@@ -847,6 +847,7 @@ function switchTab(tab) {
     else scrollChat();
   }
   if (tab === 'purchases') loadPurchases();
+  if (tab === 'broadcast') scrollFeedBottom();
 }
 
 function getInviteToken() {
@@ -1090,9 +1091,10 @@ function bcBubbleHTML(b) {
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
   s.scrollTop = 999999;
-  const ro = new ResizeObserver(() => { s.scrollTop = 999999; });
-  ro.observe(s);
-  setTimeout(() => ro.disconnect(), 2000);
+  // Re-scroll as each image loads (scrollHeight grows with lazy images)
+  s.querySelectorAll('img').forEach(img => {
+    if (!img.complete) img.addEventListener('load', () => { s.scrollTop = 999999; }, { once: true });
+  });
 }
 
 let quotedBroadcast = null;
