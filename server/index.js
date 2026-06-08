@@ -710,19 +710,13 @@ app.get('/api/sales/client/:clientId', adminAuth, async (req, res) => {
   res.json({ sales: data || [] });
 });
 
-// Client: own purchase history (flattened to individual items)
+// Client: own purchase history (grouped by sale)
 app.get('/api/purchases/me', clientAuth, async (req, res) => {
   const { data } = await supabase.from('sales')
     .select('*, sale_items(*)')
     .eq('client_id', req.client.id)
     .order('created_at', { ascending: false });
-  const purchases = [];
-  (data || []).forEach(sale => {
-    (sale.sale_items || []).forEach(item => {
-      purchases.push({ ...item, purchased_at: sale.created_at, invoice_number: sale.invoice_number });
-    });
-  });
-  res.json({ purchases });
+  res.json({ sales: data || [] });
 });
 
 // SPA routes

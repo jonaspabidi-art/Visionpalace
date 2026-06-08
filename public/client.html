@@ -432,19 +432,66 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 #pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; }
 
 /* ── Purchases view ── */
-.purchases-scroll { flex: 1; overflow-y: auto; padding: 0 16px 16px; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
+.purchases-scroll { flex: 1; overflow-y: auto; padding: 12px 16px 24px; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 12px; }
 .purchases-scroll::-webkit-scrollbar { display: none; }
-.purchase-card { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
-.purchase-card-img { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface2); flex-shrink: 0; display: block; }
-.purchase-card-img-ph { width: 56px; height: 56px; border-radius: 10px; background: var(--surface2); flex-shrink: 0; }
-.purchase-card-body { flex: 1; min-width: 0; }
-.purchase-card-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.purchase-card-ref { font-size: 11px; color: var(--text3); letter-spacing: 0.08em; margin-top: 2px; }
-.purchase-card-date { font-size: 11px; color: var(--text3); margin-top: 3px; }
-.purchase-card-right { text-align: right; flex-shrink: 0; }
-.purchase-card-price { font-size: 16px; font-weight: 800; color: var(--blue); }
-.purchase-card-qty { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.sale-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.sale-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.sale-card-date { font-size: 12px; color: var(--text2); }
+.sale-card-meta { display: flex; align-items: center; gap: 10px; }
+.sale-card-inv { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; }
+.sale-invoice-btn { display: flex; align-items: center; gap: 5px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--blue); cursor: pointer; font-family: inherit; }
+.sale-invoice-btn svg { flex-shrink: 0; }
+.sale-items { padding: 4px 0; }
+.sale-item-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; }
+.sale-item-img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--surface2); flex-shrink: 0; }
+.sale-item-img-ph { width: 44px; height: 44px; border-radius: 8px; background: var(--surface2); flex-shrink: 0; }
+.sale-item-body { flex: 1; min-width: 0; }
+.sale-item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sale-item-ref { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; margin-top: 2px; }
+.sale-item-right { text-align: right; flex-shrink: 0; }
+.sale-item-price { font-size: 14px; font-weight: 700; color: var(--blue); }
+.sale-item-qty { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.sale-card-footer { display: flex; justify-content: flex-end; align-items: center; padding: 10px 14px; border-top: 1px solid var(--border); gap: 6px; }
+.sale-total-label { font-size: 12px; color: var(--text2); }
+.sale-total-val { font-size: 16px; font-weight: 800; color: var(--blue); }
 .purchases-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 10px; color: var(--text3); }
+
+/* ── Invoice modal ── */
+#invoice-modal { display: none; position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.75); align-items: flex-end; justify-content: center; padding-bottom: var(--safe-bot); }
+#invoice-modal.open { display: flex; }
+.invoice-sheet { background: #fff; color: #111; width: 100%; max-width: 480px; max-height: 88dvh; border-radius: 20px 20px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+.invoice-sheet-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 10px; border-bottom: 1px solid #e8e8e8; flex-shrink: 0; }
+.invoice-sheet-bar span { font-size: 15px; font-weight: 700; color: #111; }
+.invoice-close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: #888; padding: 2px 6px; line-height: 1; }
+.invoice-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.invoice-doc { padding: 22px 20px; }
+.invoice-doc-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
+.invoice-brand { font-size: 18px; font-weight: 800; letter-spacing: 0.06em; color: #111; }
+.invoice-brand-sub { font-size: 10px; color: #999; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 2px; }
+.invoice-meta { text-align: right; }
+.invoice-meta-title { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #888; }
+.invoice-meta-num { font-size: 15px; font-weight: 700; color: #111; margin-top: 2px; }
+.invoice-meta-date { font-size: 12px; color: #888; margin-top: 2px; }
+.invoice-bill { margin-bottom: 22px; }
+.invoice-bill-label { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+.invoice-bill-name { font-size: 14px; font-weight: 700; color: #111; }
+.invoice-bill-detail { font-size: 13px; color: #555; margin-top: 2px; line-height: 1.5; }
+.invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+.invoice-table th { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #888; padding: 0 0 8px; border-bottom: 1px solid #e8e8e8; text-align: left; }
+.invoice-table th:last-child { text-align: right; }
+.invoice-table td { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #222; vertical-align: middle; }
+.invoice-table td:last-child { text-align: right; font-weight: 700; }
+.invoice-table .ref { font-size: 11px; color: #999; }
+.invoice-total-row { display: flex; justify-content: flex-end; align-items: center; gap: 16px; padding: 12px 0 4px; border-top: 2px solid #111; }
+.invoice-total-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #555; }
+.invoice-total-val { font-size: 20px; font-weight: 800; color: #111; }
+.invoice-dl-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: calc(100% - 36px); margin: 14px 18px; padding: 14px; background: #111; color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+
+@media print {
+  body > *:not(#invoice-print-area) { display: none !important; }
+  #invoice-print-area { display: block !important; position: static !important; padding: 32px; background: #fff; color: #111; }
+  #invoice-print-area .invoice-dl-btn { display: none !important; }
+}
 
 /* ── Splash ── */
 #splash {
@@ -653,6 +700,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
         </div>
         <p>No purchases yet</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Invoice modal -->
+  <div id="invoice-modal" onclick="if(event.target===this)closeInvoice()">
+    <div class="invoice-sheet" id="invoice-sheet">
+      <div class="invoice-sheet-bar">
+        <span>Invoice</span>
+        <button class="invoice-close-btn" onclick="closeInvoice()">×</button>
+      </div>
+      <div class="invoice-scroll">
+        <div class="invoice-doc" id="invoice-doc"></div>
+      </div>
+      <button class="invoice-dl-btn" onclick="printInvoice()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download / Print
+      </button>
     </div>
   </div>
 
@@ -1483,13 +1547,13 @@ async function loadPurchases() {
     const r = await fetch('/api/purchases/me', { headers: { 'x-session-token': session.session_token } });
     if (!r.ok) return;
     const d = await r.json();
-    renderPurchases(d.purchases || []);
+    renderPurchases(d.sales || []);
   } catch(e) {}
 }
 
-function renderPurchases(purchases) {
+function renderPurchases(sales) {
   const scroll = document.getElementById('purchases-scroll');
-  if (!purchases.length) {
+  if (!sales.length) {
     scroll.innerHTML = `<div class="purchases-empty">
       <div class="feed-empty-icon">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1498,23 +1562,127 @@ function renderPurchases(purchases) {
     </div>`;
     return;
   }
-  scroll.innerHTML = purchases.map(item => {
-    const date = new Date(item.purchased_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-    return `<div class="purchase-card">
-      ${item.image
-        ? `<img class="purchase-card-img" src="${item.image}" alt="${esc(item.name || '')}" loading="lazy">`
-        : `<div class="purchase-card-img-ph"></div>`}
-      <div class="purchase-card-body">
-        <div class="purchase-card-name">${esc(item.name || '—')}</div>
-        ${item.ref_code ? `<div class="purchase-card-ref">${esc(item.ref_code)}</div>` : ''}
-        <div class="purchase-card-date">${date}</div>
+  scroll.innerHTML = sales.map(sale => {
+    const items = sale.sale_items || [];
+    const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const total = items.reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
+    const itemsHTML = items.map(item => `
+      <div class="sale-item-row">
+        ${item.image ? `<img class="sale-item-img" src="${item.image}" loading="lazy">` : `<div class="sale-item-img-ph"></div>`}
+        <div class="sale-item-body">
+          <div class="sale-item-name">${esc(item.name || '—')}</div>
+          ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
+        </div>
+        <div class="sale-item-right">
+          ${item.sell_price != null ? `<div class="sale-item-price">€${item.sell_price}</div>` : ''}
+          ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">×${item.qty}</div>` : ''}
+        </div>
+      </div>`).join('');
+    const saleData = encodeURIComponent(JSON.stringify(sale));
+    return `<div class="sale-card">
+      <div class="sale-card-header">
+        <div class="sale-card-date">${date}</div>
+        <div class="sale-card-meta">
+          ${sale.invoice_number ? `<div class="sale-card-inv">${esc(sale.invoice_number)}</div>` : ''}
+          <button class="sale-invoice-btn" onclick="openInvoice('${saleData}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Invoice
+          </button>
+        </div>
       </div>
-      <div class="purchase-card-right">
-        ${item.sell_price != null ? `<div class="purchase-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
-        ${item.qty > 1 ? `<div class="purchase-card-qty">×${item.qty}</div>` : ''}
+      <div class="sale-items">${itemsHTML}</div>
+      <div class="sale-card-footer">
+        <span class="sale-total-label">Total</span>
+        <span class="sale-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
       </div>
     </div>`;
   }).join('');
+}
+
+function openInvoice(saleJSON) {
+  const sale = JSON.parse(decodeURIComponent(saleJSON));
+  const items = sale.sale_items || [];
+  const total = items.reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
+  const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+  const clientName = session.full_name || session.display_name || '';
+  const clientAddress = session.address || '';
+  const clientPhone = session.phone || '';
+
+  const rowsHTML = items.map(item => `
+    <tr>
+      <td>
+        <div>${esc(item.name || '—')}</div>
+        ${item.ref_code ? `<div class="ref">${esc(item.ref_code)}</div>` : ''}
+      </td>
+      <td style="text-align:center">${item.qty || 1}</td>
+      <td>${item.sell_price != null ? `€${item.sell_price}` : '—'}</td>
+      <td>${item.sell_price != null ? `€${((item.sell_price) * (item.qty || 1)).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}</td>
+    </tr>`).join('');
+
+  document.getElementById('invoice-doc').innerHTML = `
+    <div class="invoice-doc-head">
+      <div>
+        <div class="invoice-brand">VISION PALACE</div>
+        <div class="invoice-brand-sub">Luxury Goods</div>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-meta-title">Invoice</div>
+        <div class="invoice-meta-num">${sale.invoice_number ? esc(sale.invoice_number) : '—'}</div>
+        <div class="invoice-meta-date">${date}</div>
+      </div>
+    </div>
+    <div class="invoice-bill">
+      <div class="invoice-bill-label">Bill to</div>
+      <div class="invoice-bill-name">${esc(clientName)}</div>
+      <div class="invoice-bill-detail">${[clientAddress, clientPhone].filter(Boolean).map(esc).join('<br>')}</div>
+    </div>
+    <table class="invoice-table">
+      <thead><tr>
+        <th>Item</th><th style="text-align:center">Qty</th><th>Price</th><th>Total</th>
+      </tr></thead>
+      <tbody>${rowsHTML}</tbody>
+    </table>
+    <div class="invoice-total-row">
+      <span class="invoice-total-label">Total</span>
+      <span class="invoice-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+    </div>`;
+
+  document.getElementById('invoice-modal').classList.add('open');
+}
+
+function closeInvoice() {
+  document.getElementById('invoice-modal').classList.remove('open');
+}
+
+function printInvoice() {
+  const content = document.getElementById('invoice-doc').innerHTML;
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice</title><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#fff;color:#111;padding:32px;max-width:580px;margin:0 auto}
+    .invoice-doc-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px}
+    .invoice-brand{font-size:20px;font-weight:800;letter-spacing:0.06em}
+    .invoice-brand-sub{font-size:10px;color:#999;letter-spacing:0.12em;text-transform:uppercase;margin-top:3px}
+    .invoice-meta{text-align:right}
+    .invoice-meta-title{font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888}
+    .invoice-meta-num{font-size:16px;font-weight:700;margin-top:3px}
+    .invoice-meta-date{font-size:12px;color:#888;margin-top:2px}
+    .invoice-bill{margin-bottom:28px}
+    .invoice-bill-label{font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:#888;margin-bottom:6px}
+    .invoice-bill-name{font-size:14px;font-weight:700}
+    .invoice-bill-detail{font-size:13px;color:#555;margin-top:4px;line-height:1.6}
+    .invoice-table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    .invoice-table th{font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#888;padding:0 0 8px;border-bottom:1px solid #e8e8e8;text-align:left}
+    .invoice-table th:last-child,.invoice-table td:last-child{text-align:right}
+    .invoice-table td{padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#222;vertical-align:middle}
+    .invoice-table td:last-child{font-weight:700}
+    .ref{font-size:11px;color:#999;margin-top:2px}
+    .invoice-total-row{display:flex;justify-content:flex-end;align-items:center;gap:16px;padding:14px 0 4px;border-top:2px solid #111}
+    .invoice-total-label{font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#555}
+    .invoice-total-val{font-size:22px;font-weight:800}
+    @media print{body{padding:16px}}
+  </style></head><body>${content}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script></body></html>`);
+  win.document.close();
 }
 
 const splashStart = Date.now();
