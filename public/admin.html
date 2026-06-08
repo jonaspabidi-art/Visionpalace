@@ -515,7 +515,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .chat-panel-info { flex: 1; min-width: 0; }
 .chat-panel-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-panel-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.chat-panel-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
 .danger-btn {
   padding: 6px 12px; border-radius: 8px; border: 1px solid #ff3b30;
   background: transparent; color: #ff3b30; font-size: 12px; cursor: pointer; white-space: nowrap;
@@ -1287,12 +1287,12 @@ function connectSocket() {
 
   socket.on('client:online', d => {
     const c = clients.find(x => x.id === d.client_id);
-    if (c) { c.is_online = true; renderClients(); }
+    if (c) { c.is_online = true; renderClients(); if (currentClientId === d.client_id) updateChatHeader(); }
   });
 
   socket.on('client:offline', d => {
     const c = clients.find(x => x.id === d.client_id);
-    if (c) { c.is_online = false; c.last_seen_at = d.last_seen_at; renderClients(); }
+    if (c) { c.is_online = false; c.last_seen_at = d.last_seen_at; renderClients(); if (currentClientId === d.client_id) updateChatHeader(); }
   });
 
   socket.on('client:read_receipt', d => {
@@ -1677,7 +1677,17 @@ function updateChatHeader() {
   const c = clients.find(x => x.id === currentClientId);
   if (!c) return;
   document.getElementById('cp-name').textContent = c.admin_label || c.display_name;
-  document.getElementById('cp-sub').textContent = c.admin_label ? c.display_name : '';
+  const sub = document.getElementById('cp-sub');
+  if (c.is_online) {
+    sub.textContent = 'Online';
+    sub.style.color = '#34c759';
+  } else if (c.last_seen_at) {
+    sub.textContent = 'Senast ' + timeAgo(c.last_seen_at);
+    sub.style.color = '';
+  } else {
+    sub.textContent = c.admin_label ? c.display_name : '';
+    sub.style.color = '';
+  }
   document.getElementById('label-input').value = c.admin_label || '';
 }
 
