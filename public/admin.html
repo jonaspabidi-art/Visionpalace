@@ -1378,11 +1378,12 @@ function renderFeed(scrollToBottom = false) {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (scrollToBottom || prevScrollBottom < 60) {
-      feed.scrollTop = feed.scrollHeight;
-    }
-  }));
+  if (scrollToBottom || prevScrollBottom < 60) {
+    feed.scrollTop = 999999;
+    feed.querySelectorAll('img').forEach(img => {
+      if (!img.complete) img.addEventListener('load', () => { feed.scrollTop = 999999; }, { once: true });
+    });
+  }
 }
 
 function appendBroadcast(b) {
