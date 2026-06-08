@@ -1406,7 +1406,7 @@ _lb.addEventListener('touchend', e => {
 });
 
 // ── Settings ──
-function openSettings() {
+async function openSettings() {
   document.getElementById('settings-name').value = session?.display_name || '';
   document.getElementById('settings-fullname').value = session?.full_name || '';
   document.getElementById('settings-address').value = session?.address || '';
@@ -1416,6 +1416,19 @@ function openSettings() {
   document.getElementById('settings-err').textContent = '';
   document.getElementById('settings-ok').textContent = '';
   document.getElementById('settings-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/me', { headers: { 'x-session-token': session.session_token } });
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById('settings-name').value = d.display_name || '';
+      document.getElementById('settings-fullname').value = d.full_name || '';
+      document.getElementById('settings-address').value = d.address || '';
+      document.getElementById('settings-phone').value = d.phone || '';
+      session.full_name = d.full_name;
+      session.address = d.address;
+      session.phone = d.phone;
+    }
+  } catch {}
 }
 function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
 async function saveProfile() {

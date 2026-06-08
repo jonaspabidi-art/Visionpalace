@@ -384,12 +384,20 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
 
   // Push notifications fire in background — never block the response
   const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
-  webPushAll('Vision Palace', pushText).catch(() => {});
-  supabase.from('clients').select('onesignal_player_id').eq('is_inactive', false)
-    .then(({ data: clients }) => {
-      const playerIds = (clients || []).map(c => c.onesignal_player_id).filter(Boolean);
-      if (playerIds.length > 0) {
-        sendPushToAll('Vision Palace', pushText, { type: 'broadcast', id: broadcast.id }).catch(() => {});
+  // Query DB directly so push works even after server restart (in-memory map may be stale)
+  supabase.from('clients').select('id, onesignal_player_id').eq('is_inactive', false)
+    .then(({ data: allClients }) => {
+      for (const c of allClients || []) {
+        if (c.onesignal_player_id?.startsWith('{')) {
+          try {
+            const sub = JSON.parse(c.onesignal_player_id);
+            if (isValidPushSub(sub)) {
+              pushSubs.set(c.id, sub);
+              webpush.sendNotification(sub, JSON.stringify({ title: 'Vision Palace', body: pushText }))
+                .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(c.id); });
+            }
+          } catch {}
+        }
       }
     });
 });
@@ -554,6 +562,17 @@ app.patch('/api/me/profile', clientAuth, async (req, res) => {
   res.json({ ok: true, display_name: data.display_name, full_name: data.full_name, address: data.address, phone: data.phone });
 });
 
+// Get own profile (client)
+app.get('/api/me', clientAuth, async (req, res) => {
+  res.json({
+    client_id: req.client.id,
+    display_name: req.client.display_name,
+    full_name: req.client.full_name || null,
+    address: req.client.address || null,
+    phone: req.client.phone || null
+  });
+});
+
 // Mark messages as read
 app.post('/api/messages/:clientId/read', anyAuth, async (req, res) => {
   const { clientId } = req.params;
@@ -697,8 +716,8 @@ app.post('/api/sales', adminAuth, async (req, res) => {
     sale_id: sale.id,
     inventory_id: i.inventory_id || null,
     name: i.name, ref_code: i.ref_code || null,
-    sell_price: i.sell_price ?? null, qty: i.qty || 1,
-    image: i.image || null
+    sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
+    qty: i.qty || 1, image: i.image || null
   }));
   const { error: itemErr } = await supabase.from('sale_items').insert(rows);
   if (itemErr) return res.status(500).json({ error: itemErr.message });

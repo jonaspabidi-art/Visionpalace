@@ -850,6 +850,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
     </div>
 
+    <div class="view" id="historik-view">
+      <div id="historik-summary" style="display:flex;gap:10px;padding:16px 16px 0;flex-shrink:0"></div>
+      <div id="historik-list" style="flex:1;overflow-y:auto;padding:12px 16px 80px"></div>
+    </div>
+
   </div>
 
   <!-- Tab bar -->
@@ -878,6 +883,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </span>
       <span class="tab-label">Faktura</span>
+    </button>
+    <button class="tab-btn" id="tab-historik" onclick="switchTab('historik')">
+      <span class="tab-icon">
+        <svg viewBox="0 0 24 24" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="tab-label">Historik</span>
     </button>
   </div>
 
@@ -1094,12 +1105,13 @@ function switchTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById(tab + '-view').classList.add('active');
-  const titles = { broadcast: 'Sändningar', clients: 'Klienter', inventory: 'Lager', invoice: 'Faktura' };
+  const titles = { broadcast: 'Sändningar', clients: 'Klienter', inventory: 'Lager', invoice: 'Faktura', historik: 'Historik' };
   document.getElementById('header-title').textContent = titles[tab] || tab;
   document.getElementById('search-toggle-btn').style.display = tab === 'broadcast' ? '' : 'none';
   if (tab !== 'broadcast' && searchVisible) toggleSearch();
   if (tab === 'inventory') loadInventory();
   if (tab === 'invoice') populateInvClientPicker();
+  if (tab === 'historik') loadSalesHistory();
 }
 
 // ── Search toggle ──
@@ -2327,7 +2339,8 @@ function fillInvClient(clientId) {
   const c = clients.find(x => x.id === clientId);
   if (!c) return;
   document.getElementById('inv-cust-name').value = c.full_name || c.admin_label || c.display_name;
-  if (c.address) document.getElementById('inv-cust-addr').value = c.address;
+  const addrParts = [c.address, c.phone].filter(Boolean);
+  if (addrParts.length) document.getElementById('inv-cust-addr').value = addrParts.join('\n');
 }
 
 function setInvCustType(type) {
@@ -2712,8 +2725,8 @@ async function createSale() {
     const items = saleCartItems.map(i => ({
       inventory_id: i.id,
       name: i.name, ref_code: i.ref_code || null,
-      sell_price: i.sell_price ?? null, qty: i.qty,
-      image: i.image || null
+      sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
+      qty: i.qty, image: i.image || null
     }));
     if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });
     const r = await api('/api/sales', { method: 'POST', body: JSON.stringify({ client_id: clientId, items }) });
@@ -2768,6 +2781,98 @@ function fillInvoiceFromSale(clientId, items) {
     renderInvLines();
     generateInvoice();
   }, 50);
+}
+
+// ── Sales history / profit ──
+async function loadSalesHistory() {
+  const summaryEl = document.getElementById('historik-summary');
+  const listEl = document.getElementById('historik-list');
+  listEl.innerHTML = '<div style="color:var(--text3);font-size:14px;text-align:center;padding:40px 0">Laddar…</div>';
+  summaryEl.innerHTML = '';
+  try {
+    const r = await api('/api/sales');
+    const d = await r.json();
+    const sales = d.sales || [];
+    if (!sales.length) {
+      listEl.innerHTML = '<div style="color:var(--text3);font-size:14px;text-align:center;padding:40px 0">Inga försäljningar ännu</div>';
+      return;
+    }
+
+    // Group by month (YYYY-MM)
+    const months = {};
+    let totalRevAll = 0, totalProfAll = 0;
+    for (const sale of sales) {
+      const key = sale.created_at.substring(0, 7);
+      if (!months[key]) months[key] = { sales: [], revenue: 0, profit: 0 };
+      months[key].sales.push(sale);
+      for (const item of (sale.sale_items || [])) {
+        const rev = (parseFloat(item.sell_price) || 0) * (item.qty || 1);
+        const cost = (parseFloat(item.buy_price) || 0) * (item.qty || 1);
+        months[key].revenue += rev;
+        months[key].profit += item.buy_price != null ? (rev - cost) : 0;
+        totalRevAll += rev;
+        totalProfAll += item.buy_price != null ? (rev - cost) : 0;
+      }
+    }
+
+    // All-time summary cards
+    summaryEl.innerHTML = `
+      <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Total omsättning</div>
+        <div style="font-size:20px;font-weight:700;color:var(--text)">€ ${totalRevAll.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+        <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Total vinst</div>
+        <div style="font-size:20px;font-weight:700;color:${totalProfAll >= 0 ? '#66dd99' : '#ff7a7a'}">€ ${totalProfAll.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>`;
+
+    // Per-month sections
+    listEl.innerHTML = Object.keys(months).sort((a,b) => b.localeCompare(a)).map(key => {
+      const { sales: ms, revenue, profit } = months[key];
+      const [yr, mo] = key.split('-');
+      const monthName = new Date(yr, mo - 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
+      const saleRows = ms.map(sale => {
+        const clientName = sale.clients?.admin_label || sale.clients?.display_name || '—';
+        const saleRev = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
+        const saleProfit = (sale.sale_items || []).reduce((s, i) => {
+          if (i.buy_price == null) return s;
+          return s + ((parseFloat(i.sell_price) || 0) - (parseFloat(i.buy_price) || 0)) * (i.qty || 1);
+        }, 0);
+        const hasCost = (sale.sale_items || []).some(i => i.buy_price != null);
+        const date = new Date(sale.created_at).toLocaleDateString('sv-SE', { day: '2-digit', month: 'short' });
+        const itemLines = (sale.sale_items || []).map(item => {
+          const rev = (parseFloat(item.sell_price) || 0) * (item.qty || 1);
+          const cost = item.buy_price != null ? (parseFloat(item.buy_price) || 0) * (item.qty || 1) : null;
+          const margin = cost != null ? (rev - cost) : null;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(item.name)}${item.qty > 1 ? ` ×${item.qty}` : ''}</span>
+            <span style="color:var(--text);margin-left:8px;flex-shrink:0">€ ${rev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+            ${margin != null ? `<span style="color:${margin>=0?'#66dd99':'#ff7a7a'};margin-left:8px;font-size:12px;flex-shrink:0">+€ ${margin.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : ''}
+          </div>`;
+        }).join('');
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;margin-left:12px">
+              <div style="font-size:14px;font-weight:700;color:var(--text)">€ ${saleRev.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+              ${hasCost ? `<div style="font-size:12px;color:${saleProfit>=0?'#66dd99':'#ff7a7a'}">vinst € ${saleProfit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>` : ''}
+            </div>
+          </div>
+          ${itemLines}
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:24px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+          <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:capitalize">${monthName}</div>
+          <div style="font-size:12px;color:var(--text3)">€ ${revenue.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} · vinst € ${profit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+        </div>
+        ${saleRows}
+      </div>`;
+    }).join('');
+  } catch { listEl.innerHTML = '<div style="color:#ff7a7a;text-align:center;padding:40px 0">Fel vid laddning</div>'; }
 }
 
 // ── Client purchase history ──
