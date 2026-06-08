@@ -1521,8 +1521,11 @@ async function sendBroadcast(optimistic) {
     const media = optimistic._items.filter(i => !i.removed && i.url)
       .map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
 
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 20000);
     const r = await api('/api/broadcasts', {
       method: 'POST',
+      signal: abort.signal,
       body: JSON.stringify({
         text: optimistic.text,
         price: optimistic.price,
@@ -1531,21 +1534,29 @@ async function sendBroadcast(optimistic) {
         client_temp_id: tempId
       })
     });
+    clearTimeout(timeout);
     if (!r.ok) {
       const errBody = await r.json().catch(() => ({}));
       throw new Error(`server ${r.status}: ${errBody.error || 'unknown'}`);
     }
     const d = await r.json();
 
-    if (d.broadcast) {
-      replaceOptimisticBroadcast(tempId, d.broadcast);
-    } else {
-      // Broadcast was saved but server couldn't return full data — reload to show it
-      discardOptimisticBroadcast(tempId);
+    // Remove pending bubble and append the real broadcast cleanly
+    discardOptimisticBroadcast(tempId);
+    if (d.broadcast && !broadcasts.find(b => b.id === d.broadcast.id)) {
+      broadcasts.push(d.broadcast);
+      appendBroadcast(d.broadcast);
+    } else if (!d.broadcast) {
       loadBroadcasts();
     }
   } catch (e) {
-    markBroadcastFailed(tempId, e.message);
+    // On network error, reload — the POST may have succeeded on the server
+    if (e.name === 'AbortError') {
+      discardOptimisticBroadcast(tempId);
+      loadBroadcasts();
+    } else {
+      markBroadcastFailed(tempId, e.message);
+    }
   } finally {
     inFlightBcTempIds.delete(tempId);
   }
@@ -1557,21 +1568,6 @@ function discardOptimisticBroadcast(tempId) {
   if (row) row.remove();
 }
 
-function replaceOptimisticBroadcast(tempId, real) {
-  const idx = broadcasts.findIndex(b => b.id === tempId);
-  if (idx >= 0) broadcasts[idx] = real;
-  const row = document.querySelector(`.bc-msg-row[data-id="${tempId}"]`);
-  if (row) {
-    const div = document.createElement('div');
-    div.innerHTML = bcBubbleHTML(real);
-    const el = div.firstElementChild;
-    if (el) row.replaceWith(el);
-    else loadBroadcasts();
-  } else {
-    // Row not in DOM (race with renderFeed) — reload to show correct state
-    loadBroadcasts();
-  }
-}
 
 function markBroadcastFailed(tempId, reason) {
   const b = broadcasts.find(x => x.id === tempId);
