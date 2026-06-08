@@ -276,7 +276,7 @@ app.post('/api/auth/client', async (req, res) => {
   if (client.is_inactive) return res.status(403).json({ error: 'Your account has been deactivated.' });
 
   await supabase.from('clients').update({ last_seen_at: new Date().toISOString() }).eq('id', client.id);
-  res.json({ session_token: client.session_token, client_id: client.id, display_name: client.display_name });
+  res.json({ session_token: client.session_token, client_id: client.id, display_name: client.display_name, full_name: client.full_name, address: client.address, phone: client.phone });
 });
 
 // Upload media
@@ -535,12 +535,15 @@ app.post('/api/messages/me/send', clientAuth, async (req, res) => {
 
 // Client updates own profile
 app.patch('/api/me/profile', clientAuth, async (req, res) => {
-  const { display_name, new_password, current_password } = req.body;
+  const { display_name, full_name, address, phone, new_password, current_password } = req.body;
   if (!current_password) return res.status(400).json({ error: 'Current password is required.' });
   if (!verifyPassword(current_password, req.client.password_hash))
     return res.status(401).json({ error: 'Current password is incorrect.' });
   const updates = {};
   if (display_name && display_name.trim()) updates.display_name = display_name.trim();
+  if (full_name !== undefined) updates.full_name = full_name.trim() || null;
+  if (address !== undefined) updates.address = address.trim() || null;
+  if (phone !== undefined) updates.phone = phone.trim() || null;
   if (new_password) {
     if (new_password.length < 4) return res.status(400).json({ error: 'New password must be at least 4 characters.' });
     updates.password_hash = hashPassword(new_password);
@@ -548,7 +551,7 @@ app.patch('/api/me/profile', clientAuth, async (req, res) => {
   if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update.' });
   const { data, error } = await supabase.from('clients').update(updates).eq('id', req.client.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true, display_name: data.display_name });
+  res.json({ ok: true, display_name: data.display_name, full_name: data.full_name, address: data.address, phone: data.phone });
 });
 
 // Mark messages as read
