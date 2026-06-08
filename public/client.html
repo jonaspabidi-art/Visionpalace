@@ -190,6 +190,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .bc-media-strip {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; gap: 3px;
+  touch-action: pan-x pinch-zoom;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .bc-media-strip::-webkit-scrollbar { display: none; }
 .bc-media-strip img {
