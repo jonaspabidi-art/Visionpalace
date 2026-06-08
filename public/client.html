@@ -187,12 +187,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   width: 100%; display: block; max-height: 340px; object-fit: cover; cursor: pointer;
 }
 .bc-media video { width: 100%; display: block; max-height: 280px; background: #000; }
+.bc-wrap { max-width: calc(100% - 46px); display: flex; flex-direction: column; }
+.bc-wrap .bc-bubble { max-width: 100%; border-top: none; border-radius: 0 0 18px 4px; }
 .bc-media-strip {
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; gap: 3px;
   touch-action: pan-x pinch-zoom;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  border-radius: 18px 18px 0 0;
+  border: 1px solid var(--border); border-bottom: none;
 }
 .bc-media-strip::-webkit-scrollbar { display: none; }
 .bc-media-strip img {
@@ -1035,39 +1039,51 @@ function renderFeed() {
 function bcBubbleHTML(b) {
   const time = new Date(b.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   const media = b.broadcast_media || [];
-  const mediaHTML = media.length ? (() => {
-    if (media.length === 1) {
-      const m = media[0];
-      return `<div class="bc-media">${m.storage_url
-        ? (m.type==='video'
-            ? `<video src="${m.storage_url}" controls playsinline preload="metadata"></video>`
-            : `<img src="${m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-        : `<div class="media-expired">Media no longer available</div>`
-      }</div>`;
-    }
-    return `<div class="bc-media-strip">${media.map(m=>
+  const bubbleInner = `
+    ${b.is_pinned ? '<div class="bc-pin-bar">Pinned</div>' : ''}
+    <div class="bc-body">
+      ${b.price ? `<div class="bc-price">${esc(b.price)}</div>` : ''}
+      ${b.text  ? `<div class="bc-text">${esc(b.text)}</div>` : ''}
+      <div class="bc-time">${time}</div>
+    </div>
+    <button class="bc-msg-btn" onclick="replyToBroadcast('${b.id}')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Send message
+    </button>`;
+
+  const mark = `<div class="bc-mark"><img src="/logo.png" alt="VP"></div>`;
+
+  if (media.length > 1) {
+    // Strip sits OUTSIDE bc-bubble so overflow:hidden doesn't block scroll
+    const stripItems = media.map(m =>
       m.storage_url
         ? (m.type==='video'
             ? `<video src="${m.storage_url}" controls playsinline preload="metadata"></video>`
             : `<img src="${m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
-        : `<div style="flex-shrink:0;width:82%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--surface2);font-size:12px;color:var(--text3)">No longer available</div>`
-    ).join('')}</div>`;
-  })() : '';
+        : `<div style="flex-shrink:0;width:82%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--surface2);font-size:12px;color:var(--text3)">Unavailable</div>`
+    ).join('');
+    return `<div class="bc-row">
+      ${mark}
+      <div class="bc-wrap">
+        <div class="bc-media-strip">${stripItems}</div>
+        <div class="bc-bubble${b.is_pinned?' pinned':''}">${bubbleInner}</div>
+      </div>
+    </div>`;
+  }
+
+  const singleMedia = media.length === 1
+    ? `<div class="bc-media">${media[0].storage_url
+        ? (media[0].type==='video'
+            ? `<video src="${media[0].storage_url}" controls playsinline preload="metadata"></video>`
+            : `<img src="${media[0].storage_url}" data-full="${media[0].storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
+        : `<div class="media-expired">Media no longer available</div>`
+      }</div>` : '';
 
   return `<div class="bc-row">
-    <div class="bc-mark"><img src="/logo.png" alt="VP"></div>
+    ${mark}
     <div class="bc-bubble${b.is_pinned?' pinned':''}">
-      ${b.is_pinned ? '<div class="bc-pin-bar">Pinned</div>' : ''}
-      ${mediaHTML}
-      <div class="bc-body">
-        ${b.price ? `<div class="bc-price">${esc(b.price)}</div>` : ''}
-        ${b.text  ? `<div class="bc-text">${esc(b.text)}</div>` : ''}
-        <div class="bc-time">${time}</div>
-      </div>
-      <button class="bc-msg-btn" onclick="replyToBroadcast('${b.id}')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Send message
-      </button>
+      ${singleMedia}
+      ${bubbleInner}
     </div>
   </div>`;
 }
