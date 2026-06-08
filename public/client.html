@@ -1091,7 +1091,8 @@ function bcBubbleHTML(b) {
 
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
-  requestAnimationFrame(()=>s.scrollTop=s.scrollHeight);
+  s.scrollTop = 999999;
+  setTimeout(() => { s.scrollTop = 999999; }, 600);
 }
 
 let quotedBroadcast = null;
