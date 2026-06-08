@@ -965,7 +965,7 @@ function initApp() {
 function connectSocket() {
   socket = io({ auth: { session_token: session.session_token }, transports: ['websocket', 'polling'] });
   socket.on('connect', () => { loadBroadcasts(); loadMessages(); setupPush(); });
-  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); const s=document.getElementById('feed-scroll'); requestAnimationFrame(()=>s.scrollTop=0); });
+  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); scrollFeedBottom(); });
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x=>x.id===d.id);
     if (b) b.is_pinned = d.is_pinned;
@@ -1006,11 +1006,9 @@ async function loadBroadcasts() {
     const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
     const prevTop = s.scrollTop;
     const prevH = s.scrollHeight;
-    const isFirstLoad = broadcasts.length === 0;
     broadcasts = newList;
     renderFeed();
-    if (isFirstLoad) requestAnimationFrame(() => { s.scrollTop = 0; });
-    else if (atBottom) requestAnimationFrame(() => { s.scrollTop = 0; });
+    if (atBottom) scrollFeedBottom();
     else requestAnimationFrame(() => { s.scrollTop = prevTop + (s.scrollHeight - prevH); });
   } catch(e) {}
 }
