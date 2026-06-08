@@ -1317,6 +1317,12 @@ function connectSocket() {
   socket.on('client:read_receipt', d => {
     if (currentClientId === d.client_id) markMsgsReadUI();
   });
+  socket.on('inventory:sold', d => {
+    (d.ids || []).forEach(id => delete invItemsMap[id]);
+    renderInventory();
+    renderSaleInvList();
+    updateSaleCartBadge();
+  });
 }
 
 // ── API ──

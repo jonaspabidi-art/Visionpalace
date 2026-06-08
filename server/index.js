@@ -721,6 +721,14 @@ app.post('/api/sales', adminAuth, async (req, res) => {
   }));
   const { error: itemErr } = await supabase.from('sale_items').insert(rows);
   if (itemErr) return res.status(500).json({ error: itemErr.message });
+
+  // Remove sold items from inventory
+  const inventoryIds = items.map(i => i.inventory_id).filter(Boolean);
+  if (inventoryIds.length) {
+    await supabase.from('inventory').delete().in('id', inventoryIds);
+    io.to('admins').emit('inventory:sold', { ids: inventoryIds });
+  }
+
   const { data: full } = await supabase.from('sales').select('*, sale_items(*)').eq('id', sale.id).single();
   res.json({ sale: full });
 });
