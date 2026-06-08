@@ -2783,6 +2783,96 @@ function fillInvoiceFromSale(clientId, items) {
   }, 50);
 }
 
+// ── Sale status helpers ──
+function saleStatusBadge(status) {
+  const map = {
+    unpaid:    { label: 'Obetald',   color: '#ff9944', bg: 'rgba(255,153,68,.13)' },
+    paid:      { label: 'Betald',    color: '#66aaff', bg: 'rgba(100,170,255,.13)' },
+    shipped:   { label: 'Skickad',   color: '#bb88ff', bg: 'rgba(187,136,255,.13)' },
+    delivered: { label: 'Levererad', color: '#66dd99', bg: 'rgba(100,220,150,.13)' },
+    cancelled: { label: 'Avbruten',  color: '#ff7a7a', bg: 'rgba(255,100,100,.13)' },
+  };
+  const s = map[status] || map.unpaid;
+  return `<span style="background:${s.bg};color:${s.color};border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">${s.label}</span>`;
+}
+
+function trackingUrl(carrier, number) {
+  if (!number) return null;
+  const c = (carrier || '').toLowerCase();
+  if (c.includes('postnord')) return `https://www.postnord.se/vara-verktyg/spara-brev-paket-och-pall?shipmentId=${number}`;
+  if (c.includes('dhl')) return `https://www.dhl.com/se-en/home/tracking.html?tracking-id=${number}`;
+  if (c.includes('ups')) return `https://www.ups.com/track?tracknum=${number}`;
+  if (c.includes('bring')) return `https://tracking.bring.com/tracking/${number}`;
+  if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${number}`;
+  return null;
+}
+
+function statusActionsHTML(sale, sid) {
+  const s = sale.status || 'unpaid';
+  const btn = (label, onclick, color) =>
+    `<button onclick="${onclick}" style="background:${color.bg};border:1px solid ${color.border};color:${color.text};border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit">${label}</button>`;
+  if (s === 'unpaid') return `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    ${btn('✓ Markera betald', `doStatusUpdate('${sale.id}','${sid}','paid')`, {bg:'rgba(100,170,255,.13)',border:'rgba(100,170,255,.3)',text:'#66aaff'})}
+    ${btn('Avbryt köp', `doStatusUpdate('${sale.id}','${sid}','cancelled')`, {bg:'rgba(255,100,100,.1)',border:'rgba(255,100,100,.2)',text:'#ff7a7a'})}
+  </div>`;
+  if (s === 'paid') return `<div id="shipwrap-${sid}">
+    ${btn('Markera skickad →', `showShipForm('${sid}','${sale.id}')`, {bg:'rgba(187,136,255,.13)',border:'rgba(187,136,255,.3)',text:'#bb88ff'})}
+  </div>`;
+  if (s === 'shipped') {
+    const tUrl = trackingUrl(sale.shipping_carrier, sale.tracking_number);
+    const trackHtml = sale.tracking_number
+      ? `<div style="font-size:13px;color:var(--text2);margin-bottom:8px">${sale.shipping_carrier ? `<b>${esc(sale.shipping_carrier)}</b> · ` : ''}${tUrl ? `<a href="${tUrl}" target="_blank" style="color:#bb88ff">${esc(sale.tracking_number)}</a>` : esc(sale.tracking_number)}</div>` : '';
+    return `${trackHtml}${btn('✓ Markera levererad', `doStatusUpdate('${sale.id}','${sid}','delivered')`, {bg:'rgba(100,220,150,.12)',border:'rgba(100,220,150,.25)',text:'#66dd99'})}`;
+  }
+  if (s === 'delivered') {
+    const tUrl = trackingUrl(sale.shipping_carrier, sale.tracking_number);
+    return sale.tracking_number
+      ? `<div style="font-size:13px;color:var(--text2)">${sale.shipping_carrier ? `<b>${esc(sale.shipping_carrier)}</b> · ` : ''}${tUrl ? `<a href="${tUrl}" target="_blank" style="color:#bb88ff">${esc(sale.tracking_number)}</a>` : esc(sale.tracking_number)}</div>` : '';
+  }
+  return '';
+}
+
+function showShipForm(sid, saleId) {
+  const wrap = document.getElementById('shipwrap-' + sid);
+  if (!wrap) return;
+  wrap.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">
+    <input id="sc-${sid}" placeholder="Fraktbolag (PostNord, DHL…)" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;outline:none">
+    <input id="st-${sid}" placeholder="Spårningsnummer" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;outline:none">
+    <div style="display:flex;gap:8px">
+      <button onclick="submitShipForm('${sid}','${saleId}')" style="flex:1;background:rgba(187,136,255,.13);border:1px solid rgba(187,136,255,.3);color:#bb88ff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit">Skicka →</button>
+      <button onclick="cancelShipForm('${sid}','${saleId}')" style="background:var(--surface2);border:1px solid var(--border);color:var(--text3);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;font-family:inherit">Avbryt</button>
+    </div>
+  </div>`;
+}
+
+function cancelShipForm(sid, saleId) {
+  const wrap = document.getElementById('shipwrap-' + sid);
+  if (!wrap) return;
+  wrap.innerHTML = `<button onclick="showShipForm('${sid}','${saleId}')" style="background:rgba(187,136,255,.13);border:1px solid rgba(187,136,255,.3);color:#bb88ff;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit">Markera skickad →</button>`;
+}
+
+async function submitShipForm(sid, saleId) {
+  const carrier = document.getElementById('sc-' + sid)?.value.trim() || null;
+  const tracking = document.getElementById('st-' + sid)?.value.trim() || null;
+  await doStatusUpdate(saleId, sid, 'shipped', carrier, tracking);
+}
+
+async function doStatusUpdate(saleId, sid, newStatus, carrier, tracking) {
+  try {
+    const body = { status: newStatus };
+    if (carrier) body.shipping_carrier = carrier;
+    if (tracking) body.tracking_number = tracking;
+    const r = await api(`/api/sales/${saleId}/status`, { method: 'PATCH', body: JSON.stringify(body) });
+    if (!r.ok) { showToast('Kunde inte uppdatera', 'error'); return; }
+    const d = await r.json();
+    const badge = document.getElementById('sbadge-' + sid);
+    if (badge) badge.innerHTML = saleStatusBadge(d.sale.status);
+    const sa = document.getElementById('sa-' + sid);
+    if (sa) sa.innerHTML = statusActionsHTML(d.sale, sid);
+    showToast('Status uppdaterad', 'ok');
+  } catch { showToast('Anslutningsfel', 'error'); }
+}
+
 // ── Sales history / profit ──
 async function loadSalesHistory() {
   const summaryEl = document.getElementById('historik-summary');
@@ -2860,7 +2950,10 @@ async function loadSalesHistory() {
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
           <div onclick="toggleSaleDetail('${sid}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">
             <div style="flex:1;min-width:0">
-              <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</span>
+                <span id="sbadge-${sid}">${saleStatusBadge(sale.status || 'unpaid')}</span>
+              </div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''} · ${itemCount} vara${itemCount !== 1 ? 'r' : ''}</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:12px">
@@ -2871,9 +2964,12 @@ async function loadSalesHistory() {
               <span id="chev-${sid}" style="color:var(--text3);font-size:12px;transition:transform .2s">▼</span>
             </div>
           </div>
-          <div id="detail-${sid}" style="display:none;padding:0 14px 10px;border-top:1px solid var(--border)">
+          <div id="detail-${sid}" style="display:none;padding:0 14px 12px;border-top:1px solid var(--border)">
             ${itemLines}
-            <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="margin-top:10px;background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
+            <div id="sa-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+              ${statusActionsHTML(sale, sid)}
+            </div>
+            <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="margin-top:8px;background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
           </div>
         </div>`;
       }).join('');
@@ -2940,10 +3036,13 @@ async function openClientPurchases() {
         </div>`).join('');
       return `<div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 4px;border-top:1px solid var(--border)">
-          <span style="font-size:11px;font-weight:600;color:var(--text3)">
-            ${date}${sale.invoice_number ? ` · #${esc(sale.invoice_number)}` : ''}
-            ${(sale.sale_items||[]).length > 1 ? ` · € ${saleTotal.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}
-          </span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:600;color:var(--text3)">
+              ${date}${sale.invoice_number ? ` · #${esc(sale.invoice_number)}` : ''}
+              ${(sale.sale_items||[]).length > 1 ? ` · € ${saleTotal.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}` : ''}
+            </span>
+            ${saleStatusBadge(sale.status || 'unpaid')}
+          </div>
           <button onclick="deleteSale('${sale.id}', openClientPurchases)" style="background:none;border:none;color:#ff7a7a;font-size:14px;cursor:pointer;padding:0 0 0 8px;line-height:1" title="Ta bort">✕</button>
         </div>
         ${itemRows}

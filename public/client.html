@@ -962,6 +962,7 @@ function connectSocket() {
     if (!chatOpen) { chatUnread++; updateUnread(); }
     else markRead();
   });
+  socket.on('sale:status_updated', () => { loadPurchases(); });
   socket.on('admin:typing', () => {
     const row = document.getElementById('typing-row');
     row.style.opacity = '1';
@@ -1565,6 +1566,27 @@ function renderPurchases(sales) {
     </div>`;
     return;
   }
+  const statusBadge = (status) => {
+    const map = {
+      unpaid:    { label: 'Unpaid',    color: '#ff9944', bg: 'rgba(255,153,68,.13)' },
+      paid:      { label: 'Paid',      color: '#66aaff', bg: 'rgba(100,170,255,.13)' },
+      shipped:   { label: 'Shipped',   color: '#bb88ff', bg: 'rgba(187,136,255,.13)' },
+      delivered: { label: 'Delivered', color: '#66dd99', bg: 'rgba(100,220,150,.13)' },
+      cancelled: { label: 'Cancelled', color: '#ff7a7a', bg: 'rgba(255,100,100,.13)' },
+    };
+    const s = map[status] || map.unpaid;
+    return `<span style="background:${s.bg};color:${s.color};border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">${s.label}</span>`;
+  };
+  const buildTrackingUrl = (carrier, number) => {
+    if (!number) return null;
+    const c = (carrier || '').toLowerCase();
+    if (c.includes('postnord')) return `https://www.postnord.se/vara-verktyg/spara-brev-paket-och-pall?shipmentId=${number}`;
+    if (c.includes('dhl')) return `https://www.dhl.com/se-en/home/tracking.html?tracking-id=${number}`;
+    if (c.includes('ups')) return `https://www.ups.com/track?tracknum=${number}`;
+    if (c.includes('bring')) return `https://tracking.bring.com/tracking/${number}`;
+    if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${number}`;
+    return null;
+  };
   scroll.innerHTML = sales.map(sale => {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -1582,9 +1604,22 @@ function renderPurchases(sales) {
         </div>
       </div>`).join('');
     const saleData = encodeURIComponent(JSON.stringify(sale));
+    const status = sale.status || 'unpaid';
+    const tUrl = buildTrackingUrl(sale.shipping_carrier, sale.tracking_number);
+    const trackingHTML = (status === 'shipped' || status === 'delivered') && sale.tracking_number
+      ? `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);font-size:13px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bb88ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          <span style="color:var(--text3)">${esc(sale.shipping_carrier || 'Frakt')}</span>
+          ${tUrl
+            ? `<a href="${tUrl}" target="_blank" style="color:#bb88ff;font-weight:600;margin-left:auto">${esc(sale.tracking_number)} →</a>`
+            : `<span style="color:#bb88ff;font-weight:600;margin-left:auto">${esc(sale.tracking_number)}</span>`}
+        </div>` : '';
     return `<div class="sale-card">
       <div class="sale-card-header">
-        <div class="sale-card-date">${date}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="sale-card-date">${date}</div>
+          ${statusBadge(status)}
+        </div>
         <div class="sale-card-meta">
           ${sale.invoice_number ? `<div class="sale-card-inv">${esc(sale.invoice_number)}</div>` : ''}
           <button class="sale-invoice-btn" onclick="openInvoice('${saleData}')">
@@ -1594,6 +1629,7 @@ function renderPurchases(sales) {
         </div>
       </div>
       <div class="sale-items">${itemsHTML}</div>
+      ${trackingHTML}
       <div class="sale-card-footer">
         <span class="sale-total-label">Total</span>
         <span class="sale-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>

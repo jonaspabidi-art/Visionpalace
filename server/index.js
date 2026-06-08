@@ -725,6 +725,29 @@ app.post('/api/sales', adminAuth, async (req, res) => {
   res.json({ sale: full });
 });
 
+// Update sale status (admin)
+app.patch('/api/sales/:id/status', adminAuth, async (req, res) => {
+  const { status, shipping_carrier, tracking_number } = req.body;
+  const valid = ['unpaid', 'paid', 'shipped', 'delivered', 'cancelled'];
+  if (!valid.includes(status)) return res.status(400).json({ error: 'Ogiltig status' });
+  const updates = { status };
+  if (status === 'shipped') {
+    updates.shipping_carrier = shipping_carrier || null;
+    updates.tracking_number = tracking_number || null;
+    updates.shipped_at = new Date().toISOString();
+  }
+  const { data: sale, error } = await supabase.from('sales')
+    .update(updates).eq('id', req.params.id)
+    .select('*, sale_items(*)').single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (status === 'shipped') {
+    const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
+    webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`).catch(() => {});
+  }
+  io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
+  res.json({ ok: true, sale });
+});
+
 // Delete a sale (admin)
 app.delete('/api/sales/:id', adminAuth, async (req, res) => {
   const { error } = await supabase.from('sales').delete().eq('id', req.params.id);
