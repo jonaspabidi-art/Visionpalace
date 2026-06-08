@@ -24,7 +24,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 app.use(express.json({ limit: '10mb' }));
 app.use((req, res, next) => {
-  if (req.path.endsWith('.html')) {
+  if (req.path.endsWith('.html') || req.path === '/admin' || req.path === '/client' || req.path.startsWith('/join/')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   }
   next();
