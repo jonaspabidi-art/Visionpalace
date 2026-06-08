@@ -1092,7 +1092,9 @@ function bcBubbleHTML(b) {
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
   s.scrollTop = 999999;
-  setTimeout(() => { s.scrollTop = 999999; }, 600);
+  const ro = new ResizeObserver(() => { s.scrollTop = 999999; });
+  ro.observe(s);
+  setTimeout(() => ro.disconnect(), 2000);
 }
 
 let quotedBroadcast = null;
