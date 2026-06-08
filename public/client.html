@@ -965,7 +965,7 @@ function initApp() {
 function connectSocket() {
   socket = io({ auth: { session_token: session.session_token }, transports: ['websocket', 'polling'] });
   socket.on('connect', () => { loadBroadcasts(); loadMessages(); setupPush(); });
-  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); scrollFeedBottom(); });
+  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); const s=document.getElementById('feed-scroll'); requestAnimationFrame(()=>s.scrollTop=0); });
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x=>x.id===d.id);
     if (b) b.is_pinned = d.is_pinned;
@@ -1006,9 +1006,11 @@ async function loadBroadcasts() {
     const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
     const prevTop = s.scrollTop;
     const prevH = s.scrollHeight;
+    const isFirstLoad = broadcasts.length === 0;
     broadcasts = newList;
     renderFeed();
-    if (atBottom) scrollFeedBottom();
+    if (isFirstLoad) requestAnimationFrame(() => { s.scrollTop = 0; });
+    else if (atBottom) requestAnimationFrame(() => { s.scrollTop = 0; });
     else requestAnimationFrame(() => { s.scrollTop = prevTop + (s.scrollHeight - prevH); });
   } catch(e) {}
 }
@@ -1402,10 +1404,19 @@ function rmMedia(btn, url) {
 let lbImages = [], lbIndex = 0, lbScale = 1, lbInitDist = 0, lbTouchStartX = 0;
 
 function openLightbox(src) {
-  lbImages = Array.from(document.querySelectorAll('#chat-messages .bubble-img'))
-    .map(i => i.dataset.full).filter(Boolean);
-  lbIndex = lbImages.indexOf(src);
-  if (lbIndex < 0) { lbImages = [src]; lbIndex = 0; }
+  // Check if tapped image is inside a broadcast strip — collect all strip images
+  const stripImg = document.querySelector(`.bc-media-strip img[data-full="${src}"]`);
+  if (stripImg) {
+    const strip = stripImg.closest('.bc-media-strip');
+    lbImages = Array.from(strip.querySelectorAll('img[data-full]')).map(i => i.dataset.full).filter(Boolean);
+    lbIndex = lbImages.indexOf(src);
+    if (lbIndex < 0) { lbImages = [src]; lbIndex = 0; }
+  } else {
+    lbImages = Array.from(document.querySelectorAll('#chat-messages .bubble-img'))
+      .map(i => i.dataset.full).filter(Boolean);
+    lbIndex = lbImages.indexOf(src);
+    if (lbIndex < 0) { lbImages = [src]; lbIndex = 0; }
+  }
   lbScale = 1;
   showLbImage();
   document.getElementById('lightbox').classList.add('open');
