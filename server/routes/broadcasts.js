@@ -6,23 +6,32 @@ const webpush = require('web-push');
 module.exports = (io) => {
   const router = require('express').Router();
 
-  // Get broadcasts
+  // Get broadcasts (admin: own; client: their admin's)
   router.get('/broadcasts', anyAuth, async (req, res) => {
-    const { data } = await supabase
+    let query = supabase
       .from('broadcasts')
       .select('*, broadcast_media(*), broadcast_reactions(*)')
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
+
+    if (req.isAdmin) {
+      query = query.eq('admin_id', req.adminId);
+    } else if (req.client?.admin_id) {
+      query = query.eq('admin_id', req.client.admin_id);
+    }
+
+    const { data } = await query;
     res.json({ broadcasts: data || [] });
   });
 
-  // Search broadcasts
+  // Search broadcasts (admin only, own)
   router.get('/broadcasts/search', adminAuth, async (req, res) => {
     const q = req.query.q || '';
     const { data } = await supabase
       .from('broadcasts')
       .select('*, broadcast_media(*), broadcast_reactions(*)')
       .ilike('text', `%${q}%`)
+      .eq('admin_id', req.adminId)
       .order('created_at', { ascending: false });
     res.json({ broadcasts: data || [] });
   });
@@ -33,7 +42,9 @@ module.exports = (io) => {
     if (!text && (!media || media.length === 0)) return res.status(400).json({ error: 'Text eller media krävs' });
 
     const { data: broadcast, error } = await supabase.from('broadcasts').insert({
-      text, price, is_pinned: !!is_pinned, created_at: new Date().toISOString()
+      text, price, is_pinned: !!is_pinned,
+      admin_id: req.adminId,
+      created_at: new Date().toISOString()
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
 
@@ -49,18 +60,19 @@ module.exports = (io) => {
       broadcastMedia = insertedMedia || [];
     }
 
-    // Build full object in memory — avoids a third round-trip to Supabase
     const full = { ...broadcast, broadcast_media: broadcastMedia, broadcast_reactions: [] };
 
-    io.emit('admin:new_broadcast', { broadcast: full, client_temp_id: client_temp_id || null });
+    // Notify this admin's tab(s) and this admin's clients
+    io.to(`admin-${req.adminId}`).emit('admin:new_broadcast', { broadcast: full, client_temp_id: client_temp_id || null });
+    io.to(`admin-clients-${req.adminId}`).emit('admin:new_broadcast', { broadcast: full, client_temp_id: null });
+
     res.json({ broadcast: full, client_temp_id: client_temp_id || null });
 
-    // Push notifications fire in background — never block the response
+    // Push notifications only to this admin's clients
     const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
-    // Query DB directly so push works even after server restart (in-memory map may be stale)
-    supabase.from('clients').select('id, onesignal_player_id').eq('is_inactive', false)
-      .then(({ data: allClients }) => {
-        for (const c of allClients || []) {
+    supabase.from('clients').select('id, onesignal_player_id').eq('admin_id', req.adminId).eq('is_inactive', false)
+      .then(({ data: adminClients }) => {
+        for (const c of adminClients || []) {
           if (c.onesignal_player_id?.startsWith('{')) {
             try {
               const sub = JSON.parse(c.onesignal_player_id);
@@ -91,19 +103,21 @@ module.exports = (io) => {
 
     await supabase.from('broadcast_media').delete().eq('broadcast_id', id);
     await supabase.from('broadcast_reactions').delete().eq('broadcast_id', id);
-    await supabase.from('broadcasts').delete().eq('id', id);
+    await supabase.from('broadcasts').delete().eq('id', id).eq('admin_id', req.adminId);
 
-    io.emit('broadcast:deleted', { id });
+    io.to(`admin-${req.adminId}`).emit('broadcast:deleted', { id });
+    io.to(`admin-clients-${req.adminId}`).emit('broadcast:deleted', { id });
     res.json({ ok: true });
   });
 
   // Toggle pin
   router.patch('/broadcasts/:id/pin', adminAuth, async (req, res) => {
     const { id } = req.params;
-    const { data: current } = await supabase.from('broadcasts').select('is_pinned').eq('id', id).single();
+    const { data: current } = await supabase.from('broadcasts').select('is_pinned').eq('id', id).eq('admin_id', req.adminId).single();
     if (!current) return res.status(404).json({ error: 'Hittades inte' });
     const { data } = await supabase.from('broadcasts').update({ is_pinned: !current.is_pinned }).eq('id', id).select().single();
-    io.emit('broadcast:pin_updated', { id, is_pinned: data.is_pinned });
+    io.to(`admin-${req.adminId}`).emit('broadcast:pin_updated', { id, is_pinned: data.is_pinned });
+    io.to(`admin-clients-${req.adminId}`).emit('broadcast:pin_updated', { id, is_pinned: data.is_pinned });
     res.json({ broadcast: data });
   });
 
@@ -120,7 +134,9 @@ module.exports = (io) => {
       .select('*, clients(display_name, admin_label)')
       .eq('broadcast_id', broadcastId);
 
-    io.to('admins').emit('broadcast:new_reaction', { broadcast_id: broadcastId, reactions });
+    const { data: bc } = await supabase.from('broadcasts').select('admin_id').eq('id', broadcastId).single();
+    const adminRoom = bc?.admin_id ? `admin-${bc.admin_id}` : 'admins';
+    io.to(adminRoom).emit('broadcast:new_reaction', { broadcast_id: broadcastId, reactions });
     res.json({ reactions });
   });
 

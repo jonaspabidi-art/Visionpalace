@@ -49,7 +49,7 @@ module.exports = (io) => {
     const full = await supabase.from('messages').select('*, message_media(*)').eq('id', msg.id).single();
 
     io.to(`client:${clientId}`).emit('admin:new_message', { message: full.data });
-    io.to('admins').emit('message:sent', { message: full.data });
+    io.to(`admin-${req.adminId}`).emit('message:sent', { message: full.data });
 
     webPushClient(clientId, 'Vision Palace', 'Nytt meddelande').catch(() => {});
     if (client.onesignal_player_id) {
@@ -73,7 +73,8 @@ module.exports = (io) => {
     }
 
     const full = await supabase.from('messages').select('*, message_media(*)').eq('id', msg.id).single();
-    io.to('admins').emit('client:new_message', { message: full.data, client: req.client });
+    const adminRoom = req.client.admin_id ? `admin-${req.client.admin_id}` : 'admins';
+    io.to(adminRoom).emit('client:new_message', { message: full.data, client: req.client });
 
     if (state.adminPushSub && isValidPushSub(state.adminPushSub)) {
       webpush.sendNotification(state.adminPushSub, JSON.stringify({
@@ -131,20 +132,26 @@ module.exports = (io) => {
       .eq('read', false);
 
     if (req.isAdmin) {
-      io.to('admins').emit('messages:read', { client_id: clientId });
+      io.to(`admin-${req.adminId}`).emit('messages:read', { client_id: clientId });
     } else {
-      io.to('admins').emit('client:read_receipt', { client_id: clientId });
+      const adminRoom = req.client.admin_id ? `admin-${req.client.admin_id}` : 'admins';
+      io.to(adminRoom).emit('client:read_receipt', { client_id: clientId });
     }
 
     res.json({ ok: true });
   });
 
-  // Admin: unread counts per client
+  // Admin: unread counts per client (own clients only)
   router.get('/messages/unread', adminAuth, async (req, res) => {
+    const { data: adminClients } = await supabase.from('clients').select('id').eq('admin_id', req.adminId);
+    const clientIds = (adminClients || []).map(c => c.id);
+    if (!clientIds.length) return res.json({ unread: {} });
+
     const { data } = await supabase.from('messages')
       .select('client_id')
       .eq('sender', 'client')
-      .eq('read', false);
+      .eq('read', false)
+      .in('client_id', clientIds);
 
     const counts = {};
     (data || []).forEach(m => { counts[m.client_id] = (counts[m.client_id] || 0) + 1; });

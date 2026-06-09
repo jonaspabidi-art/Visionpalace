@@ -6,20 +6,24 @@ module.exports = (io) => {
   const router = require('express').Router();
 
   // Admin login
-  router.post('/auth/admin', (req, res) => {
-    const { password } = req.body;
-    if (password !== process.env.ADMIN_PASSWORD) return res.status(401).json({ error: 'Fel lösenord' });
-    res.json({ token: signAdminJWT() });
+  router.post('/auth/admin', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(401).json({ error: 'Användarnamn och lösenord krävs' });
+    const { data: admin } = await supabase.from('admins').select('*').eq('username', username.trim().toLowerCase()).single();
+    if (!admin || !verifyPassword(password, admin.password_hash)) {
+      return res.status(401).json({ error: 'Fel användarnamn eller lösenord' });
+    }
+    res.json({ token: signAdminJWT(admin.id) });
   });
 
-  // Create invite links
+  // Create invite links (scoped to requesting admin)
   router.post('/invite', adminAuth, async (req, res) => {
     const count = Math.min(parseInt(req.body.count) || 1, 10);
     const tokens = [];
     for (let i = 0; i < count; i++) {
       const token = uuidv4();
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      await supabase.from('invites').insert({ token, expires_at: expires });
+      await supabase.from('invites').insert({ token, expires_at: expires, admin_id: req.adminId });
       tokens.push(token);
     }
     res.json({ tokens });
@@ -46,6 +50,7 @@ module.exports = (io) => {
       invite_token: token,
       session_token: sessionToken,
       password_hash: hashPassword(password),
+      admin_id: invite.admin_id || null,
       joined_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString()
     }).select().single();
@@ -53,7 +58,8 @@ module.exports = (io) => {
 
     await supabase.from('invites').update({ used: true }).eq('token', token);
 
-    io.to('admins').emit('client:joined', { client });
+    const adminRoom = invite.admin_id ? `admin-${invite.admin_id}` : 'admins';
+    io.to(adminRoom).emit('client:joined', { client });
 
     res.json({ ok: true });
   });

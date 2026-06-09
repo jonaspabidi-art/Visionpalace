@@ -16,15 +16,15 @@ function verifyPassword(password, stored) {
   return verify === hash;
 }
 
-function signAdminJWT() {
-  return jwt.sign({ role: 'admin' }, process.env.JWT_SECRET);
+function signAdminJWT(adminId) {
+  return jwt.sign({ role: 'admin', adminId }, process.env.JWT_SECRET);
 }
 
 function verifyAdminJWT(token) {
   try {
     const p = jwt.verify(token, process.env.JWT_SECRET);
-    return p.role === 'admin';
-  } catch { return false; }
+    return p.role === 'admin' ? p : null;
+  } catch { return null; }
 }
 
 async function getClientBySession(token) {
@@ -36,8 +36,10 @@ async function getClientBySession(token) {
 function adminAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token || !verifyAdminJWT(token)) return res.status(401).json({ error: 'Unauthorized' });
+  const payload = token ? verifyAdminJWT(token) : null;
+  if (!payload) return res.status(401).json({ error: 'Unauthorized' });
   req.isAdmin = true;
+  req.adminId = payload.adminId;
   next();
 }
 
@@ -53,7 +55,8 @@ async function clientAuth(req, res, next) {
 async function anyAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const jwt_token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (jwt_token && verifyAdminJWT(jwt_token)) { req.isAdmin = true; return next(); }
+  const payload = jwt_token ? verifyAdminJWT(jwt_token) : null;
+  if (payload) { req.isAdmin = true; req.adminId = payload.adminId; return next(); }
   const session = req.headers['x-session-token'];
   const client = await getClientBySession(session);
   if (client) { req.client = client; return next(); }

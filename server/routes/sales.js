@@ -17,13 +17,14 @@ module.exports = (io) => {
     return `${prefix}${String(max + 1).padStart(3, '0')}`;
   }
 
-  // Create a sale (admin records items sold to a client)
+  // Create a sale
   router.post('/sales', adminAuth, async (req, res) => {
     const { client_id, items, notes } = req.body;
     if (!client_id || !items?.length) return res.status(400).json({ error: 'client_id och items krävs' });
     const invoice_number = await generateInvoiceNumber();
     const { data: sale, error } = await supabase.from('sales').insert({
       client_id, invoice_number, notes: notes || null,
+      admin_id: req.adminId,
       created_at: new Date().toISOString()
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
@@ -40,14 +41,14 @@ module.exports = (io) => {
     const { error: itemErr } = await supabase.from('sale_items').insert(rows);
     if (itemErr) return res.status(500).json({ error: itemErr.message });
 
-    // Remove sold glasses from inventory
+    // Remove sold glasses from inventory (shared across all admins)
     const inventoryIds = items.filter(i => i.inventory_id).map(i => i.inventory_id);
     if (inventoryIds.length) {
       await supabase.from('inventory').delete().in('id', inventoryIds);
-      io.to('admins').emit('inventory:sold', { ids: inventoryIds });
+      io.emit('inventory:sold', { ids: inventoryIds });
     }
 
-    // Decrement lens variant stock
+    // Decrement lens variant stock (shared across all admins)
     const lensItems = items.filter(i => i.lens_variant_id);
     for (const item of lensItems) {
       const { data: variant } = await supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).single();
@@ -74,9 +75,9 @@ module.exports = (io) => {
       updates.shipped_at = new Date().toISOString();
     }
     const { data: sale, error } = await supabase.from('sales')
-      .update(updates).eq('id', req.params.id)
+      .update(updates).eq('id', req.params.id).eq('admin_id', req.adminId)
       .select('*, sale_items(*)').single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error || !sale) return res.status(error ? 500 : 404).json({ error: error?.message || 'Hittades inte' });
     if (status === 'shipped') {
       const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
       webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`).catch(() => {});
@@ -87,29 +88,31 @@ module.exports = (io) => {
 
   // Delete a sale (admin)
   router.delete('/sales/:id', adminAuth, async (req, res) => {
-    const { error } = await supabase.from('sales').delete().eq('id', req.params.id);
+    const { error } = await supabase.from('sales').delete().eq('id', req.params.id).eq('admin_id', req.adminId);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true });
   });
 
-  // List all sales (admin)
+  // List all sales for this admin
   router.get('/sales', adminAuth, async (req, res) => {
     const { data } = await supabase.from('sales')
       .select('*, sale_items(*), clients(display_name, admin_label)')
+      .eq('admin_id', req.adminId)
       .order('created_at', { ascending: false });
     res.json({ sales: data || [] });
   });
 
-  // Sales for one client (admin)
+  // Sales for one client (admin, ownership checked)
   router.get('/sales/client/:clientId', adminAuth, async (req, res) => {
     const { data } = await supabase.from('sales')
       .select('*, sale_items(*)')
       .eq('client_id', req.params.clientId)
+      .eq('admin_id', req.adminId)
       .order('created_at', { ascending: false });
     res.json({ sales: data || [] });
   });
 
-  // Client: own purchase history (grouped by sale)
+  // Client: own purchase history
   router.get('/purchases/me', clientAuth, async (req, res) => {
     const { data } = await supabase.from('sales')
       .select('*, sale_items(*)')
