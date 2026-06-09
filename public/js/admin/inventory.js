@@ -81,14 +81,16 @@ function compressInvImage(file, cb) {
   reader.onload = e => {
     const image = new Image();
     image.onload = () => {
-      const MAX = 400;
-      const scale = Math.min(1, MAX / Math.max(image.width, image.height));
-      const w = Math.round(image.width * scale);
-      const h = Math.round(image.height * scale);
+      const MAX = 1200;
+      const size = Math.min(image.width, image.height);
+      const scale = Math.min(1, MAX / size);
+      const out = Math.round(size * scale);
+      const sx = Math.round((image.width - size) / 2);
+      const sy = Math.round((image.height - size) / 2);
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(image, 0, 0, w, h);
-      cb(canvas.toDataURL('image/jpeg', 0.65));
+      canvas.width = out; canvas.height = out;
+      canvas.getContext('2d').drawImage(image, sx, sy, size, size, 0, 0, out, out);
+      cb(canvas.toDataURL('image/jpeg', 0.85));
     };
     image.src = e.target.result;
   };
@@ -154,6 +156,7 @@ async function generateCatalogPDF() {
     const PW = 210, PH = 297, M = 14, COLS = 2, CGAP = 6, RGAP = 8;
     const CW = (PW - M * 2 - CGAP) / COLS;
     const IH = 76, TH = 24, CH = IH + TH;
+    const IMG_SZ = IH, IMG_X_OFF = (CW - IH) / 2;
 
     const drawHeader = (first) => {
       if (first) {
@@ -178,15 +181,12 @@ async function generateCatalogPDF() {
     for (const item of items) {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
+      doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
       if (item.image) {
         try {
           const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-          doc.addImage(item.image, fmt, x, y, CW, IH, undefined, 'MEDIUM');
-        } catch {
-          doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
-        }
-      } else {
-        doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
+          doc.addImage(item.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
+        } catch { /* keep background */ }
       }
       doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);
       doc.line(x, y + IH, x + CW, y + IH);
@@ -263,6 +263,7 @@ async function sendCatalogToClient(clientId) {
     const PW = 210, PH = 297, M = 14, COLS = 2, CGAP = 6, RGAP = 8;
     const CW = (PW - M * 2 - CGAP) / COLS;
     const IH = 76, TH = 24, CH = IH + TH;
+    const IMG_SZ = IH, IMG_X_OFF = (CW - IH) / 2;
     const drawHeader = (first) => {
       if (first) {
         doc.setFont('times', 'italic'); doc.setFontSize(21); doc.setTextColor(26, 26, 26);
@@ -285,10 +286,11 @@ async function sendCatalogToClient(clientId) {
     for (const item of items) {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
+      doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
       if (item.image) {
-        try { const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(item.image, fmt, x, y, CW, IH, undefined, 'MEDIUM'); }
-        catch { doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F'); }
-      } else { doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F'); }
+        try { const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(item.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE'); }
+        catch { /* keep background */ }
+      }
       doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);
       doc.line(x, y + IH, x + CW, y + IH);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(171, 171, 171);

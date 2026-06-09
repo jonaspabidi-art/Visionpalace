@@ -243,6 +243,7 @@ function _buildLensCatalogDoc(items) {
   const PW = 210, PH = 297, M = 14, COLS = 2, CGAP = 6, RGAP = 6;
   const CW = (PW - M * 2 - CGAP) / COLS;
   const IH = 65, TH = 32, CH = IH + TH;
+  const IMG_SZ = IH, IMG_X_OFF = (CW - IH) / 2;
 
   const drawHeader = (first) => {
     if (first) {
@@ -267,13 +268,12 @@ function _buildLensCatalogDoc(items) {
   for (const lens of items) {
     if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
     const x = M + col * (CW + CGAP);
+    doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
     if (lens.image) {
       try {
         const fmt = lens.image.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-        doc.addImage(lens.image, fmt, x, y, CW, IH, undefined, 'MEDIUM');
-      } catch { doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F'); }
-    } else {
-      doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
+        doc.addImage(lens.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
+      } catch { /* keep background */ }
     }
     doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);
     doc.line(x, y + IH, x + CW, y + IH);
