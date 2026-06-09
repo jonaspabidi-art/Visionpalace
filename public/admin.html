@@ -1521,11 +1521,8 @@ async function sendBroadcast(optimistic) {
     const media = optimistic._items.filter(i => !i.removed && i.url)
       .map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
 
-    const abort = new AbortController();
-    const timeout = setTimeout(() => abort.abort(), 20000);
     const r = await api('/api/broadcasts', {
       method: 'POST',
-      signal: abort.signal,
       body: JSON.stringify({
         text: optimistic.text,
         price: optimistic.price,
@@ -1534,14 +1531,12 @@ async function sendBroadcast(optimistic) {
         client_temp_id: tempId
       })
     });
-    clearTimeout(timeout);
     if (!r.ok) {
       const errBody = await r.json().catch(() => ({}));
       throw new Error(`server ${r.status}: ${errBody.error || 'unknown'}`);
     }
     const d = await r.json();
 
-    // Remove pending bubble and append the real broadcast cleanly
     discardOptimisticBroadcast(tempId);
     if (d.broadcast && !broadcasts.find(b => b.id === d.broadcast.id)) {
       broadcasts.push(d.broadcast);
@@ -1550,13 +1545,7 @@ async function sendBroadcast(optimistic) {
       loadBroadcasts();
     }
   } catch (e) {
-    // On network error, reload — the POST may have succeeded on the server
-    if (e.name === 'AbortError') {
-      discardOptimisticBroadcast(tempId);
-      loadBroadcasts();
-    } else {
-      markBroadcastFailed(tempId, e.message);
-    }
+    markBroadcastFailed(tempId, e.message);
   } finally {
     inFlightBcTempIds.delete(tempId);
   }

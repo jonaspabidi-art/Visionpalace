@@ -375,6 +375,7 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
   }).select().single();
   if (error) return res.status(500).json({ error: error.message });
 
+  let broadcastMedia = [];
   if (media && media.length > 0) {
     const mediaRows = media.map(m => ({
       broadcast_id: broadcast.id,
@@ -382,16 +383,15 @@ app.post('/api/broadcasts', adminAuth, async (req, res) => {
       thumbnail_url: m.thumbUrl,
       type: m.type
     }));
-    await supabase.from('broadcast_media').insert(mediaRows);
+    const { data: insertedMedia } = await supabase.from('broadcast_media').insert(mediaRows).select();
+    broadcastMedia = insertedMedia || [];
   }
 
-  const full = await supabase.from('broadcasts')
-    .select('*, broadcast_media(*)')
-    .eq('id', broadcast.id)
-    .single();
+  // Build full object in memory — avoids a third round-trip to Supabase
+  const full = { ...broadcast, broadcast_media: broadcastMedia, broadcast_reactions: [] };
 
-  io.emit('admin:new_broadcast', { broadcast: full.data, client_temp_id: client_temp_id || null });
-  res.json({ broadcast: full.data, client_temp_id: client_temp_id || null });
+  io.emit('admin:new_broadcast', { broadcast: full, client_temp_id: client_temp_id || null });
+  res.json({ broadcast: full, client_temp_id: client_temp_id || null });
 
   // Push notifications fire in background — never block the response
   const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
