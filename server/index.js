@@ -26,6 +26,7 @@ app.use('/api', require('./routes/broadcasts')(io));
 app.use('/api', require('./routes/messages')(io));
 app.use('/api', require('./routes/clients')(io));
 app.use('/api', require('./routes/inventory')(io));
+app.use('/api', require('./routes/lenses')(io));
 app.use('/api', require('./routes/sales')(io));
 app.use('/api', require('./routes/upload')(io));
 app.use('/api', require('./routes/push')(io));

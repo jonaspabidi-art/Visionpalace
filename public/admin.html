@@ -96,8 +96,18 @@
     <!-- Inventory view -->
     <div class="view" id="inventory-view">
       <div class="inv-toolbar">
-        <button class="inv-catalog-btn" onclick="generateCatalogPDF()">Katalog PDF</button>
-        <button class="inv-catalog-btn" onclick="showCatalogClientPicker()">Skicka katalog</button>
+        <div class="lager-tab-toggle">
+          <button id="lager-tab-glasses" class="lager-tab-btn active" onclick="switchLagerTab('glasses')">Glasögon</button>
+          <button id="lager-tab-lenses"  class="lager-tab-btn"        onclick="switchLagerTab('lenses')">Linser</button>
+        </div>
+        <div id="inv-cat-glasses" style="display:flex;gap:6px">
+          <button class="inv-catalog-btn" onclick="generateCatalogPDF()">Katalog PDF</button>
+          <button class="inv-catalog-btn" onclick="showCatalogClientPicker()">Skicka katalog</button>
+        </div>
+        <div id="inv-cat-lenses" style="display:none;gap:6px">
+          <button class="inv-catalog-btn" id="lens-cat-pdf-btn" onclick="generateLensCatalogPDF()">Katalog PDF</button>
+          <button class="inv-catalog-btn" onclick="showLensCatalogClientPicker()">Skicka katalog</button>
+        </div>
         <button class="inv-catalog-btn primary" id="inv-sell-open-btn" onclick="openSaleModal(null)" style="display:none">
           Sälj varor <span id="sale-cart-badge" style="background:#1a1409;color:var(--blue);border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px"></span>
         </button>
@@ -107,7 +117,7 @@
           <div class="inv-empty">Laddar lager…</div>
         </div>
       </div>
-      <button class="inv-fab" onclick="openInvForm(null)">+</button>
+      <button class="inv-fab" onclick="activeInvTab === 'lenses' ? openLensForm(null) : openInvForm(null)">+</button>
     </div>
 
     <!-- Invoice view -->
@@ -361,8 +371,12 @@
         </div>
       </div>
       <div>
-        <div class="sale-sec-title">Lägg till från lager</div>
+        <div class="sale-sec-title">Lägg till glasögon</div>
         <div id="sale-inv-list"></div>
+      </div>
+      <div>
+        <div class="sale-sec-title">Lägg till linser</div>
+        <div id="sale-lens-list"></div>
       </div>
       <button class="inv-gen-btn" onclick="createSale()">Skapa försäljning</button>
     </div>
@@ -380,6 +394,50 @@
   </div>
 </div>
 
+<!-- Lens add/edit form -->
+<div id="lens-form-modal" onclick="if(event.target===this)closeLensForm()">
+  <div class="inv-form-sheet">
+    <div class="inv-form-header">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;position:absolute;top:10px;left:50%;transform:translateX(-50%)"></div>
+      <div class="inv-form-title" id="lens-form-title">Ny lins</div>
+      <button onclick="closeLensForm()" style="background:none;border:none;color:var(--text3);font-size:22px;cursor:pointer;padding:4px;line-height:1">✕</button>
+    </div>
+    <div class="inv-form-body">
+      <label class="inv-img-pick" id="lens-img-pick">
+        <input type="file" id="lens-img-input" accept="image/*" onchange="handleLensImg(this)">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span class="inv-img-pick-label">Tryck för att lägga till bild</span>
+      </label>
+      <div class="inv-field">
+        <label>Namn *</label>
+        <input class="inv-input" id="lensf-name" type="text" placeholder="ex. Acuvue Oasys">
+      </div>
+      <div class="inv-row-grid">
+        <div class="inv-field">
+          <label>Ref-kod</label>
+          <input class="inv-input" id="lensf-ref" type="text" placeholder="ex. AO-001">
+        </div>
+        <div class="inv-field">
+          <label>Säljpris (€)</label>
+          <input class="inv-input" id="lensf-sell" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="inv-field">
+        <label>Inköpspris (€)</label>
+        <input class="inv-input" id="lensf-buy" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="inv-field">
+        <label>Anteckningar</label>
+        <textarea class="inv-input" id="lensf-notes" rows="2" placeholder="Fritext…"></textarea>
+      </div>
+      <div class="inv-section-title" style="margin-top:8px">Färger &amp; Lager</div>
+      <div id="lens-variants-list"></div>
+      <button class="inv-add-row" onclick="addLensVariantRow()">+ Lägg till färg</button>
+      <button class="inv-gen-btn" onclick="saveLensItem()">Spara</button>
+    </div>
+  </div>
+</div>
+
 <!-- Lightbox -->
 <div id="lightbox">
   <button id="lb-close">✕</button>
@@ -394,6 +452,7 @@
 <script src="/js/admin/broadcast.js"></script>
 <script src="/js/admin/clients.js"></script>
 <script src="/js/admin/inventory.js"></script>
+<script src="/js/admin/lenses.js"></script>
 <script src="/js/admin/invoice.js"></script>
 <script src="/js/admin/sales.js"></script>
 <script src="/js/admin/init.js"></script>

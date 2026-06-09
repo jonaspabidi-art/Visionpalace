@@ -669,6 +669,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .purchase-row-price { font-size: 14px; font-weight: 700; color: var(--blue); flex-shrink: 0; }
 
 /* ── Lightbox ── */
+/* ── Lager tab toggle (Glasögon / Linser) ── */
+.lager-tab-toggle { display: flex; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; flex-shrink: 0; }
+.lager-tab-btn { padding: 6px 14px; border: none; border-radius: 8px; background: none; color: var(--text3); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background .15s, color .15s; white-space: nowrap; }
+.lager-tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+
+/* ── Lens color chips on inventory card ── */
+.lens-var-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.lens-var-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; font-size: 11px; color: var(--text2); }
+.lens-var-chip b { color: var(--blue); }
+
+/* ── Lens variant rows in form ── */
+.lens-variant-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lens-var-color { flex: 1; }
+.lens-var-stock { width: 80px; flex-shrink: 0; }
+.lens-var-rm { background: none; border: none; color: var(--text3); font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1; flex-shrink: 0; }
+
+/* ── Lens variant buttons in sale modal ── */
+.lens-sale-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+.lens-sale-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.lens-sale-chip { padding: 5px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; transition: background .15s, border-color .15s; }
+.lens-sale-chip.active { background: rgba(100,170,255,.15); border-color: var(--blue); color: var(--blue); }
+.lens-sale-chip-stock { opacity: 0.5; font-weight: 400; }
+
+/* ── Lens form modal (same base as inv-form-modal) ── */
+#lens-form-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: flex-end; justify-content: center; }
+#lens-form-modal.open { display: flex; }
+
 #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.95); z-index: 999; align-items: center; justify-content: center; }
 #lightbox.open { display: flex; }
 #lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }

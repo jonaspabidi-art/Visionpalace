@@ -30,6 +30,9 @@ module.exports = (io) => {
     const rows = items.map(i => ({
       sale_id: sale.id,
       inventory_id: i.inventory_id || null,
+      lens_id: i.lens_id || null,
+      lens_variant_id: i.lens_variant_id || null,
+      lens_color: i.lens_color || null,
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
       qty: i.qty || 1, image: i.image || null
@@ -37,11 +40,22 @@ module.exports = (io) => {
     const { error: itemErr } = await supabase.from('sale_items').insert(rows);
     if (itemErr) return res.status(500).json({ error: itemErr.message });
 
-    // Remove sold items from inventory
-    const inventoryIds = items.map(i => i.inventory_id).filter(Boolean);
+    // Remove sold glasses from inventory
+    const inventoryIds = items.filter(i => i.inventory_id).map(i => i.inventory_id);
     if (inventoryIds.length) {
       await supabase.from('inventory').delete().in('id', inventoryIds);
       io.to('admins').emit('inventory:sold', { ids: inventoryIds });
+    }
+
+    // Decrement lens variant stock
+    const lensItems = items.filter(i => i.lens_variant_id);
+    for (const item of lensItems) {
+      const { data: variant } = await supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).single();
+      if (variant) {
+        await supabase.from('lens_variants').update({
+          stock_count: Math.max(0, (variant.stock_count || 0) - (item.qty || 1))
+        }).eq('id', item.lens_variant_id);
+      }
     }
 
     const { data: full } = await supabase.from('sales').select('*, sale_items(*)').eq('id', sale.id).single();

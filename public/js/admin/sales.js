@@ -32,6 +32,7 @@ function openSaleModal(invId) {
     ).join('');
   renderSaleCart();
   renderSaleInvList();
+  renderSaleLensList();
   document.getElementById('sale-modal').classList.add('open');
 }
 
@@ -58,29 +59,38 @@ function removeFromSaleCart(invId) {
 function renderSaleCart() {
   const list = document.getElementById('sale-cart-list');
   if (!list) return;
-  if (!saleCartItems.length) {
+  const allItems = [
+    ...saleCartItems.map(i => ({ ...i, _type: 'glasses' })),
+    ...lensCartItems.map(i => ({ ...i, _type: 'lenses' }))
+  ];
+  if (!allItems.length) {
     list.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Inga varor valda ännu</div>';
     document.getElementById('sale-total').textContent = 'Totalt: € 0,00';
     return;
   }
-  list.innerHTML = saleCartItems.map(item => `
-    <div class="sale-cart-item">
-      ${item.image
-        ? `<img class="sale-item-img" src="${item.image}" alt="">`
-        : `<div class="sale-item-img"></div>`}
+  list.innerHTML = allItems.map(item => {
+    const displayName = item._type === 'lenses'
+      ? `${esc(item.name)} <span style="color:var(--text3);font-size:11px">(${esc(item.color)})</span>`
+      : esc(item.name);
+    const minus  = item._type === 'lenses' ? `updateLensQty('${item.id}',-1)` : `updateSaleQty('${item.id}',-1)`;
+    const plus   = item._type === 'lenses' ? `updateLensQty('${item.id}',1)`  : `updateSaleQty('${item.id}',1)`;
+    const remove = item._type === 'lenses' ? `removeLensFromCart('${item.id}')` : `removeFromSaleCart('${item.id}')`;
+    return `<div class="sale-cart-item">
+      ${item.image ? `<img class="sale-item-img" src="${item.image}" alt="">` : `<div class="sale-item-img"></div>`}
       <div class="sale-item-info">
-        <div class="sale-item-name">${esc(item.name)}</div>
+        <div class="sale-item-name">${displayName}</div>
         <div class="sale-item-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
       </div>
       <div class="sale-qty-row">
-        <button class="sale-qty-btn" onclick="updateSaleQty('${item.id}',-1)">−</button>
+        <button class="sale-qty-btn" onclick="${minus}">−</button>
         <span class="sale-qty-num">${item.qty}</span>
-        <button class="sale-qty-btn" onclick="updateSaleQty('${item.id}',1)">+</button>
-        <button class="sale-rm-btn" onclick="removeFromSaleCart('${item.id}')">✕</button>
+        <button class="sale-qty-btn" onclick="${plus}">+</button>
+        <button class="sale-rm-btn" onclick="${remove}">✕</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
-  const total = saleCartItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0) + shipping;
+  const total = allItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0) + shipping;
   document.getElementById('sale-total').textContent = `Totalt: € ${total.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -121,23 +131,35 @@ function addToSaleCartFromModal(invId) {
 async function createSale() {
   const clientId = document.getElementById('sale-client-pick').value;
   if (!clientId) { showToast('Välj en klient', 'error'); return; }
-  if (!saleCartItems.length) { showToast('Inga varor valda', 'error'); return; }
+  if (!saleCartItems.length && !lensCartItems.length) { showToast('Inga varor valda', 'error'); return; }
   const btn = document.querySelector('#sale-modal .inv-gen-btn');
   btn.textContent = 'Skapar…'; btn.disabled = true;
   try {
     const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
-    const items = saleCartItems.map(i => ({
+    const glassItems = saleCartItems.map(i => ({
       inventory_id: i.id,
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
       qty: i.qty, image: i.image || null
     }));
+    const lensItems = lensCartItems.map(i => ({
+      lens_id: i.lensId, lens_variant_id: i.variantId, lens_color: i.color,
+      name: `${i.name} (${i.color})`,
+      sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
+      qty: i.qty, image: i.image || null
+    }));
+    const items = [...glassItems, ...lensItems];
     if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });
     const r = await api('/api/sales', { method: 'POST', body: JSON.stringify({ client_id: clientId, items }) });
     if (!r.ok) { const d = await r.json(); showToast(d.error || 'Fel', 'error'); return; }
     _lastSaleClientId = clientId;
-    _lastSaleItems = shipping > 0 ? [...saleCartItems, { name: 'Frakt', sell_price: shipping, qty: 1 }] : [...saleCartItems];
+    _lastSaleItems = [
+      ...saleCartItems,
+      ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
+      ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
+    ];
     saleCartItems = [];
+    lensCartItems = [];
     updateSaleCartBadge();
     closeSaleModal();
     showSaleSuccessBanner();
