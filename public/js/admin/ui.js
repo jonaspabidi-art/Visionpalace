@@ -36,7 +36,7 @@ document.getElementById('bc-extras-btn').onclick = () => {
 };
 
 // ── Broadcast composer listeners ──
-document.getElementById('bc-send-btn').onclick = postBroadcast;
+document.getElementById('bc-send-btn').onclick = () => postBroadcast();
 document.getElementById('bc-text').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postBroadcast(); }
 });
