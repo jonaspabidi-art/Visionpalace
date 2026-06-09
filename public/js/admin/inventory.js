@@ -181,7 +181,7 @@ async function generateCatalogPDF() {
     for (const item of items) {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
-      doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
+      doc.setFillColor(255, 255, 255); doc.rect(x, y, CW, IH, 'F');
       if (item.image) {
         try {
           const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG';
@@ -286,7 +286,7 @@ async function sendCatalogToClient(clientId) {
     for (const item of items) {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
-      doc.setFillColor(238, 233, 227); doc.rect(x, y, CW, IH, 'F');
+      doc.setFillColor(255, 255, 255); doc.rect(x, y, CW, IH, 'F');
       if (item.image) {
         try { const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(item.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE'); }
         catch { /* keep background */ }
