@@ -10,6 +10,7 @@ function switchLagerTab(tab) {
   document.getElementById('lager-tab-lenses').classList.toggle('active', tab === 'lenses');
   document.getElementById('inv-cat-glasses').style.display = tab === 'glasses' ? '' : 'none';
   document.getElementById('inv-cat-lenses').style.display  = tab === 'lenses'  ? '' : 'none';
+  updateSaleCartBadge();
   if (tab === 'glasses') loadInventory();
   else loadLenses();
 }

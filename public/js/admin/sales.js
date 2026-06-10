@@ -14,10 +14,10 @@ function addToSaleCartFromCard(invId) {
 }
 
 function updateSaleCartBadge() {
-  const total = saleCartItems.reduce((s, i) => s + i.qty, 0);
+  const total = saleCartItems.reduce((s, i) => s + i.qty, 0) + lensCartItems.reduce((s, i) => s + i.qty, 0);
   const btn = document.getElementById('inv-sell-open-btn');
   const badge = document.getElementById('sale-cart-badge');
-  btn.style.display = total > 0 ? '' : 'none';
+  btn.style.display = (total > 0 || activeInvTab === 'lenses') ? '' : 'none';
   badge.textContent = total > 0 ? total : '';
 }
 
