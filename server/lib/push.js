@@ -34,17 +34,22 @@ function isValidPushSub(sub) {
     && typeof sub.keys.p256dh === 'string';
 }
 
+function clearSub(clientId) {
+  pushSubs.delete(clientId);
+  supabase.from('clients').update({ onesignal_player_id: null }).eq('id', clientId).then(() => {});
+}
+
 async function webPushClient(clientId, title, body) {
   const sub = pushSubs.get(clientId);
   if (!sub) { console.log(`[Push] No subscription for client ${clientId} (total: ${pushSubs.size})`); return; }
-  if (!isValidPushSub(sub)) { console.warn(`[Push] Invalid subscription for ${clientId}, removing`); pushSubs.delete(clientId); return; }
+  if (!isValidPushSub(sub)) { console.warn(`[Push] Invalid subscription for ${clientId}, removing`); clearSub(clientId); return; }
   console.log(`[Push] Sending to client ${clientId}...`);
   try {
     await webpush.sendNotification(sub, JSON.stringify({ title, body }));
     console.log(`[Push] Delivered OK to ${clientId}`);
   } catch(e) {
     console.error(`[Push] Failed for ${clientId}: ${e.statusCode} ${e.message}`);
-    if (e.statusCode === 410 || e.statusCode === 404) { pushSubs.delete(clientId); }
+    if (e.statusCode === 410 || e.statusCode === 404) { clearSub(clientId); }
   }
 }
 
@@ -58,7 +63,7 @@ async function webPushAll(title, body) {
         .then(() => console.log(`[Push] Broadcast OK to ${clientId}`))
         .catch(e => {
           console.error(`[Push] Broadcast failed for ${clientId}: ${e.statusCode} ${e.message}`);
-          if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId);
+          if (e.statusCode === 410 || e.statusCode === 404) clearSub(clientId);
         })
     );
   }

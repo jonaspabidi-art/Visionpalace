@@ -80,7 +80,12 @@ module.exports = (io) => {
         for (const [clientId, sub] of targets) {
           if (!isValidPushSub(sub)) continue;
           webpush.sendNotification(sub, JSON.stringify({ title: 'Vision Palace', body: pushText }))
-            .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId); });
+            .catch(e => {
+              if (e.statusCode === 410 || e.statusCode === 404) {
+                pushSubs.delete(clientId);
+                supabase.from('clients').update({ onesignal_player_id: null }).eq('id', clientId).then(() => {});
+              }
+            });
         }
       });
   });
