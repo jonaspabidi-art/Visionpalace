@@ -87,8 +87,10 @@ process.on('unhandledRejection', err => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, async () => {
-  console.log(`Vision Palace running on port ${PORT}`);
-  loadPushSubs();
+(async () => {
   await seedAdmins().catch(err => console.error('[seed] Admin seed failed:', err.message));
-});
+  server.listen(PORT, () => {
+    console.log(`Vision Palace running on port ${PORT}`);
+    loadPushSubs();
+  });
+})();
