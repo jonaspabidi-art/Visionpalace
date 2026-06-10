@@ -2,6 +2,7 @@
 let saleCartItems = []; // { id, name, ref_code, sell_price, qty, image }
 let _lastSaleClientId = null;
 let _lastSaleItems = null;
+let _saleHistoryCache = {};
 
 function addToSaleCartFromCard(invId) {
   const item = invItemsMap[invId];
@@ -189,13 +190,17 @@ function showSaleSuccessBanner() {
   setTimeout(() => { if (t.parentElement) t.remove(); }, 10000);
 }
 
-function fillInvoiceFromSale(clientId, items) {
+function fillInvoiceFromSale(clientId, items, invoiceNumber) {
   switchTab('invoice');
   populateInvClientPicker();
   setTimeout(() => {
     const sel = document.getElementById('inv-client-pick');
     sel.value = clientId;
     fillInvClient(clientId);
+    if (invoiceNumber) {
+      const numEl = document.getElementById('inv-number');
+      if (numEl) numEl.value = invoiceNumber;
+    }
     invLineItems = [];
     invLineNextId = 0;
     items.forEach(item => addInvLine(
@@ -207,6 +212,12 @@ function fillInvoiceFromSale(clientId, items) {
     renderInvLines();
     generateInvoice();
   }, 50);
+}
+
+function openSaleInvoice(saleId) {
+  const sale = _saleHistoryCache[saleId];
+  if (!sale) return;
+  fillInvoiceFromSale(sale.client_id, sale.sale_items || [], sale.invoice_number);
 }
 
 // ── Sale status helpers ──
@@ -343,11 +354,13 @@ async function loadSalesHistory() {
       </div>`;
 
     // Per-month sections
+    _saleHistoryCache = {};
     listEl.innerHTML = Object.keys(months).sort((a,b) => b.localeCompare(a)).map(key => {
       const { sales: ms, revenue, profit } = months[key];
       const [yr, mo] = key.split('-');
       const monthName = new Date(yr, mo - 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
       const saleRows = ms.map(sale => {
+        _saleHistoryCache[sale.id] = sale;
         const clientName = sale.clients?.admin_label || sale.clients?.display_name || '—';
         const saleRev = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
         const saleProfit = (sale.sale_items || []).reduce((s, i) => {
@@ -395,7 +408,10 @@ async function loadSalesHistory() {
             <div id="sa-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
               ${statusActionsHTML(sale, sid)}
             </div>
-            <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="margin-top:8px;background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              <button onclick="event.stopPropagation();openSaleInvoice('${sale.id}')" style="background:none;border:1px solid rgba(100,150,255,.3);border-radius:8px;color:#7aabff;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Faktura</button>
+              <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
+            </div>
           </div>
         </div>`;
       }).join('');
