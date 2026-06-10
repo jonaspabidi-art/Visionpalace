@@ -37,7 +37,7 @@ function adminAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   const payload = token ? verifyAdminJWT(token) : null;
-  if (!payload) return res.status(401).json({ error: 'Unauthorized' });
+  if (!payload || !payload.adminId) return res.status(401).json({ error: 'Unauthorized' });
   req.isAdmin = true;
   req.adminId = payload.adminId;
   next();
@@ -56,7 +56,7 @@ async function anyAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const jwt_token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   const payload = jwt_token ? verifyAdminJWT(jwt_token) : null;
-  if (payload) { req.isAdmin = true; req.adminId = payload.adminId; return next(); }
+  if (payload?.adminId) { req.isAdmin = true; req.adminId = payload.adminId; return next(); }
   const session = req.headers['x-session-token'];
   const client = await getClientBySession(session);
   if (client) { req.client = client; return next(); }
