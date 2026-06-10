@@ -68,21 +68,19 @@ module.exports = (io) => {
 
     res.json({ broadcast: full, client_temp_id: client_temp_id || null });
 
-    // Push notifications only to this admin's clients
+    // Push notifications to this admin's clients via in-memory pushSubs
     const pushText = text ? text.substring(0, 80) : 'Ny uppdatering';
-    supabase.from('clients').select('id, onesignal_player_id').eq('admin_id', req.adminId).eq('is_inactive', false)
+    supabase.from('clients').select('id').eq('admin_id', req.adminId).eq('is_inactive', false)
       .then(({ data: adminClients }) => {
-        for (const c of adminClients || []) {
-          if (c.onesignal_player_id?.startsWith('{')) {
-            try {
-              const sub = JSON.parse(c.onesignal_player_id);
-              if (isValidPushSub(sub)) {
-                pushSubs.set(c.id, sub);
-                webpush.sendNotification(sub, JSON.stringify({ title: 'Vision Palace', body: pushText }))
-                  .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(c.id); });
-              }
-            } catch {}
-          }
+        const adminIds = new Set((adminClients || []).map(c => c.id));
+        // If no clients have admin_id yet (seeding pending), push to all subscribers as fallback
+        const targets = adminIds.size > 0
+          ? [...pushSubs.entries()].filter(([id]) => adminIds.has(id))
+          : [...pushSubs.entries()];
+        for (const [clientId, sub] of targets) {
+          if (!isValidPushSub(sub)) continue;
+          webpush.sendNotification(sub, JSON.stringify({ title: 'Vision Palace', body: pushText }))
+            .catch(e => { if (e.statusCode === 410 || e.statusCode === 404) pushSubs.delete(clientId); });
         }
       });
   });
