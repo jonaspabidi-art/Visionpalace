@@ -8,9 +8,12 @@ module.exports = (io) => {
 
   // Get broadcasts (admin: own; client: their admin's)
   router.get('/broadcasts', anyAuth, async (req, res) => {
+    const selectFields = req.isAdmin
+      ? '*, broadcast_media(*), broadcast_reactions(*), broadcast_views(client_id)'
+      : '*, broadcast_media(*), broadcast_reactions(*)';
     let query = supabase
       .from('broadcasts')
-      .select('*, broadcast_media(*), broadcast_reactions(*)')
+      .select(selectFields)
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -149,6 +152,30 @@ module.exports = (io) => {
       .select('*, clients(display_name, admin_label)')
       .eq('broadcast_id', req.params.broadcastId);
     res.json({ reactions: data || [] });
+  });
+
+  // Client marks broadcasts as seen (batch)
+  router.post('/broadcasts/views', clientAuth, async (req, res) => {
+    const { broadcast_ids } = req.body;
+    if (!Array.isArray(broadcast_ids) || !broadcast_ids.length) return res.json({ ok: true });
+    const rows = broadcast_ids.slice(0, 200).map(id => ({
+      broadcast_id: id,
+      client_id: req.client.id,
+      seen_at: new Date().toISOString()
+    }));
+    await supabase.from('broadcast_views')
+      .upsert(rows, { onConflict: 'broadcast_id,client_id', ignoreDuplicates: true });
+    res.json({ ok: true });
+  });
+
+  // Admin: who has seen a broadcast
+  router.get('/broadcasts/:id/views', adminAuth, async (req, res) => {
+    const { data } = await supabase
+      .from('broadcast_views')
+      .select('seen_at, clients(display_name, admin_label)')
+      .eq('broadcast_id', req.params.id)
+      .order('seen_at', { ascending: true });
+    res.json({ views: data || [] });
   });
 
   return router;

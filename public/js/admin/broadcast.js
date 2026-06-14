@@ -70,6 +70,7 @@ function bcBubbleHTML(b) {
   const media = b.broadcast_media || [];
   const interested = (b.broadcast_reactions || []).filter(r => r.reaction === 'interested').length;
   const notInt = (b.broadcast_reactions || []).filter(r => r.reaction === 'not_interested').length;
+  const seenCount = (b.broadcast_views || []).length;
   const pending = !!b._pending;
   const failed = !!b._failed;
 
@@ -105,6 +106,7 @@ function bcBubbleHTML(b) {
       <button class="bc-del-btn" onclick="discardFailedBroadcast('${b.id}')" title="Släng">✕</button>`;
   } else {
     footerHTML = `<span class="bc-bubble-time">${time}</span>
+      <button class="bc-seen-btn" onclick="showViews('${b.id}')">Sedd ${seenCount}</button>
       <button class="bc-react-btn" onclick="showReactions('${b.id}')">✓ ${interested} &nbsp; ✕ ${notInt}</button>
       <button class="bc-pin-btn${b.is_pinned ? ' pinned' : ''}" onclick="togglePin('${b.id}')" title="${b.is_pinned ? 'Ta bort fästning' : 'Fäst'}">◈</button>
       <button class="bc-del-btn" onclick="deleteBroadcast('${b.id}')" title="Ta bort">✕</button>`;
@@ -287,4 +289,17 @@ async function showReactions(id) {
         <span class="reaction-val">${r.reaction === 'interested' ? '✓ Intresserad' : '✕ Inte intresserad'}</span>
       </div>`).join('');
   document.getElementById('reaction-modal').classList.add('open');
+}
+
+async function showViews(id) {
+  const r = await api(`/api/broadcasts/${id}/views`);
+  const d = await r.json();
+  const list = document.getElementById('views-list');
+  list.innerHTML = !d.views?.length
+    ? '<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px">Ingen har sett detta ännu</div>'
+    : d.views.map(v => `<div class="reaction-item">
+        <span class="reaction-name">${esc(v.clients?.admin_label || v.clients?.display_name || 'Okänd')}</span>
+        <span class="reaction-val" style="color:var(--text3)">${new Date(v.seen_at).toLocaleString('sv-SE',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
+      </div>`).join('');
+  document.getElementById('views-modal').classList.add('open');
 }

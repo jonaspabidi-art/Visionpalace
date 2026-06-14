@@ -44,6 +44,7 @@ function renderFeed() {
     html += bcBubbleHTML(b);
   }
   scroll.innerHTML = html;
+  observeAllRows();
 }
 
 function bcBubbleHTML(b) {
@@ -139,6 +140,46 @@ function appendBroadcast(b) {
   }
   const div = document.createElement('div');
   div.innerHTML = bcBubbleHTML(b);
-  if (div.firstElementChild) s.appendChild(div.firstElementChild);
+  if (div.firstElementChild) {
+    const el = div.firstElementChild;
+    s.appendChild(el);
+    _observeRow(el);
+  }
   if (atBottom) scrollFeedBottom();
+}
+
+// ── Seen tracking ──
+let _seenIds = new Set();
+let _seenTimer = null;
+let _viewObserver = null;
+
+function _flushSeen() {
+  const ids = [..._seenIds];
+  if (!ids.length) return;
+  _seenIds.clear();
+  fetch('/api/broadcasts/views', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-session-token': session.session_token },
+    body: JSON.stringify({ broadcast_ids: ids })
+  }).catch(() => {});
+}
+
+function _observeRow(el) {
+  if (!_viewObserver) {
+    _viewObserver = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        const id = e.target.dataset.bcId;
+        if (id) _seenIds.add(id);
+        _viewObserver.unobserve(e.target);
+      });
+      clearTimeout(_seenTimer);
+      _seenTimer = setTimeout(_flushSeen, 2000);
+    }, { threshold: 0.1 });
+  }
+  _viewObserver.observe(el);
+}
+
+function observeAllRows() {
+  document.querySelectorAll('#feed-scroll .bc-row[data-bc-id]').forEach(_observeRow);
 }
