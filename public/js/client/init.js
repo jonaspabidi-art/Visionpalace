@@ -4,8 +4,6 @@ function initApp() {
   connectSocket();
   loadBroadcasts();
   loadMessages();
-  setInterval(loadBroadcasts, 8000);
-  setInterval(loadMessages, 5000);
   setTimeout(setupPush, 2000);
 }
 

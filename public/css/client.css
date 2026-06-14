@@ -169,6 +169,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 
 .bc-media img {
   width: 100%; display: block; max-height: 340px; object-fit: cover; cursor: pointer;
+  min-height: 120px; background: var(--surface2);
 }
 .bc-media video { width: 100%; display: block; max-height: 280px; background: #000; }
 .bc-wrap { max-width: calc(100% - 46px); display: flex; flex-direction: column; }
