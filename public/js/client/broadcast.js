@@ -69,7 +69,7 @@ function bcBubbleHTML(b) {
             : `<img src="${m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy">`)
         : `<div style="flex-shrink:0;width:82%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--surface2);font-size:12px;color:var(--text3)">Unavailable</div>`
     ).join('');
-    return `<div class="bc-row">
+    return `<div class="bc-row" data-bc-id="${b.id}">
       ${mark}
       <div class="bc-wrap">
         <div class="bc-media-strip">${stripItems}</div>
@@ -86,7 +86,7 @@ function bcBubbleHTML(b) {
         : `<div class="media-expired">Media no longer available</div>`
       }</div>` : '';
 
-  return `<div class="bc-row">
+  return `<div class="bc-row" data-bc-id="${b.id}">
     ${mark}
     <div class="bc-bubble${b.is_pinned?' pinned':''}">
       ${singleMedia}
@@ -98,8 +98,42 @@ function bcBubbleHTML(b) {
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
   s.scrollTop = 999999;
-  // Re-scroll as each image loads (scrollHeight grows with lazy images)
   s.querySelectorAll('img').forEach(img => {
-    if (!img.complete) img.addEventListener('load', () => { s.scrollTop = 999999; }, { once: true });
+    if (!img.complete) img.addEventListener('load', () => {
+      if (s.scrollHeight - s.scrollTop - s.clientHeight < 120) s.scrollTop = 999999;
+    }, { once: true });
   });
+}
+
+function appendBroadcast(b) {
+  const s = document.getElementById('feed-scroll');
+  const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 80;
+  if (b.is_pinned) {
+    if (!broadcasts.find(x => x.id === b.id)) broadcasts.push(b);
+    renderFeed();
+    return;
+  }
+  if (s.querySelector(`.bc-row[data-bc-id="${b.id}"]`)) return;
+  const dateStr = new Date(b.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+  const pills = s.querySelectorAll('.date-pill');
+  const lastPillText = pills.length ? pills[pills.length-1].querySelector('span').textContent.trim() : '';
+  const empty = s.querySelector('.feed-empty');
+  if (empty) empty.remove();
+  if (dateStr !== lastPillText) {
+    const pill = document.createElement('div');
+    pill.className = 'date-pill';
+    pill.innerHTML = `<span>${dateStr}</span>`;
+    s.appendChild(pill);
+  }
+  const div = document.createElement('div');
+  div.innerHTML = bcBubbleHTML(b);
+  if (div.firstElementChild) s.appendChild(div.firstElementChild);
+  if (atBottom) {
+    s.scrollTop = 999999;
+    s.querySelectorAll('img').forEach(img => {
+      if (!img.complete) img.addEventListener('load', () => {
+        if (s.scrollHeight - s.scrollTop - s.clientHeight < 120) s.scrollTop = 999999;
+      }, { once: true });
+    });
+  }
 }

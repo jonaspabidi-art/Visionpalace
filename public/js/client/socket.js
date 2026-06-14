@@ -1,7 +1,10 @@
 function connectSocket() {
   socket = io({ auth: { session_token: session.session_token }, transports: ['websocket', 'polling'] });
   socket.on('connect', () => { loadBroadcasts(); loadMessages(); setupPush(); });
-  socket.on('admin:new_broadcast', d => { broadcasts.unshift(d.broadcast); renderFeed(); scrollFeedBottom(); });
+  socket.on('admin:new_broadcast', d => {
+    if (!broadcasts.find(x => x.id === d.broadcast.id)) broadcasts.push(d.broadcast);
+    appendBroadcast(d.broadcast);
+  });
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x=>x.id===d.id);
     if (b) b.is_pinned = d.is_pinned;

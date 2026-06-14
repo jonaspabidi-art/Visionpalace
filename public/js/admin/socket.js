@@ -11,6 +11,7 @@ function connectSocket() {
 
   socket.on('broadcast:pin_updated', d => {
     const b = broadcasts.find(x => x.id === d.id);
+    if (b && b.is_pinned === d.is_pinned) return; // already updated optimistically
     if (b) b.is_pinned = d.is_pinned;
     renderFeed();
   });
