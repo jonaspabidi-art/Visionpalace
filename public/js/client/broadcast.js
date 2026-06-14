@@ -99,9 +99,7 @@ function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
   s.scrollTop = 999999;
   s.querySelectorAll('img').forEach(img => {
-    if (!img.complete) img.addEventListener('load', () => {
-      if (s.scrollHeight - s.scrollTop - s.clientHeight < 120) s.scrollTop = 999999;
-    }, { once: true });
+    if (!img.complete) img.addEventListener('load', () => { s.scrollTop = 999999; }, { once: true });
   });
 }
 
