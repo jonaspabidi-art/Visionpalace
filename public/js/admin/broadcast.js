@@ -35,9 +35,7 @@ function renderFeed(scrollToBottom = false) {
   if (scrollToBottom || prevScrollBottom < 60) {
     feed.scrollTop = 999999;
     feed.querySelectorAll('img').forEach(img => {
-      if (!img.complete) img.addEventListener('load', () => {
-        if (feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120) feed.scrollTop = 999999;
-      }, { once: true });
+      if (!img.complete) img.addEventListener('load', () => { feed.scrollTop = 999999; }, { once: true });
     });
   }
 }
