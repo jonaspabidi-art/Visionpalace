@@ -1,3 +1,6 @@
+let _feedAutoScroll = false;
+let _feedScrollListenerReady = false;
+
 async function loadBroadcasts() {
   try {
     const r = await fetch('/api/broadcasts', { headers:{'x-session-token':session.session_token} });
@@ -97,9 +100,20 @@ function bcBubbleHTML(b) {
 
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
+  if (!_feedScrollListenerReady) {
+    _feedScrollListenerReady = true;
+    s.addEventListener('scroll', () => {
+      if (_feedAutoScroll && s.scrollHeight - s.scrollTop - s.clientHeight > 80) {
+        _feedAutoScroll = false;
+      }
+    }, { passive: true });
+  }
+  _feedAutoScroll = true;
   s.scrollTop = 999999;
   s.querySelectorAll('img').forEach(img => {
-    if (!img.complete) img.addEventListener('load', () => { s.scrollTop = 999999; }, { once: true });
+    if (!img.complete) img.addEventListener('load', () => {
+      if (_feedAutoScroll) s.scrollTop = 999999;
+    }, { once: true });
   });
 }
 
@@ -126,12 +140,5 @@ function appendBroadcast(b) {
   const div = document.createElement('div');
   div.innerHTML = bcBubbleHTML(b);
   if (div.firstElementChild) s.appendChild(div.firstElementChild);
-  if (atBottom) {
-    s.scrollTop = 999999;
-    s.querySelectorAll('img').forEach(img => {
-      if (!img.complete) img.addEventListener('load', () => {
-        if (s.scrollHeight - s.scrollTop - s.clientHeight < 120) s.scrollTop = 999999;
-      }, { once: true });
-    });
-  }
+  if (atBottom) scrollFeedBottom();
 }

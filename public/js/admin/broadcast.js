@@ -1,3 +1,6 @@
+let _bcAutoScroll = false;
+let _bcScrollListenerReady = false;
+
 async function loadBroadcasts(q = '') {
   const gen = ++bcLoadGen;
   const url = q ? `/api/broadcasts/search?q=${encodeURIComponent(q)}` : '/api/broadcasts';
@@ -33,9 +36,20 @@ function renderFeed(scrollToBottom = false) {
   }
   feed.innerHTML = html;
   if (scrollToBottom || prevScrollBottom < 60) {
+    if (!_bcScrollListenerReady) {
+      _bcScrollListenerReady = true;
+      feed.addEventListener('scroll', () => {
+        if (_bcAutoScroll && feed.scrollHeight - feed.scrollTop - feed.clientHeight > 80) {
+          _bcAutoScroll = false;
+        }
+      }, { passive: true });
+    }
+    _bcAutoScroll = true;
     feed.scrollTop = 999999;
     feed.querySelectorAll('img').forEach(img => {
-      if (!img.complete) img.addEventListener('load', () => { feed.scrollTop = 999999; }, { once: true });
+      if (!img.complete) img.addEventListener('load', () => {
+        if (_bcAutoScroll) feed.scrollTop = 999999;
+      }, { once: true });
     });
   }
 }
