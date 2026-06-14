@@ -133,7 +133,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .feed-scroll {
   flex: 1; overflow-y: auto; padding: 16px 14px 10px;
   display: flex; flex-direction: column; gap: 2px;
-  -webkit-overflow-scrolling: touch;
 }
 .feed-scroll::-webkit-scrollbar { display: none; }
 
@@ -144,7 +143,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 }
 
 /* Broadcast bubble */
-.bc-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.bc-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 8px; content-visibility: auto; contain-intrinsic-size: 0 200px; }
 .bc-mark {
   width: 30px; height: 30px; border-radius: 50%; background: #fff;
   overflow: hidden; flex-shrink: 0;
@@ -178,7 +177,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; gap: 3px;
   overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
   border-radius: 18px 18px 0 0;
   border: 1px solid var(--border); border-bottom: none;
 }
