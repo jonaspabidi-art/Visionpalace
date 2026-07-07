@@ -159,8 +159,15 @@ async function createSale() {
       ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
       ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
     ];
+    const soldInvIds = saleCartItems.map(i => i.id);
+    const soldLenses = lensCartItems.length > 0;
     saleCartItems = [];
     lensCartItems = [];
+    // Update inventory UI immediately (the socket event does the same for other admins)
+    soldInvIds.forEach(id => delete invItemsMap[id]);
+    if (activeInvTab === 'glasses') renderInventory(Object.values(invItemsMap));
+    else if (soldLenses) loadLenses();
+    renderSaleInvList();
     updateSaleCartBadge();
     closeSaleModal();
     showSaleSuccessBanner();

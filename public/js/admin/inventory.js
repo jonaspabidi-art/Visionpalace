@@ -33,10 +33,12 @@ function renderInventory(items) {
 // ── Inventory CRUD ──
 let invFormItemId = null;
 let invFormImage = null; // base64 or null (undefined = unchanged on edit)
+let _refLookupLast = '';
 
 function openInvForm(itemId) {
   invFormItemId = itemId;
   invFormImage = undefined;
+  _refLookupLast = '';
   const item = itemId ? invItemsMap[itemId] : null;
   document.getElementById('inv-form-title').textContent = item ? 'Redigera vara' : 'Ny vara';
   document.getElementById('invf-name').value = item?.name || '';
@@ -56,6 +58,35 @@ function openInvForm(itemId) {
   }
   document.getElementById('inv-img-input').value = '';
   document.getElementById('inv-form-modal').classList.add('open');
+}
+
+// Autofill name/price/image from a previously used ref code (new items only)
+async function lookupRefCode() {
+  if (invFormItemId) return; // never overwrite an existing item being edited
+  const code = document.getElementById('invf-ref').value.trim();
+  if (!code || code === _refLookupLast) return;
+  _refLookupLast = code;
+  try {
+    const r = await api(`/api/inventory/ref-lookup?code=${encodeURIComponent(code)}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const m = d.match;
+    if (!m) return;
+    const nameEl = document.getElementById('invf-name');
+    const sellEl = document.getElementById('invf-sell');
+    const buyEl = document.getElementById('invf-buy');
+    if (!nameEl.value.trim() && m.name) nameEl.value = m.name;
+    if (!sellEl.value && m.sell_price != null) sellEl.value = m.sell_price;
+    if (!buyEl.value && m.buy_price != null) buyEl.value = m.buy_price;
+    if (invFormImage === undefined && m.image) {
+      invFormImage = m.image;
+      const pick = document.getElementById('inv-img-pick');
+      let img = pick.querySelector('img.inv-preview-img');
+      if (!img) { img = document.createElement('img'); img.className = 'inv-preview-img'; pick.appendChild(img); }
+      img.src = m.image;
+    }
+    showToast('Produktdata hämtad från ref-kod', 'success');
+  } catch { /* lookup is best-effort */ }
 }
 
 function closeInvForm() {

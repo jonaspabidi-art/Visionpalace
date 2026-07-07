@@ -103,7 +103,7 @@ function connectSocket() {
   });
   socket.on('inventory:sold', d => {
     (d.ids || []).forEach(id => delete invItemsMap[id]);
-    renderInventory();
+    if (activeInvTab === 'glasses') renderInventory(Object.values(invItemsMap));
     renderSaleInvList();
     updateSaleCartBadge();
   });
