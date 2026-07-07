@@ -42,6 +42,7 @@ function uploadFiles(files, arr, prevEl) {
       : `<img src="${localUrl}" alt=""><button>✕</button>`;
     const item = {
       localUrl,
+      fileName: file.name,
       type: isVideo ? 'video' : 'image',
       url: null,
       thumbUrl: null,

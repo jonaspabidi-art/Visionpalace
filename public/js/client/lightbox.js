@@ -31,6 +31,9 @@ function closeLightbox() { document.getElementById('lightbox').classList.remove(
 const _lb = document.getElementById('lightbox');
 const _lbImg = document.getElementById('lb-img');
 _lb.addEventListener('click', e => { if (e.target === _lb || e.target.id === 'lb-close') closeLightbox(); });
+document.getElementById('lb-save').addEventListener('click', () => {
+  if (lbImages[lbIndex]) saveMedia(lbImages[lbIndex]);
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 _lb.addEventListener('touchstart', e => {
   if (e.touches.length === 1) lbTouchStartX = e.touches[0].clientX;

@@ -278,6 +278,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-group.from-me .bubble:last-of-type { border-bottom-right-radius: 4px; }
 
 .msg-meta { font-size: 11px; color: var(--text3); margin: 2px 5px 0; letter-spacing: 0.2px; }
+.bubble.pending { opacity: 0.62; }
+.bubble.failed { outline: 1px solid rgba(255,100,100,.55); }
+.msg-fail-row {
+  font-size: 11px; color: #ff7a7a; margin: 4px 5px 0;
+  display: flex; align-items: center; gap: 8px;
+}
+.msg-fail-row button {
+  background: rgba(255,255,255,.1); border: none; color: var(--text);
+  border-radius: 8px; padding: 3px 9px; font-size: 11px;
+  cursor: pointer; font-family: inherit;
+}
 .msg-group.from-me .msg-meta { text-align: right; }
 .msg-group.anim-in .msg-meta { animation: msgFadeUp .25s ease .14s both; }
 .media-wrap { position: relative; display: inline-block; margin-top: 6px; }
@@ -338,7 +349,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   position: absolute; top: 3px; right: 3px; width: 16px; height: 16px;
   background: rgba(0,0,0,.85); border: none; color: #fff; border-radius: 50%;
   font-size: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-weight: 700;
+  font-weight: 700; z-index: 3;
+}
+@keyframes vpspin { to { transform: rotate(360deg); } }
+.prev-thumb.uploading::after {
+  content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 1;
+}
+.prev-thumb.uploading::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+  border-radius: 50%; animation: vpspin .7s linear infinite; z-index: 2;
 }
 .input-row { display: flex; gap: 8px; align-items: flex-end; }
 .attach-btn {
@@ -386,6 +407,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   background: rgba(255,255,255,.1); border: none; color: #fff;
   width: 34px; height: 34px; border-radius: 50%; font-size: 15px;
   cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 600;
+}
+#lb-save {
+  position: absolute; top: max(18px, var(--safe-top)); left: 18px;
+  background: rgba(255,255,255,.1); border: none; color: #fff;
+  width: 34px; height: 34px; border-radius: 50%; font-size: 15px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 600;
+  z-index: 2;
 }
 #lb-counter {
   position: absolute; top: max(22px, var(--safe-top)); left: 50%; transform: translateX(-50%);

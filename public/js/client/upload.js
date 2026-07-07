@@ -20,28 +20,69 @@ function compressImage(file, maxPx = 1920, quality = 0.85) {
   });
 }
 
-document.getElementById('file-input').addEventListener('change', async e => {
-  const files = Array.from(e.target.files);
-  const compressed = await Promise.all(files.map(f => compressImage(f)));
-  const form = new FormData();
-  compressed.forEach((blob, i) => form.append('files', blob, files[i].name));
-  const r = await fetch('/api/upload', { method:'POST', headers:{'x-session-token':session.session_token}, body:form });
-  if (!r.ok) { alert('Upload failed. Please try again.'); return; }
-  const d = await r.json();
+// Instant local previews; compression + upload run in the background so the
+// user can keep typing. item.url is set when the upload succeeds.
+function uploadFiles(files) {
   const row = document.getElementById('media-prev-row');
-  for (const f of d.files) {
-    pendingMedia.push(f);
+  const items = Array.from(files).map(file => {
+    const localUrl = URL.createObjectURL(file);
+    const isVideo = file.type.startsWith('video');
     const div = document.createElement('div');
-    div.className = 'prev-thumb';
-    div.innerHTML = f.type==='video'
-      ? `<video src="${f.url}" muted></video><button onclick="rmMedia(this,'${f.url}')">×</button>`
-      : `<img src="${f.thumbUrl}"><button onclick="rmMedia(this,'${f.url}')">×</button>`;
+    div.className = 'prev-thumb uploading';
+    div.innerHTML = isVideo
+      ? `<video src="${localUrl}" muted></video><button>×</button>`
+      : `<img src="${localUrl}" alt=""><button>×</button>`;
+    const item = {
+      localUrl,
+      fileName: file.name,
+      type: isVideo ? 'video' : 'image',
+      url: null,
+      thumbUrl: null,
+      uploadPromise: null,
+      removed: false,
+      _div: div
+    };
+    div.querySelector('button').onclick = () => {
+      item.removed = true;
+      pendingMedia = pendingMedia.filter(x => x !== item);
+      div.remove();
+      URL.revokeObjectURL(item.localUrl);
+    };
     row.appendChild(div);
-  }
+    pendingMedia.push(item);
+    return { item, file };
+  });
+
+  const up = (async () => {
+    const compressed = await Promise.all(items.map(({ file }) => compressImage(file)));
+    const form = new FormData();
+    compressed.forEach((blob, i) => form.append('files', blob, items[i].file.name));
+    const r = await fetch('/api/upload', { method: 'POST', headers: { 'x-session-token': session.session_token }, body: form });
+    if (!r.ok) throw new Error('upload failed');
+    const d = await r.json();
+    d.files.forEach((f, i) => {
+      const { item } = items[i];
+      item.url = f.url;
+      item.thumbUrl = f.thumbUrl;
+      if (item._div.parentElement) item._div.classList.remove('uploading');
+    });
+  })();
+
+  // Silenced promise: never rejects. Failure is detected via item.url being null.
+  const upSilenced = up.catch(() => {});
+  upSilenced.then(() => {
+    if (items.some(({ item }) => !item.url && !item.removed)) {
+      items.forEach(({ item }) => {
+        if (item._div.parentElement) item._div.classList.remove('uploading');
+      });
+      showToast('Upload failed. Please try again.', 'error');
+    }
+  });
+
+  items.forEach(({ item }) => item.uploadPromise = upSilenced);
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  uploadFiles(Array.from(e.target.files));
   e.target.value = '';
 });
-
-function rmMedia(btn, url) {
-  pendingMedia = pendingMedia.filter(f=>f.url!==url);
-  btn.closest('.prev-thumb').remove();
-}
