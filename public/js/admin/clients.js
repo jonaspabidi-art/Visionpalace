@@ -42,6 +42,37 @@ async function loadClients() {
 }
 
 // ── Private chat ──
+
+// Pin the chat to the newest message and keep it there while media loads.
+// A ResizeObserver re-pins instantly whenever a row grows (image/video load),
+// and only a real user gesture (touch/wheel) cancels the pinning.
+let _chatAutoScroll = false;
+let _chatPinReady = false;
+let _chatPinObserver = null;
+
+function pinChatToBottom() {
+  const c = document.getElementById('chat-messages');
+  if (!c) return;
+  if (!_chatPinReady) {
+    _chatPinReady = true;
+    const cancel = () => { _chatAutoScroll = false; };
+    c.addEventListener('touchstart', cancel, { passive: true });
+    c.addEventListener('wheel', cancel, { passive: true });
+  }
+  _chatAutoScroll = true;
+  c.scrollTop = c.scrollHeight;
+  if (!_chatPinObserver) {
+    _chatPinObserver = new ResizeObserver(() => {
+      if (!_chatAutoScroll) return;
+      const el = document.getElementById('chat-messages');
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  } else {
+    _chatPinObserver.disconnect();
+  }
+  c.querySelectorAll('.msg-row').forEach(row => _chatPinObserver.observe(row));
+}
+
 async function openChat(clientId) {
   currentClientId = clientId;
   document.getElementById('chat-panel').classList.add('open');
@@ -62,7 +93,7 @@ async function openChat(clientId) {
     }
   });
   attachAdminImgFade(c);
-  requestAnimationFrame(() => requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; }));
+  requestAnimationFrame(pinChatToBottom);
   await markRead(clientId);
   const cl = clients.find(x => x.id === clientId);
   if (cl) { cl.unread_count = 0; renderClients(); updateUnreadBadge(); }
@@ -98,7 +129,11 @@ function appendMsg(m) {
   attachAdminImgFade(el);
   requestAnimationFrame(() => {
     const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
-    if (atBottom) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+    if (atBottom) {
+      c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+      _chatAutoScroll = true;
+      if (_chatPinObserver) _chatPinObserver.observe(el);
+    }
   });
 }
 
@@ -132,9 +167,19 @@ function msgHTML(m) {
     ).join('');
     bubbleInner = `<div class="bubble">${m.text ? esc(m.text) : ''}${mediaHTML ? `<div class="bubble-media">${mediaHTML}</div>` : ''}</div>`;
   }
-  return `<div class="msg-row ${from}">
+  let meta;
+  if (m._pending) {
+    meta = `Skickar… <span class="bc-sending-dot"></span>`;
+  } else if (m._failed) {
+    meta = `<span style="color:#ff7a7a">Kunde inte skicka</span>
+      <button class="msg-retry-btn" onclick="retryChatMsg('${m.id}')">Försök igen</button>
+      <button class="msg-discard-btn" onclick="discardChatMsg('${m.id}')" title="Släng">✕</button>`;
+  } else {
+    meta = `${time} ${tick}`;
+  }
+  return `<div class="msg-row ${from}${m._pending ? ' pending' : ''}${m._failed ? ' failed' : ''}" data-id="${m.id}">
     ${bubbleInner}
-    <div class="msg-meta">${time} ${tick}</div>
+    <div class="msg-meta">${meta}</div>
   </div>`;
 }
 
@@ -146,38 +191,98 @@ async function markRead(clientId) {
   await api(`/api/messages/${clientId}/read`, { method: 'POST' });
 }
 
-let sending = false;
-async function sendMessage() {
-  if (sending) return;
+// ── Optimistic send: bubble shows instantly, server ack replaces it ──
+let _pendingChatMsgs = {}; // tempId -> { clientId, text, items }
+
+function sendMessage() {
+  if (!currentClientId) return;
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   const items = pendingChatMedia.filter(i => !i.removed);
   if (!text && items.length === 0) return;
-  sending = true;
-  const btn = document.getElementById('send-btn');
-  btn.disabled = true;
+
+  // Clear composer instantly — feedback regardless of network speed
   input.value = '';
   autoResize(input);
+  pendingChatMedia = [];
+  document.getElementById('chat-media-prev').innerHTML = '';
+
+  const tempId = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const optimistic = {
+    id: tempId, sender: 'admin', text,
+    created_at: new Date().toISOString(),
+    message_media: items.map(i => ({
+      storage_url: i.url || i.localUrl,
+      thumbnail_url: i.thumbUrl || i.localUrl,
+      type: i.type
+    })),
+    _pending: true
+  };
+  _pendingChatMsgs[tempId] = { clientId: currentClientId, text, items };
+  appendMsg(optimistic);
+  deliverChatMsg(tempId);
+}
+
+async function deliverChatMsg(tempId) {
+  const p = _pendingChatMsgs[tempId];
+  if (!p) return;
   try {
-    const promises = [...new Set(items.map(i => i.uploadPromise).filter(Boolean))];
-    if (promises.length) {
-      try { await Promise.all(promises); }
-      catch { return; }
-    }
-    const media = items.map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
-    const r = await api(`/api/messages/${currentClientId}`, {
-      method: 'POST', body: JSON.stringify({ text, media })
+    const promises = [...new Set(p.items.map(i => i.uploadPromise).filter(Boolean))];
+    if (promises.length) await Promise.all(promises);
+    if (p.items.some(i => !i.removed && !i.url)) throw new Error('upload incomplete');
+    const media = p.items.filter(i => i.url).map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
+    const r = await api(`/api/messages/${p.clientId}`, {
+      method: 'POST', body: JSON.stringify({ text: p.text, media })
     });
-    if (r.ok) {
-      pendingChatMedia = [];
-      document.getElementById('chat-media-prev').innerHTML = '';
-      const d = await r.json();
-      appendMsg(d.message);
-    }
-  } finally {
-    sending = false;
-    btn.disabled = false;
+    if (!r.ok) throw new Error('server error');
+    const d = await r.json();
+    delete _pendingChatMsgs[tempId];
+    replaceMsgRow(tempId, d.message);
+  } catch {
+    setMsgRowState(tempId, { _failed: true });
   }
+}
+
+function replaceMsgRow(tempId, m) {
+  const row = document.querySelector(`.msg-row[data-id="${tempId}"]`);
+  if (!row) return;
+  const div = document.createElement('div');
+  div.innerHTML = msgHTML(m);
+  const el = div.firstElementChild;
+  row.replaceWith(el);
+  attachAdminImgFade(el);
+  if (_chatPinObserver && _chatAutoScroll) _chatPinObserver.observe(el);
+}
+
+function setMsgRowState(tempId, state) {
+  const p = _pendingChatMsgs[tempId];
+  if (!p) return;
+  const row = document.querySelector(`.msg-row[data-id="${tempId}"]`);
+  if (!row) return;
+  const m = {
+    id: tempId, sender: 'admin', text: p.text,
+    created_at: new Date().toISOString(),
+    message_media: p.items.map(i => ({
+      storage_url: i.url || i.localUrl,
+      thumbnail_url: i.thumbUrl || i.localUrl,
+      type: i.type
+    })),
+    ...state
+  };
+  const div = document.createElement('div');
+  div.innerHTML = msgHTML(m);
+  row.replaceWith(div.firstElementChild);
+}
+
+function retryChatMsg(tempId) {
+  setMsgRowState(tempId, { _pending: true });
+  deliverChatMsg(tempId);
+}
+
+function discardChatMsg(tempId) {
+  delete _pendingChatMsgs[tempId];
+  const row = document.querySelector(`.msg-row[data-id="${tempId}"]`);
+  if (row) row.remove();
 }
 
 document.getElementById('send-btn').onclick = sendMessage;

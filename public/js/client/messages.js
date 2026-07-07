@@ -41,13 +41,24 @@ function bubbleMediaHTML(m) {
   }).join('');
 }
 
+// Save/share a media file. Web Share (with file) gives the native share sheet
+// on mobile ("Save Image" → photo library) — far more reliable in an iOS PWA
+// than <a download>, which stays as the fallback.
 async function saveMedia(url) {
   try {
     const resp = await fetch(url);
     const blob = await resp.blob();
+    const name = url.split('/').pop().split('?')[0] || 'image.jpg';
+    if (navigator.canShare) {
+      const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+      }
+    }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = url.split('/').pop().split('?')[0] || 'media';
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -168,6 +179,7 @@ function appendChatMsg(m) {
   const from = m.sender === 'admin' ? 'from-admin' : 'from-me';
   const time = new Date(m.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   const lastGroup = c.querySelector('.msg-group:last-child');
+  let bubbleEl;
   if (lastGroup && lastGroup.classList.contains(from)) {
     const meta = lastGroup.querySelector('.msg-meta');
     if (meta) meta.remove();
@@ -187,11 +199,17 @@ function appendChatMsg(m) {
     metaEl.className = 'msg-meta';
     metaEl.textContent = time;
     lastGroup.appendChild(metaEl);
+    bubbleEl = bbl;
   } else {
     const el = document.createElement('div');
     el.className = `msg-group ${from} anim-in`;
     el.innerHTML = bubbleHTML(m) + `<div class="msg-meta">${time}</div>`;
     c.appendChild(el);
+    bubbleEl = el.querySelector('.bubble, .pc-card, .bubble-pdf');
+  }
+  if (bubbleEl) {
+    bubbleEl.dataset.mid = m.id;
+    if (m._pending) bubbleEl.classList.add('pending');
   }
   attachImgFade(c);
   if (chatOpen) {
@@ -200,13 +218,36 @@ function appendChatMsg(m) {
   }
 }
 
+// Scroll to the newest message and keep the chat pinned there while media
+// loads. A ResizeObserver re-pins instantly whenever a group grows (image/
+// video load); only a real user gesture (touch/wheel) cancels the pinning.
+let _chatAutoScroll = false;
+let _chatPinReady = false;
+let _chatPinObserver = null;
+
 function scrollChat(smooth = false) {
   const c = document.getElementById('chat-messages');
-  if (smooth) {
-    requestAnimationFrame(() => c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }));
-  } else {
-    requestAnimationFrame(() => c.scrollTop = c.scrollHeight);
+  if (!_chatPinReady) {
+    _chatPinReady = true;
+    const cancel = () => { _chatAutoScroll = false; };
+    c.addEventListener('touchstart', cancel, { passive: true });
+    c.addEventListener('wheel', cancel, { passive: true });
   }
+  _chatAutoScroll = true;
+  if (!_chatPinObserver) {
+    _chatPinObserver = new ResizeObserver(() => {
+      if (!_chatAutoScroll) return;
+      const el = document.getElementById('chat-messages');
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+  } else {
+    _chatPinObserver.disconnect();
+  }
+  requestAnimationFrame(() => {
+    if (smooth) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+    else c.scrollTop = c.scrollHeight;
+    c.querySelectorAll('.msg-group').forEach(g => _chatPinObserver.observe(g));
+  });
 }
 
 function attachImgFade(container) {
@@ -235,15 +276,14 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 });
 document.getElementById('chat-input').addEventListener('input', function(){ autoResize(this); });
 
-let sending = false;
-async function sendMsg() {
-  if (sending) return;
+// ── Optimistic send: bubble shows instantly, server ack confirms it ──
+let _pendingMsgs = {}; // tempId -> { fullText, broadcastMedia, items }
+
+function sendMsg() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
-  if (!text && !pendingMedia.length && !quotedBroadcastMedia.length) return;
-  sending = true;
-  const btn = document.getElementById('send-btn');
-  btn.disabled = true;
+  const items = pendingMedia.filter(i => !i.removed);
+  if (!text && !items.length && !quotedBroadcastMedia.length) return;
 
   let fullText = text;
   const broadcastMedia = [...quotedBroadcastMedia];
@@ -252,23 +292,96 @@ async function sendMsg() {
     fullText = `↩ ${ref}\n\n${text}`.trim();
   }
 
+  // Clear composer instantly — feedback regardless of network speed
   input.value = '';
   autoResize(input);
   dismissQuote();
+  pendingMedia = [];
+  document.getElementById('media-prev-row').innerHTML = '';
+
+  const tempId = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const optimistic = {
+    id: tempId, sender: 'client', text: fullText,
+    created_at: new Date().toISOString(),
+    message_media: [
+      ...broadcastMedia.map(m => ({ storage_url: m.url, thumbnail_url: m.thumbUrl || m.url, type: m.type })),
+      ...items.map(i => ({ storage_url: i.url || i.localUrl, thumbnail_url: i.thumbUrl || i.localUrl, type: i.type }))
+    ],
+    _pending: true
+  };
+  _pendingMsgs[tempId] = { fullText, broadcastMedia, items };
+  appendChatMsg(optimistic);
+  deliverMsg(tempId);
+}
+
+async function deliverMsg(tempId) {
+  const p = _pendingMsgs[tempId];
+  if (!p) return;
   try {
+    const promises = [...new Set(p.items.map(i => i.uploadPromise).filter(Boolean))];
+    if (promises.length) await Promise.all(promises);
+    if (p.items.some(i => !i.removed && !i.url)) throw new Error('upload incomplete');
+    const media = [
+      ...p.broadcastMedia,
+      ...p.items.filter(i => i.url).map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }))
+    ];
     const r = await fetch('/api/messages/me/send', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-session-token':session.session_token},
-      body: JSON.stringify({ text: fullText, media: [...broadcastMedia, ...pendingMedia] })
+      body: JSON.stringify({ text: p.fullText, media })
     });
-    if (r.ok) {
-      pendingMedia = [];
-      document.getElementById('media-prev-row').innerHTML = '';
-      const d = await r.json();
-      appendChatMsg(d.message);
-    }
-  } finally {
-    sending = false;
-    btn.disabled = false;
+    if (!r.ok) throw new Error('server error');
+    const d = await r.json();
+    delete _pendingMsgs[tempId];
+    ackMsg(tempId, d.message);
+  } catch {
+    failMsg(tempId);
   }
+}
+
+function ackMsg(tempId, real) {
+  renderedMsgIds.delete(tempId);
+  renderedMsgIds.add(real.id);
+  const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);
+  if (!bbl) return;
+  bbl.dataset.mid = real.id;
+  bbl.classList.remove('pending');
+  // Swap blob previews for the stored server media
+  if (bbl.classList.contains('bubble')) {
+    bbl.innerHTML = (real.text ? esc(real.text) : '') + bubbleMediaHTML(real);
+    attachImgFade(bbl.parentElement || bbl);
+  }
+}
+
+function failMsg(tempId) {
+  const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);
+  if (!bbl) return;
+  bbl.classList.remove('pending');
+  bbl.classList.add('failed');
+  if (!document.querySelector(`.msg-fail-row[data-fail="${tempId}"]`)) {
+    const row = document.createElement('div');
+    row.className = 'msg-fail-row';
+    row.dataset.fail = tempId;
+    row.innerHTML = `Couldn't send
+      <button onclick="retryMsg('${tempId}')">Try again</button>
+      <button onclick="discardMsg('${tempId}')" title="Discard">×</button>`;
+    bbl.insertAdjacentElement('afterend', row);
+  }
+}
+
+function retryMsg(tempId) {
+  const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);
+  if (bbl) { bbl.classList.remove('failed'); bbl.classList.add('pending'); }
+  const row = document.querySelector(`.msg-fail-row[data-fail="${tempId}"]`);
+  if (row) row.remove();
+  deliverMsg(tempId);
+}
+
+function discardMsg(tempId) {
+  delete _pendingMsgs[tempId];
+  renderedMsgIds.delete(tempId);
+  const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);
+  if (bbl) bbl.remove();
+  const row = document.querySelector(`.msg-fail-row[data-fail="${tempId}"]`);
+  if (row) row.remove();
 }

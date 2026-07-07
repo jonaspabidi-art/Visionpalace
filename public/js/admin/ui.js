@@ -83,6 +83,37 @@ document.getElementById('lightbox').onclick = e => {
   if (e.target === e.currentTarget || e.target.id === 'lb-close')
     document.getElementById('lightbox').classList.remove('open');
 };
+
+// Save/share the image shown in the lightbox. Web Share (with file) gives the
+// native share sheet on mobile ("Spara bild" → photo library); falls back to a
+// blob download, and as a last resort opens the image in a new tab.
+async function saveMedia(url) {
+  try {
+    const resp = await fetch(url);
+    const blob = await resp.blob();
+    const name = url.split('/').pop().split('?')[0] || 'bild.jpg';
+    if (navigator.canShare) {
+      const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+      }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch {
+    window.open(url, '_blank');
+  }
+}
+document.getElementById('lb-save').onclick = () => {
+  const src = document.getElementById('lb-img').src;
+  if (src) saveMedia(src);
+};
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('open');
 });
