@@ -1,5 +1,6 @@
 let _feedAutoScroll = false;
 let _feedScrollListenerReady = false;
+let _feedPinObserver = null;
 
 async function loadBroadcasts() {
   try {
@@ -99,23 +100,30 @@ function bcBubbleHTML(b) {
   </div>`;
 }
 
+// Pin the feed to the newest broadcast and keep it there while media loads.
+// A ResizeObserver re-pins instantly whenever a row grows (image/video load),
+// and only a real user gesture (touch/wheel) cancels the pinning — scroll
+// events can't be used for that since media loads trigger them too.
 function scrollFeedBottom() {
   const s = document.getElementById('feed-scroll');
   if (!_feedScrollListenerReady) {
     _feedScrollListenerReady = true;
-    s.addEventListener('scroll', () => {
-      if (_feedAutoScroll && s.scrollHeight - s.scrollTop - s.clientHeight > 80) {
-        _feedAutoScroll = false;
-      }
-    }, { passive: true });
+    const cancel = () => { _feedAutoScroll = false; };
+    s.addEventListener('touchstart', cancel, { passive: true });
+    s.addEventListener('wheel', cancel, { passive: true });
   }
   _feedAutoScroll = true;
-  s.scrollTop = 999999;
-  s.querySelectorAll('img').forEach(img => {
-    if (!img.complete) img.addEventListener('load', () => {
-      if (_feedAutoScroll) s.scrollTop = 999999;
-    }, { once: true });
-  });
+  s.scrollTop = s.scrollHeight;
+  if (!_feedPinObserver) {
+    _feedPinObserver = new ResizeObserver(() => {
+      if (!_feedAutoScroll) return;
+      const f = document.getElementById('feed-scroll');
+      if (f) f.scrollTop = f.scrollHeight;
+    });
+  } else {
+    _feedPinObserver.disconnect();
+  }
+  s.querySelectorAll('.bc-row').forEach(row => _feedPinObserver.observe(row));
 }
 
 function appendBroadcast(b) {

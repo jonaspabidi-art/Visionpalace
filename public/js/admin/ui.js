@@ -8,6 +8,7 @@ function switchTab(tab) {
   document.getElementById('header-title').textContent = titles[tab] || tab;
   document.getElementById('search-toggle-btn').style.display = tab === 'broadcast' ? '' : 'none';
   if (tab !== 'broadcast' && searchVisible) toggleSearch();
+  if (tab === 'broadcast') requestAnimationFrame(pinFeedToBottom);
   if (tab === 'inventory') loadInventory();
   if (tab === 'invoice') populateInvClientPicker();
   if (tab === 'historik') loadSalesHistory();

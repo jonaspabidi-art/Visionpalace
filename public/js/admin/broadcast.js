@@ -1,5 +1,33 @@
 let _bcAutoScroll = false;
 let _bcScrollListenerReady = false;
+let _bcPinObserver = null;
+
+// Pin the feed to the newest broadcast and keep it there while media loads.
+// A ResizeObserver re-pins instantly whenever a row grows (image/video load),
+// and only a real user gesture (touch/wheel) cancels the pinning — scroll
+// events can't be used for that since media loads trigger them too.
+function pinFeedToBottom() {
+  const feed = document.getElementById('bc-feed');
+  if (!feed) return;
+  if (!_bcScrollListenerReady) {
+    _bcScrollListenerReady = true;
+    const cancel = () => { _bcAutoScroll = false; };
+    feed.addEventListener('touchstart', cancel, { passive: true });
+    feed.addEventListener('wheel', cancel, { passive: true });
+  }
+  _bcAutoScroll = true;
+  feed.scrollTop = feed.scrollHeight;
+  if (!_bcPinObserver) {
+    _bcPinObserver = new ResizeObserver(() => {
+      if (!_bcAutoScroll) return;
+      const f = document.getElementById('bc-feed');
+      if (f) f.scrollTop = f.scrollHeight;
+    });
+  } else {
+    _bcPinObserver.disconnect();
+  }
+  feed.querySelectorAll('.bc-msg-row').forEach(row => _bcPinObserver.observe(row));
+}
 
 async function loadBroadcasts(q = '') {
   const gen = ++bcLoadGen;
@@ -35,23 +63,7 @@ function renderFeed(scrollToBottom = false) {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
-  if (scrollToBottom || prevScrollBottom < 60) {
-    if (!_bcScrollListenerReady) {
-      _bcScrollListenerReady = true;
-      feed.addEventListener('scroll', () => {
-        if (_bcAutoScroll && feed.scrollHeight - feed.scrollTop - feed.clientHeight > 80) {
-          _bcAutoScroll = false;
-        }
-      }, { passive: true });
-    }
-    _bcAutoScroll = true;
-    feed.scrollTop = 999999;
-    feed.querySelectorAll('img').forEach(img => {
-      if (!img.complete) img.addEventListener('load', () => {
-        if (_bcAutoScroll) feed.scrollTop = 999999;
-      }, { once: true });
-    });
-  }
+  if (scrollToBottom || prevScrollBottom < 60) pinFeedToBottom();
 }
 
 function appendBroadcast(b) {
@@ -62,7 +74,7 @@ function appendBroadcast(b) {
   const div = document.createElement('div');
   div.innerHTML = bcBubbleHTML(b);
   feed.appendChild(div.firstElementChild);
-  requestAnimationFrame(() => { feed.scrollTop = feed.scrollHeight; });
+  requestAnimationFrame(pinFeedToBottom);
 }
 
 function bcBubbleHTML(b) {
