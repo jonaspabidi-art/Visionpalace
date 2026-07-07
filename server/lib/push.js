@@ -11,19 +11,62 @@ webpush.setVapidDetails(
 const pushSubs = new Map(); // clientId -> PushSubscription
 const onlineClients = new Set(); // clientIds currently connected
 
-// Use a plain object so mutation works via reference across modules
+// Admin push subscriptions — one per device, keyed by endpoint so several
+// devices logged into the admin account all receive notifications.
+const adminPushSubs = new Map(); // endpoint -> PushSubscription
+// Kept for backwards compatibility with older require() sites
 const state = { adminPushSub: null };
 
-// Load admin push subscription from DB on startup so it survives server restarts
-supabase.from('app_settings').select('value').eq('key', 'admin_push_sub').single()
-  .then(({ data }) => {
-    if (data?.value) {
+async function saveAdminSubs() {
+  await supabase.from('app_settings').upsert({
+    key: 'admin_push_subs',
+    value: JSON.stringify([...adminPushSubs.values()]),
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function addAdminPushSub(sub) {
+  adminPushSubs.set(sub.endpoint, sub);
+  await saveAdminSubs();
+}
+
+// Load admin push subscriptions from DB on startup (including the legacy
+// single-subscription key, which is migrated into the list and removed)
+(async () => {
+  try {
+    const { data: rows } = await supabase.from('app_settings').select('key, value').in('key', ['admin_push_subs', 'admin_push_sub']);
+    let migrated = false;
+    for (const row of rows || []) {
       try {
-        const sub = JSON.parse(data.value);
-        if (isValidPushSub(sub)) { state.adminPushSub = sub; console.log('[Push] Admin push subscription loaded from DB'); }
+        const parsed = JSON.parse(row.value);
+        const subs = row.key === 'admin_push_subs' ? parsed : [parsed];
+        for (const sub of subs) {
+          if (isValidPushSub(sub)) adminPushSubs.set(sub.endpoint, sub);
+        }
+        if (row.key === 'admin_push_sub') migrated = true;
       } catch {}
     }
-  });
+    if (migrated) {
+      await saveAdminSubs();
+      await supabase.from('app_settings').delete().eq('key', 'admin_push_sub');
+    }
+    console.log(`[Push] ${adminPushSubs.size} admin push subscription(s) loaded from DB`);
+  } catch (e) { console.error('[Push] Failed to load admin subscriptions:', e.message); }
+})();
+
+// Send a push to every admin device; dead subscriptions (410/404) are pruned
+async function webPushAdmins(title, body, data = {}) {
+  if (!adminPushSubs.size) { console.log('[Push] No admin subscriptions'); return; }
+  let pruned = false;
+  await Promise.allSettled([...adminPushSubs.entries()].map(([endpoint, sub]) =>
+    webpush.sendNotification(sub, JSON.stringify({ title, body, data }))
+      .catch(e => {
+        console.error(`[Push] Admin push failed: ${e.statusCode} ${e.message}`);
+        if (e.statusCode === 410 || e.statusCode === 404) { adminPushSubs.delete(endpoint); pruned = true; }
+      })
+  ));
+  if (pruned) await saveAdminSubs().catch(() => {});
+}
 
 function isValidPushSub(sub) {
   return sub
@@ -39,13 +82,13 @@ function clearSub(clientId) {
   supabase.from('clients').update({ onesignal_player_id: null }).eq('id', clientId).then(() => {});
 }
 
-async function webPushClient(clientId, title, body) {
+async function webPushClient(clientId, title, body, data = {}) {
   const sub = pushSubs.get(clientId);
   if (!sub) { console.log(`[Push] No subscription for client ${clientId} (total: ${pushSubs.size})`); return; }
   if (!isValidPushSub(sub)) { console.warn(`[Push] Invalid subscription for ${clientId}, removing`); clearSub(clientId); return; }
   console.log(`[Push] Sending to client ${clientId}...`);
   try {
-    await webpush.sendNotification(sub, JSON.stringify({ title, body }));
+    await webpush.sendNotification(sub, JSON.stringify({ title, body, data }));
     console.log(`[Push] Delivered OK to ${clientId}`);
   } catch(e) {
     console.error(`[Push] Failed for ${clientId}: ${e.statusCode} ${e.message}`);
@@ -106,4 +149,4 @@ async function loadPushSubs() {
   console.log(`Loaded ${count} push subscriptions from DB`);
 }
 
-module.exports = { pushSubs, onlineClients, state, isValidPushSub, webPushClient, webPushAll, sendPushToAll, sendPushToPlayer, loadPushSubs };
+module.exports = { pushSubs, onlineClients, state, adminPushSubs, addAdminPushSub, webPushAdmins, isValidPushSub, webPushClient, webPushAll, sendPushToAll, sendPushToPlayer, loadPushSubs };

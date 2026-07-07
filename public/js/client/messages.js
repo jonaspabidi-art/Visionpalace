@@ -35,7 +35,7 @@ function bubbleMediaHTML(m) {
       <button class="media-save-btn" onclick="saveMedia('${full}')" title="Save">↓</button>
     </div>`;
     return `<div class="media-wrap">
-      <img class="bubble-img" src="${md.thumbnail_url||full}" data-full="${full}" onclick="openLightbox(this.dataset.full)" loading="lazy">
+      <img class="bubble-img" src="${md.thumbnail_url||full}" data-full="${full}" onclick="openLightbox(this.dataset.full)" loading="lazy" decoding="async">
       <button class="media-save-btn" onclick="saveMedia('${full}')" title="Save">↓</button>
     </div>`;
   }).join('');

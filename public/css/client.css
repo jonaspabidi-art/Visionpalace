@@ -292,7 +292,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 .msg-group.from-me .msg-meta { text-align: right; }
 .msg-group.anim-in .msg-meta { animation: msgFadeUp .25s ease .14s both; }
 .media-wrap { position: relative; display: inline-block; margin-top: 6px; }
-.bubble-img { max-width: 200px; min-width: 80px; min-height: 60px; border-radius: 10px; display: block; cursor: pointer; opacity: 0; transition: opacity .3s ease; background: var(--surface2); }
+/* Fixed square box so images never shift layout when they load mid-scroll */
+.bubble-img { width: min(200px, 100%); aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; cursor: pointer; opacity: 0; transition: opacity .3s ease; background: var(--surface2); }
 .bubble-img.loaded { opacity: 1; }
 .bubble-vid { max-width: 200px; border-radius: 10px; display: block; }
 .media-save-btn {

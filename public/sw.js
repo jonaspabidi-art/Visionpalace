@@ -1,4 +1,4 @@
-const CACHE = 'vp-v13';
+const CACHE = 'vp-v14';
 const SHELL = ['/client', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -45,12 +45,24 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const data = e.notification.data || {};
+  const target = data.url || '/client'; // '/admin' for admin notifications
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wins => {
-      for (const w of wins) {
-        if ('focus' in w) return w.focus();
+      // Focus a window of the RIGHT app (admin vs client), never the other one
+      const win = wins.find(w => {
+        try { return new URL(w.url).pathname.startsWith(target); } catch { return false; }
+      });
+      if (win) {
+        win.postMessage({ type: 'notification-click', ...data });
+        return win.focus();
       }
-      return clients.openWindow('/client');
+      // Fresh open: pass the navigation target in the hash so the app can
+      // land on the right chat/tab after boot
+      let url = target;
+      if (data.client_id) url += `#client=${data.client_id}`;
+      else if (data.tab) url += `#tab=${data.tab}`;
+      return clients.openWindow(url);
     })
   );
 });
