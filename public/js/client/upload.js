@@ -34,6 +34,7 @@ function uploadFiles(files) {
       : `<img src="${localUrl}" alt=""><button>×</button>`;
     const item = {
       localUrl,
+      fileName: file.name,
       type: isVideo ? 'video' : 'image',
       url: null,
       thumbUrl: null,
@@ -45,6 +46,7 @@ function uploadFiles(files) {
       item.removed = true;
       pendingMedia = pendingMedia.filter(x => x !== item);
       div.remove();
+      URL.revokeObjectURL(item.localUrl);
     };
     row.appendChild(div);
     pendingMedia.push(item);

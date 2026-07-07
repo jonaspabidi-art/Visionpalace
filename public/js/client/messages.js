@@ -222,30 +222,32 @@ function appendChatMsg(m) {
 // loads. A ResizeObserver re-pins instantly whenever a group grows (image/
 // video load); only a real user gesture (touch/wheel) cancels the pinning.
 let _chatAutoScroll = false;
-let _chatPinReady = false;
 let _chatPinObserver = null;
+let _chatPinScheduled = false;
 
 function scrollChat(smooth = false) {
   const c = document.getElementById('chat-messages');
-  if (!_chatPinReady) {
-    _chatPinReady = true;
+  _chatAutoScroll = true;
+  if (!_chatPinObserver) {
     const cancel = () => { _chatAutoScroll = false; };
     c.addEventListener('touchstart', cancel, { passive: true });
     c.addEventListener('wheel', cancel, { passive: true });
-  }
-  _chatAutoScroll = true;
-  if (!_chatPinObserver) {
+    // Coalesce re-pins to one per frame — media load bursts fire many resizes
     _chatPinObserver = new ResizeObserver(() => {
-      if (!_chatAutoScroll) return;
-      const el = document.getElementById('chat-messages');
-      if (el) el.scrollTop = el.scrollHeight;
+      if (!_chatAutoScroll || _chatPinScheduled) return;
+      _chatPinScheduled = true;
+      requestAnimationFrame(() => {
+        _chatPinScheduled = false;
+        if (!_chatAutoScroll) return;
+        const el = document.getElementById('chat-messages');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
     });
-  } else {
-    _chatPinObserver.disconnect();
   }
   requestAnimationFrame(() => {
     if (smooth) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
     else c.scrollTop = c.scrollHeight;
+    // observe() on an already-observed element is a spec'd no-op
     c.querySelectorAll('.msg-group').forEach(g => _chatPinObserver.observe(g));
   });
 }
@@ -314,12 +316,28 @@ function sendMsg() {
   deliverMsg(tempId);
 }
 
+// Re-upload items whose first upload failed, using the local blob still shown
+// in the pending bubble — makes "Try again" work after an upload failure.
+async function reuploadItems(items, headers) {
+  const missing = items.filter(i => !i.removed && !i.url && i.localUrl);
+  if (!missing.length) return;
+  const blobs = await Promise.all(missing.map(i => fetch(i.localUrl).then(r => r.blob())));
+  const compressed = await Promise.all(blobs.map(b => compressImage(b)));
+  const form = new FormData();
+  compressed.forEach((blob, i) => form.append('files', blob, missing[i].fileName || 'media.jpg'));
+  const r = await fetch('/api/upload', { method: 'POST', headers, body: form });
+  if (!r.ok) return;
+  const d = await r.json();
+  (d.files || []).forEach((f, i) => { missing[i].url = f.url; missing[i].thumbUrl = f.thumbUrl; });
+}
+
 async function deliverMsg(tempId) {
   const p = _pendingMsgs[tempId];
   if (!p) return;
   try {
     const promises = [...new Set(p.items.map(i => i.uploadPromise).filter(Boolean))];
     if (promises.length) await Promise.all(promises);
+    await reuploadItems(p.items, { 'x-session-token': session.session_token });
     if (p.items.some(i => !i.removed && !i.url)) throw new Error('upload incomplete');
     const media = [
       ...p.broadcastMedia,
@@ -334,6 +352,7 @@ async function deliverMsg(tempId) {
     const d = await r.json();
     delete _pendingMsgs[tempId];
     ackMsg(tempId, d.message);
+    p.items.forEach(i => { if (i.localUrl) URL.revokeObjectURL(i.localUrl); });
   } catch {
     failMsg(tempId);
   }
@@ -341,8 +360,15 @@ async function deliverMsg(tempId) {
 
 function ackMsg(tempId, real) {
   renderedMsgIds.delete(tempId);
-  renderedMsgIds.add(real.id);
   const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);
+  // If the persisted message already arrived via a thread refetch (socket
+  // reconnect during the send), drop the optimistic bubble instead of
+  // converting it — otherwise the message would show twice.
+  if (renderedMsgIds.has(real.id)) {
+    if (bbl) bbl.remove();
+    return;
+  }
+  renderedMsgIds.add(real.id);
   if (!bbl) return;
   bbl.dataset.mid = real.id;
   bbl.classList.remove('pending');
@@ -378,6 +404,8 @@ function retryMsg(tempId) {
 }
 
 function discardMsg(tempId) {
+  const p = _pendingMsgs[tempId];
+  if (p) p.items.forEach(i => { if (i.localUrl) URL.revokeObjectURL(i.localUrl); });
   delete _pendingMsgs[tempId];
   renderedMsgIds.delete(tempId);
   const bbl = document.querySelector(`#chat-messages [data-mid="${tempId}"]`);

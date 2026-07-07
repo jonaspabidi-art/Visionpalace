@@ -47,30 +47,38 @@ async function loadClients() {
 // A ResizeObserver re-pins instantly whenever a row grows (image/video load),
 // and only a real user gesture (touch/wheel) cancels the pinning.
 let _chatAutoScroll = false;
-let _chatPinReady = false;
 let _chatPinObserver = null;
+let _chatPinScheduled = false;
 
 function pinChatToBottom() {
   const c = document.getElementById('chat-messages');
   if (!c) return;
-  if (!_chatPinReady) {
-    _chatPinReady = true;
+  if (!_chatPinObserver) {
     const cancel = () => { _chatAutoScroll = false; };
     c.addEventListener('touchstart', cancel, { passive: true });
     c.addEventListener('wheel', cancel, { passive: true });
-  }
-  _chatAutoScroll = true;
-  c.scrollTop = c.scrollHeight;
-  if (!_chatPinObserver) {
+    // Coalesce re-pins to one per frame — media load bursts fire many resizes
     _chatPinObserver = new ResizeObserver(() => {
-      if (!_chatAutoScroll) return;
-      const el = document.getElementById('chat-messages');
-      if (el) el.scrollTop = el.scrollHeight;
+      if (!_chatAutoScroll || _chatPinScheduled) return;
+      _chatPinScheduled = true;
+      requestAnimationFrame(() => {
+        _chatPinScheduled = false;
+        if (!_chatAutoScroll) return;
+        const el = document.getElementById('chat-messages');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
     });
   } else {
     _chatPinObserver.disconnect();
   }
+  _chatAutoScroll = true;
+  c.scrollTop = c.scrollHeight;
   c.querySelectorAll('.msg-row').forEach(row => _chatPinObserver.observe(row));
+}
+
+function unpinChat() {
+  _chatAutoScroll = false;
+  if (_chatPinObserver) _chatPinObserver.disconnect();
 }
 
 async function openChat(clientId) {
@@ -208,9 +216,10 @@ function sendMessage() {
   document.getElementById('chat-media-prev').innerHTML = '';
 
   const tempId = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const createdAt = new Date().toISOString();
   const optimistic = {
     id: tempId, sender: 'admin', text,
-    created_at: new Date().toISOString(),
+    created_at: createdAt,
     message_media: items.map(i => ({
       storage_url: i.url || i.localUrl,
       thumbnail_url: i.thumbUrl || i.localUrl,
@@ -218,9 +227,24 @@ function sendMessage() {
     })),
     _pending: true
   };
-  _pendingChatMsgs[tempId] = { clientId: currentClientId, text, items };
+  _pendingChatMsgs[tempId] = { clientId: currentClientId, text, items, createdAt };
   appendMsg(optimistic);
   deliverChatMsg(tempId);
+}
+
+// Re-upload items whose first upload failed, using the local blob still shown
+// in the pending bubble — makes "Försök igen" work after an upload failure.
+async function reuploadChatItems(items) {
+  const missing = items.filter(i => !i.removed && !i.url && i.localUrl);
+  if (!missing.length) return;
+  const blobs = await Promise.all(missing.map(i => fetch(i.localUrl).then(r => r.blob())));
+  const compressed = await Promise.all(blobs.map(b => compressImage(b)));
+  const form = new FormData();
+  compressed.forEach((blob, i) => form.append('files', blob, missing[i].fileName || 'media.jpg'));
+  const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  if (!r.ok) return;
+  const d = await r.json();
+  (d.files || []).forEach((f, i) => { missing[i].url = f.url; missing[i].thumbUrl = f.thumbUrl; });
 }
 
 async function deliverChatMsg(tempId) {
@@ -229,6 +253,7 @@ async function deliverChatMsg(tempId) {
   try {
     const promises = [...new Set(p.items.map(i => i.uploadPromise).filter(Boolean))];
     if (promises.length) await Promise.all(promises);
+    await reuploadChatItems(p.items);
     if (p.items.some(i => !i.removed && !i.url)) throw new Error('upload incomplete');
     const media = p.items.filter(i => i.url).map(i => ({ url: i.url, thumbUrl: i.thumbUrl, type: i.type }));
     const r = await api(`/api/messages/${p.clientId}`, {
@@ -238,6 +263,7 @@ async function deliverChatMsg(tempId) {
     const d = await r.json();
     delete _pendingChatMsgs[tempId];
     replaceMsgRow(tempId, d.message);
+    p.items.forEach(i => { if (i.localUrl) URL.revokeObjectURL(i.localUrl); });
   } catch {
     setMsgRowState(tempId, { _failed: true });
   }
@@ -261,7 +287,7 @@ function setMsgRowState(tempId, state) {
   if (!row) return;
   const m = {
     id: tempId, sender: 'admin', text: p.text,
-    created_at: new Date().toISOString(),
+    created_at: p.createdAt,
     message_media: p.items.map(i => ({
       storage_url: i.url || i.localUrl,
       thumbnail_url: i.thumbUrl || i.localUrl,
@@ -271,7 +297,10 @@ function setMsgRowState(tempId, state) {
   };
   const div = document.createElement('div');
   div.innerHTML = msgHTML(m);
-  row.replaceWith(div.firstElementChild);
+  const el = div.firstElementChild;
+  row.replaceWith(el);
+  attachAdminImgFade(el);
+  if (_chatPinObserver && _chatAutoScroll) _chatPinObserver.observe(el);
 }
 
 function retryChatMsg(tempId) {
@@ -280,6 +309,8 @@ function retryChatMsg(tempId) {
 }
 
 function discardChatMsg(tempId) {
+  const p = _pendingChatMsgs[tempId];
+  if (p) p.items.forEach(i => { if (i.localUrl) URL.revokeObjectURL(i.localUrl); });
   delete _pendingChatMsgs[tempId];
   const row = document.querySelector(`.msg-row[data-id="${tempId}"]`);
   if (row) row.remove();
@@ -295,6 +326,7 @@ document.getElementById('msg-input').addEventListener('input', function () { aut
 document.getElementById('chat-back').onclick = () => {
   document.getElementById('chat-panel').classList.remove('open');
   currentClientId = null;
+  unpinChat();
 };
 
 document.getElementById('label-save-btn').onclick = async () => {
@@ -313,6 +345,7 @@ document.getElementById('delete-client-btn').onclick = async () => {
     clients = clients.filter(x => x.id !== currentClientId);
     currentClientId = null;
     document.getElementById('chat-panel').classList.remove('open');
+    unpinChat();
     renderClients();
   }
 };
