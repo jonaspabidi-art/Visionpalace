@@ -170,7 +170,7 @@ function msgHTML(m) {
     const mediaHTML = media.map(md => md.storage_url
       ? (md.type === 'video'
         ? `<video src="${md.storage_url}" controls style="max-width:200px;border-radius:10px;margin-top:6px;display:block"></video>`
-        : `<img src="${md.thumbnail_url || md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" style="max-width:200px;border-radius:10px;margin-top:6px;cursor:pointer;display:block" loading="lazy">`)
+        : `<img src="${md.thumbnail_url || md.storage_url}" data-full="${md.storage_url}" onclick="openLightbox(this.dataset.full)" loading="lazy" decoding="async">`)
       : `<span style="font-size:12px;color:#555;font-style:italic">Bild ej tillgänglig</span>`
     ).join('');
     bubbleInner = `<div class="bubble">${m.text ? esc(m.text) : ''}${mediaHTML ? `<div class="bubble-media">${mediaHTML}</div>` : ''}</div>`;

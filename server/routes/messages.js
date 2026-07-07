@@ -1,7 +1,6 @@
 const { adminAuth, clientAuth, anyAuth, verifyPassword, hashPassword } = require('../lib/auth');
-const { state, isValidPushSub, webPushClient, sendPushToPlayer } = require('../lib/push');
+const { webPushAdmins, webPushClient, sendPushToPlayer } = require('../lib/push');
 const supabase = require('../lib/supabase');
-const webpush = require('web-push');
 
 module.exports = (io) => {
   const router = require('express').Router();
@@ -51,7 +50,7 @@ module.exports = (io) => {
     io.to(`client:${clientId}`).emit('admin:new_message', { message: full.data });
     io.to(`admin-${req.adminId}`).emit('message:sent', { message: full.data });
 
-    webPushClient(clientId, 'Vision Palace', 'Nytt meddelande').catch(() => {});
+    webPushClient(clientId, 'Vision Palace', 'Nytt meddelande', { url: '/client', tab: 'messages' }).catch(() => {});
     if (client.onesignal_player_id) {
       await sendPushToPlayer(client.onesignal_player_id, 'Vision Palace', 'Nytt meddelande från admin', { type: 'message', client_id: clientId });
     }
@@ -76,15 +75,11 @@ module.exports = (io) => {
     const adminRoom = req.client.admin_id ? `admin-${req.client.admin_id}` : 'admins';
     io.to(adminRoom).emit('client:new_message', { message: full.data, client: req.client });
 
-    if (state.adminPushSub && isValidPushSub(state.adminPushSub)) {
-      webpush.sendNotification(state.adminPushSub, JSON.stringify({
-        title: req.client.admin_label || req.client.display_name,
-        body: text || 'Skickade ett media'
-      })).catch(e => {
-        console.error(`[Push] Admin push failed: ${e.statusCode} ${e.message}`);
-        if (e.statusCode === 410 || e.statusCode === 404) { state.adminPushSub = null; supabase.from('app_settings').delete().eq('key', 'admin_push_sub').then(() => {}); }
-      });
-    }
+    webPushAdmins(
+      req.client.admin_label || req.client.display_name,
+      text || 'Skickade ett media',
+      { url: '/admin', client_id: req.client.id }
+    ).catch(() => {});
 
     res.json({ message: full.data });
   });

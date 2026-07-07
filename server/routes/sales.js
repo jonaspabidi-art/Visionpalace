@@ -80,7 +80,7 @@ module.exports = (io) => {
     if (error || !sale) return res.status(error ? 500 : 404).json({ error: error?.message || 'Hittades inte' });
     if (status === 'shipped') {
       const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
-      webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`).catch(() => {});
+      webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`, { url: '/client', tab: 'purchases' }).catch(() => {});
     }
     io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
     res.json({ ok: true, sale });

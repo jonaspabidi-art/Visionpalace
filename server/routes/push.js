@@ -1,5 +1,5 @@
 const { adminAuth, clientAuth } = require('../lib/auth');
-const { pushSubs, state, isValidPushSub } = require('../lib/push');
+const { pushSubs, adminPushSubs, addAdminPushSub, isValidPushSub } = require('../lib/push');
 const supabase = require('../lib/supabase');
 
 module.exports = (io) => {
@@ -25,17 +25,20 @@ module.exports = (io) => {
     res.json({ ok: true });
   });
 
-  // Save web push subscription (admin)
+  // Save web push subscription (admin) — one per device, keyed by endpoint
   router.post('/push/admin-subscribe', adminAuth, async (req, res) => {
-    const { subscription } = req.body;
+    const { subscription, replaced_endpoint } = req.body;
     console.log(`[Push] Admin subscribe request, endpoint present: ${!!subscription?.endpoint}`);
     if (!isValidPushSub(subscription)) {
       console.warn('[Push] Invalid admin subscription body');
       return res.status(400).json({ error: 'Invalid subscription' });
     }
-    state.adminPushSub = subscription;
-    await supabase.from('app_settings').upsert({ key: 'admin_push_sub', value: JSON.stringify(subscription), updated_at: new Date().toISOString() });
-    console.log('[Push] Admin push subscription registered and saved to DB');
+    // The device renewed its subscription — drop the old endpoint it replaced
+    if (replaced_endpoint && replaced_endpoint !== subscription.endpoint) {
+      adminPushSubs.delete(replaced_endpoint);
+    }
+    await addAdminPushSub(subscription);
+    console.log(`[Push] Admin push subscription registered (${adminPushSubs.size} device(s))`);
     res.json({ ok: true });
   });
 

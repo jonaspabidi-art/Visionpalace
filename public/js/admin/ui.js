@@ -197,23 +197,25 @@ function showToast(msg, type) {
 
 async function registerAdminPushSub() {
   try {
-    const kr = await fetch('/api/push/vapid-key');
-    if (!kr.ok) throw new Error('vapid-key ' + kr.status);
-    const { publicKey } = await kr.json();
-    if (!publicKey) throw new Error('no publicKey');
-
     const sw = await Promise.race([
       navigator.serviceWorker.ready,
       new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 10000))
     ]);
 
-    const existing = await sw.pushManager.getSubscription();
-    if (existing) await existing.unsubscribe();
-    const sub = await sw.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey)
-    });
-    if (!sub) throw new Error('subscribe returned null');
+    // Reuse this device's existing subscription — unsubscribing/resubscribing
+    // would invalidate the endpoint the server already knows about
+    let sub = await sw.pushManager.getSubscription();
+    if (!sub) {
+      const kr = await fetch('/api/push/vapid-key');
+      if (!kr.ok) throw new Error('vapid-key ' + kr.status);
+      const { publicKey } = await kr.json();
+      if (!publicKey) throw new Error('no publicKey');
+      sub = await sw.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+      if (!sub) throw new Error('subscribe returned null');
+    }
 
     const r = await fetch('/api/push/admin-subscribe', {
       method: 'POST',
