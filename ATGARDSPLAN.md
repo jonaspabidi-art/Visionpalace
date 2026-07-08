@@ -137,6 +137,84 @@
 
 ---
 
+## Ny funktionalitet — Inköp & bokföring (beslutad 2026-07-08)
+
+> Kontext från ägaren: appen används av ett slutet sällskap (3 admins i bolaget,
+> klienter enbart via inbjudningslänk — inga öppna länkar). Försäljning sker till
+> 99 % till UK utanför EU ⇒ **ingen moms** i något av flödena nedan. Inköp görs
+> från Kering (distributör för Cartier) som skickar ett orderpapper med
+> ref-nummer, antal och pris per rad. P0-säkerhetspunkterna ovan kvarstår men
+> kan tas i lugnare takt givet den slutna användarkretsen — rate limiting på
+> login (punkt 4) är fortfarande viktigast eftersom appen ligger på öppna
+> internet.
+
+### 23. Inköpslogg + "köpt av" (grunden — bygg först)
+**Problem:** Inköp loggas inte. När en vara säljs RADERAS lagerraden — inköpspriset
+lever bara kvar som kopia på `sale_items`, och en vara som aldrig säljs syns aldrig
+i något underlag. Bokföring behöver inköpet **när det görs**. Lagret är dessutom
+delat utan `admin_id`, så det syns inte vem av de två säljande admin-kontona som
+gjort ett inköp.
+**Lösning:**
+1. Ny tabell (SQL körs i Supabase SQL Editor):
+   ```sql
+   CREATE TABLE purchases (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     admin_id uuid REFERENCES admins(id),
+     inventory_id uuid,             -- ingen FK: lagerraden raderas vid sälj, loggen ska bestå
+     name text NOT NULL,
+     ref_code text,
+     buy_price numeric,
+     qty int NOT NULL DEFAULT 1,
+     source text NOT NULL DEFAULT 'manual',   -- 'manual' | 'order_import'
+     document_url text,             -- orderpapper (bild/PDF) i storage-bucketen
+     created_at timestamptz NOT NULL DEFAULT now()
+   );
+   ```
+2. `POST /api/inventory` skriver automatiskt en `purchases`-rad när en vara skapas
+   (admin_id = `req.adminId`, buy_price/ref_code/name från varan). Ingen UI-ändring.
+3. Liten "köpt av"-väljare i lagerformuläret (två knappar, förifylld med inloggad
+   admin) om inköpet ska bokas på den andra admin. Skickas som `purchased_by` i
+   POST-kroppen; default `req.adminId`.
+4. Radering av lagervara ska INTE radera inköpsloggen (den är historik).
+
+### 24. "Läs in order" — AI-avläsning av Kering-orderpapper
+**Idé (ägarens):** fota/ladda upp orderpappret → appen läser av ref-nummer, antal
+och pris → granskningslista → bekräfta → varorna skapas i lagret (kända ref-koder
+återanvänder namn/bild/säljpris via befintliga `GET /inventory/ref-lookup`).
+**Modellval:** `claude-haiku-4-5` räcker (enkel strukturerad extraktion ur dokument;
+vision + PDF stöds). Pris $1/M input-tokens, $5/M output. En order ≈ 2 000 in +
+400 ut ≈ **$0,004 ≈ 4 öre per order**. Blir avläsningen opålitlig på stökiga foton:
+byt modellsträngen till `claude-sonnet-5` (~3× dyrare, fortfarande ören). Kräver
+förbetalda API-krediter hos Anthropic (min. $5 — räcker i åratal på denna volym).
+**Bygge:**
+1. Env-variabel `ANTHROPIC_API_KEY` i Railway. Installera `@anthropic-ai/sdk`.
+2. Ny route `POST /api/orders/parse` (adminAuth, multer, 1 fil: jpeg/png/webp/pdf):
+   skicka filen som `image`-/`document`-block till Messages API med instruktionen
+   att returnera JSON `[{ref_code, qty, price}]` (använd `output_config.format`
+   med json_schema så svaret alltid är giltig JSON). Svara `{ rows }`.
+3. Granskningsvy i Lager-fliken ("Läs in order"-knapp): varje rad slås upp mot
+   `GET /inventory/ref-lookup` — träff = grön rad med förifyllt namn/bild/säljpris;
+   okänd ref = gul rad där namn/bild fylls i manuellt (sparas till nästa gång).
+   Antal N ⇒ N lagerrader. **Aldrig auto-skapande utan bekräftelse.**
+4. Vid bekräftelse: ladda upp originaldokumentet via befintliga `/api/upload`,
+   skapa lagerrader + `purchases`-rader (source `'order_import'`, `document_url`).
+5. Felväg: om AI-anropet misslyckas visas ett tydligt fel och man använder
+   vanliga skapa produkt-flödet — inget annat påverkas.
+
+### 25. Bokföringsexport (CSV per månad och admin)
+**Lösning:** Knapp under Historik: välj månad → `GET /api/export/bookkeeping?month=YYYY-MM`
+(adminAuth) → CSV med två sektioner (eller två filer): **Försäljningar** (datum,
+fakturanummer, klient, varor, belopp, vinst — från `sales`+`sale_items` filtrerat
+på `admin_id` + månad) och **Inköp** (datum, vara, ref, inköpspris, källa — från
+`purchases`). Inga momskolumner (UK-export). CSV räcker för import i
+Fortnox/Visma/Bokio eller vidarebefordran till redovisningskonsult; ingen
+API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
+
+**Byggordning:** 23 → 25 → 24 (exporten ger värde direkt; AI-importen är störst
+och bygger på inköpsloggen). 23+25 ryms i en session; 24 är en egen session.
+
+---
+
 ## Prioriteringsförslag per session
 
 | Session | Innehåll | Berör server? |
@@ -147,5 +225,7 @@
 | 4 | P1: punkt 8–9 (fakturasekvens + transaktionell försäljning, SQL-migration) | Ja — omstart |
 | 5 | P1: punkt 10–12 + P2 efter behov | Ja — omstart |
 | 6 | P3: punkt 16–19 (refaktor + CI + CLAUDE.md) | Nej |
+| 7 | Nytt: punkt 23 + 25 (inköpslogg, "köpt av", bokföringsexport; SQL-migration) | Ja — omstart |
+| 8 | Nytt: punkt 24 (AI-avläsning av Kering-order, kräver ANTHROPIC_API_KEY) | Ja — omstart |
 
 **Testchecklista efter varje deploy:** admin-login, klient-login, skicka meddelande åt båda håll (med bild), skapa sälj (lagret uppdateras i UI), broadcast med bild (landar på senaste), push-notis till båda admin-enheterna + klick landar rätt, katalog-PDF.
