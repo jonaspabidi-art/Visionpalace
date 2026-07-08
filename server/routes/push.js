@@ -38,8 +38,8 @@ module.exports = (io) => {
       adminPushSubs.delete(replaced_endpoint);
     }
     await addAdminPushSub(subscription);
-    console.log(`[Push] Admin push subscription registered (${adminPushSubs.size} device(s))`);
-    res.json({ ok: true });
+    console.log(`[Push] Admin push subscription registered …${subscription.endpoint.slice(-12)} (${adminPushSubs.size} device(s))`);
+    res.json({ ok: true, devices: adminPushSubs.size });
   });
 
   // Save OneSignal player ID for client
