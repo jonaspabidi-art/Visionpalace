@@ -1,6 +1,7 @@
 // ── Lens form state ──
 let lensFormItemId = null;
-let lensFormImage = undefined;
+let lensFormImage = undefined; // image URL (undefined = unchanged on edit)
+let lensFormImageBlob = null;  // freshly picked image, uploaded on save
 let _lensVariantRows = [];
 
 // ── Tab toggle ──
@@ -57,6 +58,7 @@ function renderLenses(items) {
 function openLensForm(lensId) {
   lensFormItemId = lensId || null;
   lensFormImage = undefined;
+  lensFormImageBlob = null;
   _lensVariantRows = [];
   const lens = lensId ? lensesMap[lensId] : null;
   document.getElementById('lens-form-title').textContent = lens ? 'Redigera lins' : 'Ny lins';
@@ -84,18 +86,19 @@ function closeLensForm() {
   document.getElementById('lens-form-modal').classList.remove('open');
   lensFormItemId = null;
   lensFormImage = undefined;
+  lensFormImageBlob = null;
   _lensVariantRows = [];
 }
 
 function handleLensImg(input) {
   const file = input.files[0];
   if (!file) return;
-  compressInvImage(file, base64 => {
-    lensFormImage = base64;
+  compressInvImage(file, (blob, previewUrl) => {
+    lensFormImageBlob = blob;
     const pick = document.getElementById('lens-img-pick');
     let img = pick.querySelector('img.inv-preview-img');
     if (!img) { img = document.createElement('img'); img.className = 'inv-preview-img'; pick.appendChild(img); }
-    img.src = base64;
+    img.src = previewUrl;
   });
 }
 
@@ -135,9 +138,24 @@ async function saveLensItem() {
     notes:      document.getElementById('lensf-notes').value.trim() || null,
     variants
   };
-  if (lensFormImage !== undefined) body.image = lensFormImage;
   const btn = document.querySelector('#lens-form-modal .inv-gen-btn');
-  btn.textContent = 'Sparar…'; btn.disabled = true;
+  btn.disabled = true;
+
+  // A freshly picked image is uploaded to storage first; the row stores its URL
+  if (lensFormImageBlob) {
+    btn.textContent = 'Laddar upp bild…';
+    const url = await uploadProductImage(lensFormImageBlob);
+    if (!url) {
+      showToast('Bilduppladdningen misslyckades — linsen sparades inte', 'error');
+      btn.textContent = 'Spara'; btn.disabled = false;
+      return;
+    }
+    lensFormImage = url;
+    lensFormImageBlob = null;
+  }
+  if (lensFormImage !== undefined) body.image = lensFormImage;
+
+  btn.textContent = 'Sparar…';
   const r = lensFormItemId
     ? await api(`/api/lenses/${lensFormItemId}`, { method: 'PATCH', body: JSON.stringify(body) })
     : await api('/api/lenses', { method: 'POST', body: JSON.stringify(body) });
@@ -170,7 +188,7 @@ async function generateLensCatalogPDF() {
     });
   }
   try {
-    const doc = _buildLensCatalogDoc(items);
+    const doc = await _buildLensCatalogDoc(items);
     const today = new Date().toLocaleDateString('sv-SE').replace(/\//g, '-');
     doc.save(`lins-katalog-${today}.pdf`);
     showToast('Katalog skapad', 'success');
@@ -212,7 +230,7 @@ async function sendLensCatalogToClient(clientId) {
     });
   }
   try {
-    const doc = _buildLensCatalogDoc(items);
+    const doc = await _buildLensCatalogDoc(items);
     const blob = doc.output('blob');
     const form = new FormData();
     form.append('files', blob, 'lins-katalog.pdf');
@@ -237,7 +255,7 @@ async function sendLensCatalogToClient(clientId) {
   }
 }
 
-function _buildLensCatalogDoc(items) {
+async function _buildLensCatalogDoc(items) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   doc.setProperties({ title: 'Vision Palace – Linskatalog', creator: 'Vision Palace' });
@@ -270,10 +288,11 @@ function _buildLensCatalogDoc(items) {
     if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
     const x = M + col * (CW + CGAP);
     doc.setFillColor(255, 255, 255); doc.rect(x, y, CW, IH, 'F');
-    if (lens.image) {
+    const imgData = await imgToDataUrl(lens.image);
+    if (imgData) {
       try {
-        const fmt = lens.image.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-        doc.addImage(lens.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
+        const fmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        doc.addImage(imgData, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
       } catch { /* keep background */ }
     }
     doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);

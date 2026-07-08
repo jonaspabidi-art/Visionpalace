@@ -51,10 +51,10 @@
 **Plats:** `public/js/admin/inventory.js` (`compressInvImage` → `canvas.toDataURL` → `inventory.image`), samma mönster i `lenses.js`; kopieras vidare till `sale_items.image` vid varje försäljning (`sales.js`)
 **Problem:** Varje lagervara bär ~100–500 KB base64 i en TEXT-kolumn. `GET /api/inventory` returnerar ALLT vid varje lager-öppning; försäljningar duplicerar bilden till `sale_items`; historik-vyn laddar allt igen. Databasen sväller och alla listvyer blir långsammare för varje månad.
 **Lösning (stegvis, bakåtkompatibel):**
-1. Låt lager-/linsformulären ladda upp bilden via befintliga `/api/upload` (som chatten gör) och spara URL i `image`-kolumnen i stället för base64.
-2. `sale_items.image` sparar samma URL (ingen duplicering).
-3. Migreringsskript (engångs, körs av servern eller manuellt): läs alla rader där `image LIKE 'data:%'`, ladda upp till storage, ersätt med URL.
-4. Frontend är redan URL-agnostisk (`<img src>` funkar för båda) — katalog-PDF:en (jsPDF `addImage`) behöver dock hämta bilden till dataURL först; lägg en liten `urlToDataUrl()`-hjälpare i `inventory.js`.
+1. ✅ KLART (2026-07-07): Lager-/linsformulären laddar nu upp bilden via `/api/upload` och sparar URL i `image`-kolumnen (`uploadProductImage()` i `inventory.js`; blob-baserad `compressInvImage`). Nya/ändrade bilder blir URL:er; gamla base64-rader fungerar oförändrat.
+2. ✅ KLART: `sale_items.image` kopierar värdet rakt av — för nya varor är det en URL (ingen duplicering).
+3. ÅTERSTÅR: Migreringsskript (engångs): läs alla rader i `inventory`, `lenses`, `sale_items` där `image LIKE 'data:%'`, avkoda base64 till Buffer, ladda upp via `uploadMedia()` i `server/lib/upload.js`, ersätt med URL. Kör med service-nyckeln, t.ex. `scripts/migrate-images.js`.
+4. ✅ KLART: Katalog-PDF:erna konverterar URL:er via `imgToDataUrl()`-hjälparen i `inventory.js` (glasögon + linser); `_buildLensCatalogDoc` är numera async.
 
 ### 8. Fakturanummer kan kollidera (race condition)
 **Plats:** `server/routes/sales.js:8–18` (`generateInvoiceNumber` läser max+1)

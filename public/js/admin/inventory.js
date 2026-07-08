@@ -32,12 +32,14 @@ function renderInventory(items) {
 
 // ── Inventory CRUD ──
 let invFormItemId = null;
-let invFormImage = null; // base64 or null (undefined = unchanged on edit)
+let invFormImage = null; // image URL or null (undefined = unchanged on edit)
+let invFormImageBlob = null; // freshly picked image, uploaded on save
 let _refLookupLast = '';
 
 function openInvForm(itemId) {
   invFormItemId = itemId;
   invFormImage = undefined;
+  invFormImageBlob = null;
   _refLookupLast = '';
   const item = itemId ? invItemsMap[itemId] : null;
   document.getElementById('inv-form-title').textContent = item ? 'Redigera vara' : 'Ny vara';
@@ -78,7 +80,7 @@ async function lookupRefCode() {
     if (!nameEl.value.trim() && m.name) nameEl.value = m.name;
     if (!sellEl.value && m.sell_price != null) sellEl.value = m.sell_price;
     if (!buyEl.value && m.buy_price != null) buyEl.value = m.buy_price;
-    if (invFormImage === undefined && m.image) {
+    if (invFormImage === undefined && !invFormImageBlob && m.image) {
       invFormImage = m.image;
       const pick = document.getElementById('inv-img-pick');
       let img = pick.querySelector('img.inv-preview-img');
@@ -93,17 +95,18 @@ function closeInvForm() {
   document.getElementById('inv-form-modal').classList.remove('open');
   invFormItemId = null;
   invFormImage = undefined;
+  invFormImageBlob = null;
 }
 
 function handleInvImg(input) {
   const file = input.files[0];
   if (!file) return;
-  compressInvImage(file, base64 => {
-    invFormImage = base64;
+  compressInvImage(file, (blob, previewUrl) => {
+    invFormImageBlob = blob;
     const pick = document.getElementById('inv-img-pick');
     let img = pick.querySelector('img.inv-preview-img');
     if (!img) { img = document.createElement('img'); img.className = 'inv-preview-img'; pick.appendChild(img); }
-    img.src = base64;
+    img.src = previewUrl;
   });
 }
 
@@ -121,11 +124,41 @@ function compressInvImage(file, cb) {
       const canvas = document.createElement('canvas');
       canvas.width = out; canvas.height = out;
       canvas.getContext('2d').drawImage(image, sx, sy, size, size, 0, 0, out, out);
-      cb(canvas.toDataURL('image/jpeg', 0.85));
+      canvas.toBlob(blob => { if (blob) cb(blob, URL.createObjectURL(blob)); }, 'image/jpeg', 0.85);
     };
     image.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// Upload a product image to storage and return its URL (thumb preferred).
+// Product images used to be saved as base64 straight into the DB row —
+// new/changed images go to Supabase Storage instead; old rows keep working.
+async function uploadProductImage(blob) {
+  try {
+    const form = new FormData();
+    form.append('files', blob, 'produkt.jpg');
+    const r = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.files?.[0]?.thumbUrl || d.files?.[0]?.url || null;
+  } catch { return null; }
+}
+
+// jsPDF needs image data, not URLs — convert storage URLs on demand
+async function imgToDataUrl(src) {
+  if (!src || src.startsWith('data:')) return src || null;
+  try {
+    const r = await fetch(src);
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return await new Promise(res => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => res(null);
+      fr.readAsDataURL(blob);
+    });
+  } catch { return null; }
 }
 
 async function saveInvItem() {
@@ -138,11 +171,26 @@ async function saveInvItem() {
     buy_price: parseFloat(document.getElementById('invf-buy').value) || null,
     notes: document.getElementById('invf-notes').value.trim() || null,
   };
+
+  const btn = document.querySelector('#inv-form-modal .inv-gen-btn');
+  btn.disabled = true;
+
+  // A freshly picked image is uploaded to storage first; the row stores its URL
+  if (invFormImageBlob) {
+    btn.textContent = 'Laddar upp bild…';
+    const url = await uploadProductImage(invFormImageBlob);
+    if (!url) {
+      showToast('Bilduppladdningen misslyckades — varan sparades inte', 'error');
+      btn.textContent = 'Spara'; btn.disabled = false;
+      return;
+    }
+    invFormImage = url;
+    invFormImageBlob = null;
+  }
   // Only include image if changed (new image selected, or new item)
   if (invFormImage !== undefined) body.image = invFormImage;
 
-  const btn = document.querySelector('#inv-form-modal .inv-gen-btn');
-  btn.textContent = 'Sparar…'; btn.disabled = true;
+  btn.textContent = 'Sparar…';
 
   const r = invFormItemId
     ? await api(`/api/inventory/${invFormItemId}`, { method: 'PATCH', body: JSON.stringify(body) })
@@ -213,10 +261,11 @@ async function generateCatalogPDF() {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
       doc.setFillColor(255, 255, 255); doc.rect(x, y, CW, IH, 'F');
-      if (item.image) {
+      const imgData = await imgToDataUrl(item.image);
+      if (imgData) {
         try {
-          const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-          doc.addImage(item.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
+          const fmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+          doc.addImage(imgData, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE');
         } catch { /* keep background */ }
       }
       doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);
@@ -318,8 +367,9 @@ async function sendCatalogToClient(clientId) {
       if (y + CH > PH - M) { doc.addPage(); y = drawHeader(false); col = 0; }
       const x = M + col * (CW + CGAP);
       doc.setFillColor(255, 255, 255); doc.rect(x, y, CW, IH, 'F');
-      if (item.image) {
-        try { const fmt = item.image.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(item.image, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE'); }
+      const imgData = await imgToDataUrl(item.image);
+      if (imgData) {
+        try { const fmt = imgData.startsWith('data:image/png') ? 'PNG' : 'JPEG'; doc.addImage(imgData, fmt, x + IMG_X_OFF, y, IMG_SZ, IMG_SZ, undefined, 'NONE'); }
         catch { /* keep background */ }
       }
       doc.setDrawColor(221, 217, 209); doc.setLineWidth(0.2); doc.rect(x, y, CW, CH);
