@@ -154,28 +154,68 @@ async function createSale() {
     }));
     const items = [...glassItems, ...lensItems];
     if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });
-    const r = await api('/api/sales', { method: 'POST', body: JSON.stringify({ client_id: clientId, items }) });
-    if (!r.ok) { const d = await r.json(); showToast(d.error || 'Fel', 'error'); return; }
-    _lastSaleClientId = clientId;
-    _lastSaleItems = [
-      ...saleCartItems,
-      ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
-      ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
-    ];
-    const soldInvIds = saleCartItems.map(i => i.id);
-    const soldLenses = lensCartItems.length > 0;
-    saleCartItems = [];
-    lensCartItems = [];
-    // Update inventory UI immediately (the socket event does the same for other admins)
-    soldInvIds.forEach(id => delete invItemsMap[id]);
-    if (activeInvTab === 'glasses') renderInventory(Object.values(invItemsMap));
-    else if (soldLenses) loadLenses();
-    renderSaleInvList();
-    updateSaleCartBadge();
-    closeSaleModal();
-    showSaleSuccessBanner();
+    let r = null;
+    try {
+      r = await api('/api/sales', {
+        method: 'POST',
+        body: JSON.stringify({ client_id: clientId, items }),
+        signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined
+      });
+    } catch (e) {
+      // No reply (timeout or dropped connection). The sale may still have
+      // been created server-side — verify before showing an error, so the
+      // user never creates the same sale twice.
+      btn.textContent = 'Kontrollerar…';
+      const created = await verifySaleCreated(clientId, saleItemsSummary(items));
+      if (!created) {
+        showToast('Fick inget svar från servern. Kontrollera i Historik om försäljningen skapades innan du försöker igen.', 'error');
+        return;
+      }
+    }
+    if (r && !r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Fel', 'error'); return; }
+    finishSaleUI(clientId, shipping);
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Skapa försäljning'; btn.disabled = false; }
+}
+
+// One line per item, order-independent — used to recognise "our" sale when
+// the POST got no reply and we have to check whether it landed anyway
+function saleItemsSummary(items) {
+  return items.map(i => `${i.name}×${i.qty || 1}`).sort().join('|');
+}
+
+async function verifySaleCreated(clientId, sentSummary) {
+  try {
+    const r = await api(`/api/sales/client/${clientId}`);
+    if (!r.ok) return false;
+    const d = await r.json();
+    return (d.sales || []).some(s =>
+      Date.now() - new Date(s.created_at) < 10 * 60 * 1000 &&
+      saleItemsSummary(s.sale_items || []) === sentSummary
+    );
+  } catch { return false; }
+}
+
+// Success path: clear the cart, update inventory UI and show the banner
+function finishSaleUI(clientId, shipping) {
+  _lastSaleClientId = clientId;
+  _lastSaleItems = [
+    ...saleCartItems,
+    ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
+    ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
+  ];
+  const soldInvIds = saleCartItems.map(i => i.id);
+  const soldLenses = lensCartItems.length > 0;
+  saleCartItems = [];
+  lensCartItems = [];
+  // Update inventory UI immediately (the socket event does the same for other admins)
+  soldInvIds.forEach(id => delete invItemsMap[id]);
+  if (activeInvTab === 'glasses') renderInventory(Object.values(invItemsMap));
+  else if (soldLenses) loadLenses();
+  renderSaleInvList();
+  updateSaleCartBadge();
+  closeSaleModal();
+  showSaleSuccessBanner();
 }
 
 function showSaleSuccessBanner() {
