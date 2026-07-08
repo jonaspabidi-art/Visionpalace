@@ -53,7 +53,7 @@
 **Lösning (stegvis, bakåtkompatibel):**
 1. ✅ KLART (2026-07-07): Lager-/linsformulären laddar nu upp bilden via `/api/upload` och sparar URL i `image`-kolumnen (`uploadProductImage()` i `inventory.js`; blob-baserad `compressInvImage`). Nya/ändrade bilder blir URL:er; gamla base64-rader fungerar oförändrat.
 2. ✅ KLART: `sale_items.image` kopierar värdet rakt av — för nya varor är det en URL (ingen duplicering).
-3. ÅTERSTÅR: Migreringsskript (engångs): läs alla rader i `inventory`, `lenses`, `sale_items` där `image LIKE 'data:%'`, avkoda base64 till Buffer, ladda upp via `uploadMedia()` i `server/lib/upload.js`, ersätt med URL. Kör med service-nyckeln, t.ex. `scripts/migrate-images.js`.
+3. ✅ SKRIPT KLART (`scripts/migrate-images.js`) — körs manuellt på servern: `node scripts/migrate-images.js --dry-run` först, sedan utan flaggan. Idempotent; misslyckade rader lämnas orörda och kan köras om. ÅTERSTÅR: att faktiskt köra det i produktion.
 4. ✅ KLART: Katalog-PDF:erna konverterar URL:er via `imgToDataUrl()`-hjälparen i `inventory.js` (glasögon + linser); `_buildLensCatalogDoc` är numera async.
 
 ### 8. Fakturanummer kan kollidera (race condition)
