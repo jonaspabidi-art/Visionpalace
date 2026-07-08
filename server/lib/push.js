@@ -60,8 +60,9 @@ async function webPushAdmins(title, body, data = {}) {
   let pruned = false;
   await Promise.allSettled([...adminPushSubs.entries()].map(([endpoint, sub]) =>
     webpush.sendNotification(sub, JSON.stringify({ title, body, data }))
+      .then(() => console.log(`[Push] Admin push OK → …${endpoint.slice(-12)}`))
       .catch(e => {
-        console.error(`[Push] Admin push failed: ${e.statusCode} ${e.message}`);
+        console.error(`[Push] Admin push failed → …${endpoint.slice(-12)}: ${e.statusCode} ${e.message}`);
         if (e.statusCode === 410 || e.statusCode === 404) { adminPushSubs.delete(endpoint); pruned = true; }
       })
   ));

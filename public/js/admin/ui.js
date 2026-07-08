@@ -195,21 +195,42 @@ function showToast(msg, type) {
   setTimeout(() => t.remove(), type === 'error' ? 8000 : 3000);
 }
 
+function _b64urlNorm(s) {
+  return String(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function _keyToB64url(buf) {
+  return _b64urlNorm(btoa(String.fromCharCode(...new Uint8Array(buf))));
+}
+
+let _pushToastShown = false;
+
 async function registerAdminPushSub() {
   try {
+    const kr = await fetch('/api/push/vapid-key');
+    if (!kr.ok) throw new Error('vapid-key ' + kr.status);
+    const { publicKey } = await kr.json();
+    if (!publicKey) throw new Error('no publicKey');
+
     const sw = await Promise.race([
       navigator.serviceWorker.ready,
       new Promise((_, rej) => setTimeout(() => rej(new Error('SW timeout')), 10000))
     ]);
 
-    // Reuse this device's existing subscription — unsubscribing/resubscribing
-    // would invalidate the endpoint the server already knows about
+    // Reuse this device's existing subscription — but only if it was created
+    // with OUR VAPID key. A subscription under another key can never receive
+    // our pushes (the push service rejects sends with 403, which is not one
+    // of the prune codes), so a mismatch must be re-subscribed.
     let sub = await sw.pushManager.getSubscription();
+    if (sub && sub.options?.applicationServerKey) {
+      const existingKey = _keyToB64url(sub.options.applicationServerKey);
+      if (existingKey !== _b64urlNorm(publicKey)) {
+        console.warn('[Push] VAPID key mismatch — re-subscribing');
+        await sub.unsubscribe();
+        sub = null;
+      }
+    }
     if (!sub) {
-      const kr = await fetch('/api/push/vapid-key');
-      if (!kr.ok) throw new Error('vapid-key ' + kr.status);
-      const { publicKey } = await kr.json();
-      if (!publicKey) throw new Error('no publicKey');
       sub = await sw.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(publicKey)
@@ -223,7 +244,12 @@ async function registerAdminPushSub() {
       body: JSON.stringify({ subscription: sub.toJSON() })
     });
     if (!r.ok) throw new Error('server ' + r.status);
-    console.log('[Push] Admin subscription saved');
+    const d = await r.json().catch(() => ({}));
+    console.log('[Push] Admin subscription saved', d);
+    if (!_pushToastShown) {
+      _pushToastShown = true;
+      showToast(`Notiser aktiva på denna enhet${d.devices ? ` · ${d.devices} enhet(er) registrerade` : ''}`, 'success');
+    }
   } catch(e) {
     console.error('[Push] Admin setup failed:', e);
     showToast('Notiser: ' + e.message, 'error');
