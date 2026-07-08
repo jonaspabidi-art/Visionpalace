@@ -137,17 +137,20 @@ async function createSale() {
   btn.textContent = 'Skapar…'; btn.disabled = true;
   try {
     const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
+    // No image in the payload — the server copies it from the DB row.
+    // Legacy items carry base64 images; sending those made the request
+    // multi-MB and the sale appeared to hang on "Skapar…" over mobile.
     const glassItems = saleCartItems.map(i => ({
       inventory_id: i.id,
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
-      qty: i.qty, image: i.image || null
+      qty: i.qty
     }));
     const lensItems = lensCartItems.map(i => ({
       lens_id: i.lensId, lens_variant_id: i.variantId, lens_color: i.color,
       name: `${i.name} (${i.color})`,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
-      qty: i.qty, image: i.image || null
+      qty: i.qty
     }));
     const items = [...glassItems, ...lensItems];
     if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });

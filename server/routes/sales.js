@@ -28,6 +28,22 @@ module.exports = (io) => {
       created_at: new Date().toISOString()
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Look up product images server-side. Legacy inventory/lens rows store
+    // base64 images — shipping those through the sale request (and back in
+    // the response) made createSale hang for minutes on mobile connections.
+    const imgInvIds = [...new Set(items.filter(i => i.inventory_id).map(i => i.inventory_id))];
+    const imgLensIds = [...new Set(items.filter(i => i.lens_id).map(i => i.lens_id))];
+    const imageByInv = {}, imageByLens = {};
+    if (imgInvIds.length) {
+      const { data } = await supabase.from('inventory').select('id, image').in('id', imgInvIds);
+      (data || []).forEach(r => { imageByInv[r.id] = r.image; });
+    }
+    if (imgLensIds.length) {
+      const { data } = await supabase.from('lenses').select('id, image').in('id', imgLensIds);
+      (data || []).forEach(r => { imageByLens[r.id] = r.image; });
+    }
+
     const rows = items.map(i => ({
       sale_id: sale.id,
       inventory_id: i.inventory_id || null,
@@ -36,7 +52,9 @@ module.exports = (io) => {
       lens_color: i.lens_color || null,
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
-      qty: i.qty || 1, image: i.image || null
+      qty: i.qty || 1,
+      // DB image first; i.image kept as fallback for older cached clients
+      image: (i.inventory_id ? imageByInv[i.inventory_id] : i.lens_id ? imageByLens[i.lens_id] : null) ?? i.image ?? null
     }));
     const { error: itemErr } = await supabase.from('sale_items').insert(rows);
     if (itemErr) return res.status(500).json({ error: itemErr.message });
@@ -59,8 +77,9 @@ module.exports = (io) => {
       }
     }
 
-    const { data: full } = await supabase.from('sales').select('*, sale_items(*)').eq('id', sale.id).single();
-    res.json({ sale: full });
+    // Slim response — createSale only checks r.ok, and re-fetching the sale
+    // with its items would ship any legacy base64 images back over the wire
+    res.json({ sale });
   });
 
   // Update sale status (admin)
