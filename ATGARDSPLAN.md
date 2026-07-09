@@ -181,6 +181,30 @@ gjort ett inköp.
 **Idé (ägarens):** fota/ladda upp orderpappret → appen läser av ref-nummer, antal
 och pris → granskningslista → bekräfta → varorna skapas i lagret (kända ref-koder
 återanvänder namn/bild/säljpris via befintliga `GET /inventory/ref-lookup`).
+
+**Verkligt exempel granskat (`Kering_AR-26UK102622074623.pdf`, 2026-07-09):** riktig
+Kering-faktura, ren PDF (inte fotat papper) — förenklar avläsningen. Struktur:
+- Artikelrad: `CT0582S-005 56 Sunglass MAN METAL` i en enda "Article Description"-
+  kolumn. Ref-koden är `CT0582S-005` (mönster `CT\d+[A-Z]?-\d+`), `56` är
+  linsstorlek (ointressant för oss), resten är produktbeskrivning.
+- Kvantitet i egen `Qty`-kolumn.
+- Pris i `Net Total`-kolumnen, **europeiskt talformat**: `12.072,00` = 12 072,00
+  (punkt = tusentalsavgränsare, komma = decimal) — INTE 12,072. Modellen måste
+  instrueras explicit att normalisera detta till en vanlig decimal (`12072.00`),
+  annars kan den läsa fel.
+- **Valuta: SEK**, inte EUR — fakturan totalsumman anges uttryckligen `SEK`.
+  Appens `buy_price`/`sell_price` visas dock genomgående i €. Extraherat pris
+  måste därför **konverteras SEK→EUR innan det sparas** (ägarens beslut
+  2026-07-09), annars blir vinstuträkningen i Historik (`sell_price − buy_price`)
+  fel utan att synas. Enklaste lösning: en redigerbar växelkurs i `app_settings`
+  (t.ex. `sek_eur_rate`, defaultvärde satt manuellt, uppdateras vid behov via ett
+  fält i adminvyn) — undviker beroende av ett externt valuta-API. Räkna
+  `buy_price_eur = round(net_total_sek * rate, 2)` per rad. Visa BÅDA beloppen
+  i granskningslistan (SEK från fakturan + beräknat EUR) så avvikelser upptäcks
+  innan bekräftelse.
+- Momsraden `0% reverse charge` bekräftar att inköpen är momsfria för oss —
+  inget extra att hantera.
+
 **Modellval:** `claude-haiku-4-5` räcker (enkel strukturerad extraktion ur dokument;
 vision + PDF stöds). Pris $1/M input-tokens, $5/M output. En order ≈ 2 000 in +
 400 ut ≈ **$0,004 ≈ 4 öre per order**. Blir avläsningen opålitlig på stökiga foton:
@@ -189,13 +213,24 @@ förbetalda API-krediter hos Anthropic (min. $5 — räcker i åratal på denna 
 **Bygge:**
 1. Env-variabel `ANTHROPIC_API_KEY` i Railway. Installera `@anthropic-ai/sdk`.
 2. Ny route `POST /api/orders/parse` (adminAuth, multer, 1 fil: jpeg/png/webp/pdf):
-   skicka filen som `image`-/`document`-block till Messages API med instruktionen
-   att returnera JSON `[{ref_code, qty, price}]` (använd `output_config.format`
-   med json_schema så svaret alltid är giltig JSON). Svara `{ rows }`.
+   skicka filen som `document`-block (PDF) resp. `image`-block (foto) till
+   Messages API. System-instruktion måste täcka: (a) extrahera ref-kod med
+   mönstret ovan ur "Article Description"-fältet, inte separata ID/UPC-kolumner,
+   (b) normalisera europeiskt talformat till vanlig decimal, (c) läsa av
+   valutan från fakturans summeringsfält (`Invoice Summary` / `Total amount`)
+   och skicka med i svaret så servern vet vilken kurs som ska tillämpas —
+   anta inte alltid SEK, andra leverantörer kan fakturera i EUR/USD.
+   Använd `output_config.format` med json_schema så svaret alltid är giltig
+   JSON: `[{ref_code, qty, net_total, currency}]`. Servern konverterar till EUR
+   och svarar `{ rows: [{ref_code, qty, buy_price_eur, buy_price_original,
+   currency_original}] }`.
 3. Granskningsvy i Lager-fliken ("Läs in order"-knapp): varje rad slås upp mot
    `GET /inventory/ref-lookup` — träff = grön rad med förifyllt namn/bild/säljpris;
    okänd ref = gul rad där namn/bild fylls i manuellt (sparas till nästa gång).
-   Antal N ⇒ N lagerrader. **Aldrig auto-skapande utan bekräftelse.**
+   Antal N ⇒ N lagerrader. Visa `buy_price_original currency_original` (t.ex.
+   "12 072,00 SEK") bredvid det beräknade EUR-beloppet på varje rad, redigerbart,
+   så en felaktig kurs eller feltolkning upptäcks direkt. **Aldrig auto-skapande
+   utan bekräftelse.**
 4. Vid bekräftelse: ladda upp originaldokumentet via befintliga `/api/upload`,
    skapa lagerrader + `purchases`-rader (source `'order_import'`, `document_url`).
 5. Felväg: om AI-anropet misslyckas visas ett tydligt fel och man använder
