@@ -7,12 +7,25 @@ module.exports = (io) => {
 
   // A stalled keep-alive socket towards Supabase can otherwise hang a query
   // for minutes with the sale half-created and the app stuck on "Skapar…"
-  const dbTimeout = () => AbortSignal.timeout(15000);
+  const dbTimeout = () => AbortSignal.timeout(10000);
+
+  // Reads that fail (typically a dead keep-alive connection after the server
+  // has been idle) get one retry on a fresh attempt. Reads only — a write
+  // that timed out may still have reached the database and must not be rerun.
+  async function retryRead(label, queryFn) {
+    let res = await queryFn();
+    if (res.error) {
+      console.warn(`[Sale] ${label} misslyckades (${res.error.message}) — försöker igen`);
+      res = await queryFn();
+    }
+    return res;
+  }
 
   async function generateInvoiceNumber() {
     const mm = String(new Date().getMonth() + 1).padStart(2, '0');
     const prefix = `VP${mm}-`;
-    const { data, error } = await supabase.from('sales').select('invoice_number').ilike('invoice_number', `${prefix}%`).abortSignal(dbTimeout());
+    const { data, error } = await retryRead('fakturanummer', () =>
+      supabase.from('sales').select('invoice_number').ilike('invoice_number', `${prefix}%`).abortSignal(dbTimeout()));
     if (error) throw new Error(`fakturanummer: ${error.message}`);
     let max = 0;
     (data || []).forEach(row => {
@@ -48,11 +61,13 @@ module.exports = (io) => {
       const imgLensIds = [...new Set(items.filter(i => i.lens_id).map(i => i.lens_id))];
       const imageByInv = {}, imageByLens = {};
       if (imgInvIds.length) {
-        const { data } = await supabase.from('inventory').select('id, image').in('id', imgInvIds).abortSignal(dbTimeout());
+        const { data } = await retryRead('bilduppslag lager', () =>
+          supabase.from('inventory').select('id, image').in('id', imgInvIds).abortSignal(dbTimeout()));
         (data || []).forEach(r => { imageByInv[r.id] = r.image; });
       }
       if (imgLensIds.length) {
-        const { data } = await supabase.from('lenses').select('id, image').in('id', imgLensIds).abortSignal(dbTimeout());
+        const { data } = await retryRead('bilduppslag linser', () =>
+          supabase.from('lenses').select('id, image').in('id', imgLensIds).abortSignal(dbTimeout()));
         (data || []).forEach(r => { imageByLens[r.id] = r.image; });
       }
       step('bilder');
@@ -85,7 +100,8 @@ module.exports = (io) => {
       // Decrement lens variant stock (shared across all admins)
       const lensItems = items.filter(i => i.lens_variant_id);
       for (const item of lensItems) {
-        const { data: variant } = await supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).abortSignal(dbTimeout()).single();
+        const { data: variant } = await retryRead('linslager', () =>
+          supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).abortSignal(dbTimeout()).single());
         if (variant) {
           await supabase.from('lens_variants').update({
             stock_count: Math.max(0, (variant.stock_count || 0) - (item.qty || 1))
