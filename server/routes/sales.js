@@ -46,12 +46,22 @@ module.exports = (io) => {
       if (!client_id || !items?.length) return res.status(400).json({ error: 'client_id och items krävs' });
       const invoice_number = await generateInvoiceNumber();
       step('nr');
-      const { data: sale, error } = await supabase.from('sales').insert({
+      const createdAtIso = new Date().toISOString();
+      let { data: sale, error } = await supabase.from('sales').insert({
         client_id, invoice_number, notes: notes || null,
         admin_id: req.adminId,
-        created_at: new Date().toISOString()
+        created_at: createdAtIso
       }).select().abortSignal(dbTimeout()).single();
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        // The insert may have reached the database even though the response
+        // was lost on a stalled connection — verify before failing
+        const { data: existing } = await retryRead('säljverifiering', () =>
+          supabase.from('sales').select().eq('invoice_number', invoice_number).eq('client_id', client_id)
+            .gte('created_at', createdAtIso).abortSignal(dbTimeout()).maybeSingle());
+        if (!existing) return res.status(500).json({ error: `försäljning: ${error.message}` });
+        console.warn(`[Sale] ${invoice_number}: insert-svar förlorat men raden fanns — fortsätter`);
+        sale = existing;
+      }
       step('sale');
 
       // Look up product images server-side. Legacy inventory/lens rows store
@@ -85,7 +95,19 @@ module.exports = (io) => {
         image: (i.inventory_id ? imageByInv[i.inventory_id] : i.lens_id ? imageByLens[i.lens_id] : null) ?? i.image ?? null
       }));
       const { error: itemErr } = await supabase.from('sale_items').insert(rows).abortSignal(dbTimeout());
-      if (itemErr) return res.status(500).json({ error: itemErr.message });
+      if (itemErr) {
+        // Same ambiguity as above: the rows may have landed despite the error.
+        // A single insert statement is atomic — either all rows exist or none.
+        const { data: existingRows } = await retryRead('radverifiering', () =>
+          supabase.from('sale_items').select('id').eq('sale_id', sale.id).abortSignal(dbTimeout()));
+        if ((existingRows || []).length < rows.length) {
+          // Genuine failure — remove the empty sale so Historik stays clean
+          const { error: cleanupErr } = await supabase.from('sales').delete().eq('id', sale.id).abortSignal(dbTimeout());
+          if (cleanupErr) console.error(`[Sale] ${invoice_number}: kunde inte städa bort tomt sälj: ${cleanupErr.message}`);
+          return res.status(500).json({ error: `varurader: ${itemErr.message}` });
+        }
+        console.warn(`[Sale] ${invoice_number}: varurads-svar förlorat men raderna fanns — fortsätter`);
+      }
       step('rader');
 
       // Remove sold glasses from inventory (shared across all admins)
@@ -114,9 +136,13 @@ module.exports = (io) => {
       // Slim response — createSale only checks r.ok, and re-fetching the sale
       // with its items would ship any legacy base64 images back over the wire
       res.json({ sale });
+      // Notify the client that a purchase was registered (fire-and-forget —
+      // must never affect the sale itself)
+      webPushClient(client_id, 'Vision Palace', 'Ett nytt köp har registrerats på ditt konto', { url: '/client', tab: 'purchases' }).catch(() => {});
     } catch (e) {
       console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.message);
-      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid skapande av försäljning' });
+      const done = steps.length ? steps.map(s => s.split(' ')[0]).join(', ') : 'inga';
+      if (!res.headersSent) res.status(500).json({ error: `Serverfel vid skapande av försäljning (klarade steg: ${done})` });
     }
   });
 

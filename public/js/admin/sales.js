@@ -172,8 +172,15 @@ async function createSale() {
         return;
       }
     }
-    if (r && !r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Fel', 'error'); return; }
-    finishSaleUI(clientId, shipping);
+    if (r && !r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Fel vid skapande av försäljning', 'error'); return; }
+    // The sale IS created at this point — a UI hiccup below must never
+    // masquerade as a failed sale
+    try { finishSaleUI(clientId, shipping); }
+    catch (e) {
+      console.error('UI-uppdatering efter sälj misslyckades:', e);
+      closeSaleModal();
+      showSaleSuccessBanner();
+    }
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Skapa försäljning'; btn.disabled = false; }
 }
