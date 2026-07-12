@@ -3,10 +3,13 @@ const INV_COMPANY = {
   name: 'C.lunettes AB',
   vat: 'SE559168839 4SE',
   address: '411 15 Gothenburg, Sweden',
+  addressSv: '411 15 Göteborg',
   bankName: 'Danske Bank',
   iban: 'SE9112000000012350396061',
   bankAddress: 'Oestra hamngatan 13, 404 22',
   bic: 'DABASESX',
+  clearing: '1235',
+  accountNumber: '0396061',
 };
 
 function populateInvClientPicker() {
@@ -40,6 +43,13 @@ function setInvCustType(type) {
   document.getElementById('inv-lbl-name').textContent = type === 'private' ? 'Namn' : 'Företagsnamn';
   document.getElementById('inv-cust-name').placeholder = type === 'private' ? 'ex. Anna Svensson' : 'ex. GMC PUB SRL';
   document.getElementById('inv-biz-fields').style.display = type === 'private' ? 'none' : '';
+}
+
+function setInvLang(lang) {
+  invLang = lang;
+  document.getElementById('inv-btn-lang-en').classList.toggle('active', lang === 'en');
+  document.getElementById('inv-btn-lang-sv').classList.toggle('active', lang === 'sv');
+  renderInvLines();
 }
 
 function switchInvTab(tab) {
@@ -95,7 +105,7 @@ function renderInvLines() {
           <input class="inv-input" type="number" min="0" step="any" inputmode="decimal" data-field="qty">
         </div>
         <div class="inv-field">
-          <label>Pris (€)</label>
+          <label>Pris (${invLang === 'sv' ? 'kr' : '€'})</label>
           <input class="inv-input" type="number" min="0" step="0.01" placeholder="0.00" inputmode="decimal" data-field="price">
         </div>
       </div>
@@ -120,7 +130,38 @@ function renderInvLines() {
   });
 }
 
+// Letter-spaced heading text, e.g. ls('BILLED TO') → 'B I L L E D &nbsp; T O'
+function ls(text) {
+  return text.split(' ').map(w => w.split('').join(' ')).join(' &nbsp; ');
+}
+
+const INV_TEXT = {
+  en: {
+    title: 'INVOICE', payTo: 'PAY TO', custCompany: 'BILLED TO', custPrivate: 'CUSTOMER',
+    colDesc: 'Description', colQty: 'Quantity', colVat: 'VAT', colPrice: 'Unit Price', colAmount: 'Amount',
+    net: 'Netto', vatLabel: 'VAT', total: 'TOTAL',
+    bankDetails: 'Bank details', bankName: 'Bank Name', bankAddress: 'Bank Address',
+    paymentTerms: 'Payment terms',
+    paymentText: days => `Payment is required within ${days} business days of invoice date.<br>Thank you for your business.`,
+    vatFieldLabel: v => `VAT: ${v}`, regFieldLabel: r => `Reg: ${r}`,
+    currency: (fmt, n) => `€ ${fmt(n)}`,
+    address: () => INV_COMPANY.address,
+  },
+  sv: {
+    title: 'FAKTURA', payTo: 'BETALA TILL', custCompany: 'KUND', custPrivate: 'KUND',
+    colDesc: 'Beskrivning', colQty: 'Antal', colVat: 'Moms', colPrice: 'Á-pris', colAmount: 'Belopp',
+    net: 'Netto', vatLabel: 'Moms', total: 'TOTALT',
+    bankDetails: 'Bankuppgifter', bankName: 'Bank', bankAddress: 'Bankadress',
+    paymentTerms: 'Betalningsvillkor',
+    paymentText: days => `Betalning ska ske inom ${days} bankdagar från fakturadatum.<br>Tack för ditt köp.`,
+    vatFieldLabel: v => `Moms-/Org.nr: ${v}`, regFieldLabel: r => `Reg.nr: ${r}`,
+    currency: (fmt, n) => `${fmt(n)} kr`,
+    address: () => INV_COMPANY.addressSv,
+  },
+};
+
 function generateInvoice() {
+  const T = INV_TEXT[invLang] || INV_TEXT.en;
   const invNumber = document.getElementById('inv-number').value.trim() || '—';
   const invDate = document.getElementById('inv-date').value;
   const invDays = document.getElementById('inv-days').value || '14';
@@ -145,6 +186,7 @@ function generateInvoice() {
   const total = subtotal + totalVat;
 
   function fmt(n) { return n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  const money = n => T.currency(fmt, n);
 
   const rowsHtml = invLineItems.map(item => {
     const qty = parseFloat(item.qty) || 0;
@@ -154,26 +196,36 @@ function generateInvoice() {
       <td style="font-weight:600;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${esc(item.desc) || '—'}</td>
       <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${qty % 1 === 0 ? qty : fmt(qty)}</td>
       <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${vat}%</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">€ ${fmt(price)}</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">€ ${fmt(qty * price)}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${money(price)}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${money(qty * price)}</td>
     </tr>`;
   }).join('');
 
   const vatRowsHtml = Object.entries(vatGroups).map(([rate, amount]) =>
     `<div style="display:flex;gap:32px;font-size:11px;color:#555;margin-top:6px">
-      <span style="min-width:120px;text-align:right">VAT ${rate}%</span>
-      <span style="min-width:80px;text-align:right">€ ${fmt(amount)}</span>
+      <span style="min-width:120px;text-align:right">${T.vatLabel} ${rate}%</span>
+      <span style="min-width:80px;text-align:right">${money(amount)}</span>
     </div>`).join('');
 
   const isPrivate = invCustType === 'private';
   const custExtra = isPrivate ? '' : [
-    custVat ? `VAT: ${esc(custVat)}` : '',
-    custReg ? `Reg: ${esc(custReg)}` : '',
+    custVat ? T.vatFieldLabel(esc(custVat)) : '',
+    custReg ? T.regFieldLabel(esc(custReg)) : '',
   ].filter(Boolean).join('<br>');
+
+  const bankRowsHtml = invLang === 'sv' ? `
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">${T.bankName}</span><span style="font-weight:500">${esc(INV_COMPANY.bankName)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Clearingnummer</span><span style="font-weight:500">${esc(INV_COMPANY.clearing)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Kontonummer</span><span style="font-weight:500">${esc(INV_COMPANY.accountNumber)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">${T.bankAddress}</span><span style="font-weight:500">${esc(INV_COMPANY.bankAddress)}</span></div>` : `
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">${T.bankName}</span><span style="font-weight:500">${esc(INV_COMPANY.bankName)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">IBAN</span><span style="font-weight:500">${esc(INV_COMPANY.iban)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">${T.bankAddress}</span><span style="font-weight:500">${esc(INV_COMPANY.bankAddress)}</span></div>
+        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">BIC / Swift</span><span style="font-weight:500">${esc(INV_COMPANY.bic)}</span></div>`;
 
   const docHtml = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:48px">
-      <div style="font-size:36px;font-weight:800;letter-spacing:10px;text-transform:uppercase;color:#111">I N V O I C E</div>
+      <div style="font-size:36px;font-weight:800;letter-spacing:10px;text-transform:uppercase;color:#111">${ls(T.title)}</div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700;color:#111;letter-spacing:2px;margin-bottom:4px"># ${esc(invNumber)}</div>
         <div style="font-size:12px;color:#555">${dateFormatted}</div>
@@ -181,12 +233,12 @@ function generateInvoice() {
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:40px;padding-bottom:32px;border-bottom:2px solid #111">
       <div>
-        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">P A Y &nbsp; T O</div>
+        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${ls(T.payTo)}</div>
         <div style="font-size:14px;font-weight:700;margin-bottom:4px">${esc(INV_COMPANY.name)}</div>
-        <div style="font-size:11px;color:#444;line-height:1.8">${esc(INV_COMPANY.vat)}<br>${esc(INV_COMPANY.address)}</div>
+        <div style="font-size:11px;color:#444;line-height:1.8">${esc(INV_COMPANY.vat)}<br>${esc(T.address())}</div>
       </div>
       <div>
-        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${isPrivate ? 'C U S T O M E R' : 'B I L L E D &nbsp; T O'}</div>
+        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${isPrivate ? ls(T.custPrivate) : ls(T.custCompany)}</div>
         <div style="font-size:14px;font-weight:700;margin-bottom:4px">${esc(custName)}</div>
         <div style="font-size:11px;color:#444;line-height:1.8">${custAddr}${custExtra ? '<br>' + custExtra : ''}</div>
       </div>
@@ -194,39 +246,34 @@ function generateInvoice() {
     <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
       <thead>
         <tr style="border-bottom:1px solid #111">
-          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:left;font-weight:600;width:40%">Description</th>
-          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">Quantity</th>
-          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">VAT</th>
-          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">Unit Price</th>
-          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">Amount</th>
+          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:left;font-weight:600;width:40%">${T.colDesc}</th>
+          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">${T.colQty}</th>
+          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">${T.colVat}</th>
+          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">${T.colPrice}</th>
+          <th style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;padding:0 0 10px;text-align:right;font-weight:600">${T.colAmount}</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     <div style="margin-top:16px;border-top:2px solid #111;padding-top:16px;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
       <div style="display:flex;gap:32px;font-size:11px;color:#555">
-        <span style="min-width:120px;text-align:right">Netto</span>
-        <span style="min-width:80px;text-align:right">€ ${fmt(subtotal)}</span>
+        <span style="min-width:120px;text-align:right">${T.net}</span>
+        <span style="min-width:80px;text-align:right">${money(subtotal)}</span>
       </div>
       ${vatRowsHtml}
       <div style="display:flex;gap:32px;font-size:16px;font-weight:800;margin-top:8px;letter-spacing:1px;border-top:1.5px solid #111;padding-top:8px">
-        <span style="min-width:120px;text-align:right">T O T A L</span>
-        <span style="min-width:80px;text-align:right">€ ${fmt(total)}</span>
+        <span style="min-width:120px;text-align:right">${ls(T.total)}</span>
+        <span style="min-width:80px;text-align:right">${money(total)}</span>
       </div>
     </div>
     <div style="margin-top:auto;padding-top:40px;border-top:1px solid #ddd;display:grid;grid-template-columns:1fr 1fr;gap:40px">
       <div>
-        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">Bank details</div>
-        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Bank Name</span><span style="font-weight:500">${esc(INV_COMPANY.bankName)}</span></div>
-        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">IBAN</span><span style="font-weight:500">${esc(INV_COMPANY.iban)}</span></div>
-        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Bank Address</span><span style="font-weight:500">${esc(INV_COMPANY.bankAddress)}</span></div>
-        <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">BIC / Swift</span><span style="font-weight:500">${esc(INV_COMPANY.bic)}</span></div>
+        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${T.bankDetails}</div>${bankRowsHtml}
       </div>
       <div>
-        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">Payment terms</div>
+        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${T.paymentTerms}</div>
         <div style="font-size:10px;color:#888;line-height:1.7;padding-top:8px">
-          Payment is required within ${esc(invDays)} business days of invoice date.<br>
-          Thank you for your business.
+          ${T.paymentText(esc(invDays))}
         </div>
       </div>
     </div>`;
