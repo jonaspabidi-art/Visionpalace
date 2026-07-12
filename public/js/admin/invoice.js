@@ -161,7 +161,7 @@ function generateInvoice() {
 
   const vatRowsHtml = Object.entries(vatGroups).map(([rate, amount]) =>
     `<div style="display:flex;gap:32px;font-size:11px;color:#555;margin-top:6px">
-      <span style="min-width:120px;text-align:right">Moms ${rate}%</span>
+      <span style="min-width:120px;text-align:right">VAT ${rate}%</span>
       <span style="min-width:80px;text-align:right">€ ${fmt(amount)}</span>
     </div>`).join('');
 
