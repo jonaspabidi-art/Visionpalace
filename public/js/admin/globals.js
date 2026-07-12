@@ -17,4 +17,5 @@ let activeInvTab = 'glasses';
 let invLineItems = [];
 let invLineNextId = 0;
 let invCustType = 'company';
+let invLang = 'en'; // 'en' | 'sv'
 let bcInitialLoad = true;
