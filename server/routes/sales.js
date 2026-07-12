@@ -110,27 +110,35 @@ module.exports = (io) => {
       }
       step('rader');
 
-      // Remove sold glasses from inventory (shared across all admins)
-      const inventoryIds = items.filter(i => i.inventory_id).map(i => i.inventory_id);
-      if (inventoryIds.length) {
-        const { error: delErr } = await supabase.from('inventory').delete().in('id', inventoryIds).abortSignal(dbTimeout());
-        if (delErr) console.error(`[Sale] ${invoice_number}: lagerborttagning misslyckades: ${delErr.message}`);
-        io.emit('inventory:sold', { ids: inventoryIds });
-      }
-      step('lager');
-
-      // Decrement lens variant stock (shared across all admins)
-      const lensItems = items.filter(i => i.lens_variant_id);
-      for (const item of lensItems) {
-        const { data: variant } = await retryRead('linslager', () =>
-          supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).abortSignal(dbTimeout()).single());
-        if (variant) {
-          await supabase.from('lens_variants').update({
-            stock_count: Math.max(0, (variant.stock_count || 0) - (item.qty || 1))
-          }).eq('id', item.lens_variant_id).abortSignal(dbTimeout());
+      // From here on the sale and its rows are safely stored — everything
+      // below is housekeeping (inventory cleanup, socket broadcast, lens
+      // stock) and must NEVER fail the request. Failures are logged loudly.
+      try {
+        // Remove sold glasses from inventory (shared across all admins)
+        const inventoryIds = items.filter(i => i.inventory_id).map(i => i.inventory_id);
+        if (inventoryIds.length) {
+          const { error: delErr } = await supabase.from('inventory').delete().in('id', inventoryIds).abortSignal(dbTimeout());
+          if (delErr) console.error(`[Sale] ${invoice_number}: lagerborttagning misslyckades: ${delErr.message}`);
+          try { io.emit('inventory:sold', { ids: inventoryIds }); }
+          catch (emitErr) { console.error(`[Sale] ${invoice_number}: socket-utskick misslyckades:`, emitErr.stack || emitErr.message); }
         }
+        step('lager');
+
+        // Decrement lens variant stock (shared across all admins)
+        const lensItems = items.filter(i => i.lens_variant_id);
+        for (const item of lensItems) {
+          const { data: variant } = await retryRead('linslager', () =>
+            supabase.from('lens_variants').select('stock_count').eq('id', item.lens_variant_id).abortSignal(dbTimeout()).single());
+          if (variant) {
+            await supabase.from('lens_variants').update({
+              stock_count: Math.max(0, (variant.stock_count || 0) - (item.qty || 1))
+            }).eq('id', item.lens_variant_id).abortSignal(dbTimeout());
+          }
+        }
+        step('linser');
+      } catch (tailErr) {
+        console.error(`[Sale] ${invoice_number}: efterarbete misslyckades (säljet är sparat, svarar OK):`, tailErr.stack || tailErr.message);
       }
-      step('linser');
 
       console.log(`[Sale] ${invoice_number} skapad på ${Date.now() - t0}ms (${steps.join(', ')})`);
       // Slim response — createSale only checks r.ok, and re-fetching the sale
@@ -140,7 +148,7 @@ module.exports = (io) => {
       // must never affect the sale itself)
       webPushClient(client_id, 'Vision Palace', 'Ett nytt köp har registrerats på ditt konto', { url: '/client', tab: 'purchases' }).catch(() => {});
     } catch (e) {
-      console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.message);
+      console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.stack || e.message);
       const done = steps.length ? steps.map(s => s.split(' ')[0]).join(', ') : 'inga';
       if (!res.headersSent) res.status(500).json({ error: `Serverfel vid skapande av försäljning (klarade steg: ${done})` });
     }
