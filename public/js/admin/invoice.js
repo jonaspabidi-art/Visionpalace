@@ -57,7 +57,13 @@ function switchInvTab(tab) {
   document.getElementById('inv-panel-preview').style.display = tab === 'preview' ? '' : 'none';
   document.getElementById('inv-tab-form').classList.toggle('active', tab === 'form');
   document.getElementById('inv-tab-preview').classList.toggle('active', tab === 'preview');
-  if (tab === 'preview') scaleInvDoc();
+  if (tab === 'preview') {
+    // iOS Safari can still be mid-reflow (e.g. animating the input-focus zoom
+    // back out) right when this panel becomes visible — measuring offsetWidth
+    // in the same tick can catch a stale/incorrect layout. Two rAFs push the
+    // measurement past both the browser's own pending layout and our own.
+    requestAnimationFrame(() => requestAnimationFrame(scaleInvDoc));
+  }
 }
 
 function scaleInvDoc() {
@@ -65,10 +71,18 @@ function scaleInvDoc() {
   const inner = document.getElementById('inv-doc-inner');
   if (!outer || !inner) return;
   const available = outer.offsetWidth;
+  if (!available) return; // not laid out yet — a later resize/rAF call will retry
   const scale = Math.min(1, available / 794);
   inner.style.transform = scale < 1 ? `scale(${scale})` : '';
   outer.style.height = scale < 1 ? Math.ceil(1123 * scale) + 'px' : '';
 }
+
+// Re-fit the preview if the viewport changes size (orientation change, or iOS
+// finishing an input-focus zoom animation) while it's on screen
+window.addEventListener('resize', () => {
+  const preview = document.getElementById('inv-panel-preview');
+  if (preview && preview.style.display !== 'none') scaleInvDoc();
+});
 
 function addInvLine(desc = '', qty = '1', price = '', vat = '0') {
   const id = invLineNextId++;
@@ -161,6 +175,11 @@ const INV_TEXT = {
 };
 
 function generateInvoice() {
+  // Dismiss any focused form field first. On iOS Safari, tapping this button
+  // right after typing in a field can race the browser's own input-focus
+  // zoom-out animation against our panel switch below — blurring explicitly
+  // lets that resolve before we touch the DOM.
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   const T = INV_TEXT[invLang] || INV_TEXT.en;
   const invNumber = document.getElementById('inv-number').value.trim() || '—';
   const invDate = document.getElementById('inv-date').value;
