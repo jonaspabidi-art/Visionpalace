@@ -245,8 +245,27 @@ på `admin_id` + månad) och **Inköp** (datum, vara, ref, inköpspris, källa �
 Fortnox/Visma/Bokio eller vidarebefordran till redovisningskonsult; ingen
 API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
 
+### 26. ✅ KLART (2026-07-12) — Avräkningskonto (70 % provision till säljarna)
+**Bakgrund:** Två personer delar ett admin-konto och säljer under bolagsägarens
+bolag (som har eget konto). Säljarna tar 70 % av vinsten. Följdes tidigare i Excel.
+**Byggt:** `settlements`-tabell + `GET/POST/DELETE /api/settlement*` +
+kort överst i Historik. Saldot **räknas fram** ur försäljningarna varje gång
+(lagras aldrig) — bara utbetalningar och ingående saldo persisteras.
+**Regler (ägarens beslut 2026-07-12):**
+- Provision räknas först vid status betald/skickad/levererad; avbrutna räknas
+  aldrig; obetalda visas separat som "väntar på betalning".
+- Frakt delas inte (rader utan `buy_price` är genomgång, inte marginal).
+- Båda kontona ser samma siffror och båda får registrera utbetalning;
+  tredje admin utanför paret får 403.
+- Varning visas för sälj där ingen rad har inköpspris (ger tyst 0 i provision).
+**Uppsättning:** `supabase/migrations/008_settlement.sql` — användarnamnen fylls i
+och körs i Supabase. Innan dess svarar endpointen `not_configured` och kortet är dolt.
+**Satsändring:** `sales.commission_pct` fryser satsen per sälj; kör backfillen som
+står dokumenterad i SQL-filen INNAN satsen ändras, annars räknas historiken om.
+
 **Byggordning:** 23 → 25 → 24 (exporten ger värde direkt; AI-importen är störst
 och bygger på inköpsloggen). 23+25 ryms i en session; 24 är en egen session.
+Punkt 26 är redan klar och är oberoende av 23–25.
 
 ---
 
@@ -262,5 +281,6 @@ och bygger på inköpsloggen). 23+25 ryms i en session; 24 är en egen session.
 | 6 | P3: punkt 16–19 (refaktor + CI + CLAUDE.md) | Nej |
 | 7 | Nytt: punkt 23 + 25 (inköpslogg, "köpt av", bokföringsexport; SQL-migration) | Ja — omstart |
 | 8 | Nytt: punkt 24 (AI-avläsning av Kering-order, kräver ANTHROPIC_API_KEY) | Ja — omstart |
+| ~~—~~ | ~~Punkt 26 (avräkningskonto)~~ ✅ klar 2026-07-12 | — |
 
 **Testchecklista efter varje deploy:** admin-login, klient-login, skicka meddelande åt båda håll (med bild), skapa sälj (lagret uppdateras i UI), broadcast med bild (landar på senaste), push-notis till båda admin-enheterna + klick landar rätt, katalog-PDF.
