@@ -3,6 +3,10 @@
 let settlementData = null;
 let settlementEntryType = 'payout';
 
+// The ledger is kept in kronor — that's the currency actually paid out
+function kr(n) {
+  return `${(Number(n) || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
+}
 function eur(n) {
   return `€ ${(Number(n) || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -45,7 +49,7 @@ function renderSettlement(d) {
     const name = new Date(yr, mo - 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
     return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
       <span style="color:var(--text2);text-transform:capitalize">${esc(name)}</span>
-      <span style="color:var(--text)">${eur(d.months[key])}</span>
+      <span style="color:var(--text)">${kr(d.months[key])}</span>
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:12px;padding:6px 0">Inga betalda försäljningar ännu</div>';
 
@@ -58,7 +62,7 @@ function renderSettlement(d) {
         <div style="color:var(--text3);font-size:11px;margin-top:1px">${date}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-        <span style="color:${isPayout ? '#66dd99' : 'var(--text2)'};font-weight:600">${isPayout ? '−' : '+'} ${eur(e.amount)}</span>
+        <span style="color:${isPayout ? '#66dd99' : 'var(--text2)'};font-weight:600">${isPayout ? '−' : '+'} ${kr(e.amount)}</span>
         <button onclick="deleteSettlementEntry('${e.id}')" style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px;line-height:1" title="Ta bort">✕</button>
       </div>
     </div>`;
@@ -74,11 +78,14 @@ function renderSettlement(d) {
       <div style="display:flex;justify-content:space-between;align-items:baseline">
         <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">${label} · ${d.commission_pct}% av vinsten</div>
       </div>
-      <div style="font-size:28px;font-weight:800;color:${positive ? '#66dd99' : '#ff7a7a'};margin:6px 0 2px">${eur(d.balance)}</div>
+      <div style="font-size:28px;font-weight:800;color:${positive ? '#66dd99' : '#ff7a7a'};margin:6px 0 2px">${kr(d.balance)}</div>
       <div style="font-size:11px;color:var(--text3)">
-        Intjänat ${eur(d.earned)}${d.opening ? ` + ingående ${eur(d.opening)}` : ''} − utbetalt ${eur(d.paid_out)}
+        Intjänat ${kr(d.earned)}${d.opening ? ` + ingående ${kr(d.opening)}` : ''} − utbetalt ${kr(d.paid_out)}
       </div>
-      ${d.pending ? `<div style="font-size:11px;color:#ff9944;margin-top:6px">Väntar på betalning: ${eur(d.pending)} (räknas in när köpet markeras betalt)</div>` : ''}
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">
+        Intjänat i euro: ${eur(d.earned_eur)} · kurs 1 € = ${d.eur_sek_rate} kr
+      </div>
+      ${d.pending ? `<div style="font-size:11px;color:#ff9944;margin-top:6px">Väntar på betalning: ${kr(d.pending)} (räknas in när köpet markeras betalt)</div>` : ''}
       ${warning}
       <div style="display:flex;gap:8px;margin-top:12px">
         <button onclick="openSettlementModal()" style="flex:1;background:var(--blue);border:none;border-radius:10px;color:#1a1409;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Registrera utbetalning</button>
@@ -115,8 +122,8 @@ function setSettlementType(type) {
   document.getElementById('stl-btn-payout').classList.toggle('active', settlementEntryType === 'payout');
   document.getElementById('stl-btn-opening').classList.toggle('active', settlementEntryType === 'opening');
   document.getElementById('stl-hint').textContent = settlementEntryType === 'payout'
-    ? 'Minskar skulden — registreras när pengarna betalats ut.'
-    : 'Ökar skulden — använd en gång för saldot ni har sedan tidigare (t.ex. från Excel).';
+    ? 'Minskar skulden — registreras i kronor när pengarna betalats ut.'
+    : 'Ökar skulden — använd en gång för saldot ni har sedan tidigare (t.ex. från Excel), i kronor.';
 }
 
 async function saveSettlementEntry() {
