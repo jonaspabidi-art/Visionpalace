@@ -7,6 +7,12 @@ let settlementEntryType = 'payout';
 function kr(n) {
   return `${(Number(n) || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
 }
+// Same, but drops ",00" — öre are noise on the headline figures
+function krShort(n) {
+  const v = Number(n) || 0;
+  const round = Math.abs(v % 1) < 0.005;
+  return `${v.toLocaleString('sv-SE', { minimumFractionDigits: round ? 0 : 2, maximumFractionDigits: 2 })} kr`;
+}
 function eur(n) {
   return `€ ${(Number(n) || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -68,33 +74,43 @@ function renderSettlement(d) {
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:12px;padding:6px 0">Inga utbetalningar registrerade</div>';
 
+  // The front of the card answers one question: how much is owed right now.
+  // Everything explaining HOW that number came about lives behind Detaljer.
   const warning = d.missing_buy_price
-    ? `<div style="background:rgba(255,153,68,.1);border:1px solid rgba(255,153,68,.25);border-radius:10px;padding:8px 10px;font-size:11px;color:#ff9944;margin-top:10px">
-         ⚠ ${d.missing_buy_price} försäljning${d.missing_buy_price !== 1 ? 'ar' : ''} saknar inköpspris och ger därför 0 i provision. Fyll i inköpspris på varorna i lagret.
-       </div>` : '';
+    ? `<div style="color:#ff9944;font-size:12px;margin-top:8px">⚠ ${d.missing_buy_price} sälj saknar inköpspris — ger 0 i provision</div>`
+    : '';
+
+  const sumRow = (label, value, opts = {}) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;${opts.total ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:10px' : ''}">
+      <span style="color:${opts.total ? 'var(--text)' : 'var(--text2)'};font-size:13px;${opts.total ? 'font-weight:700' : ''}">${label}</span>
+      <span style="color:${opts.total ? (positive ? '#66dd99' : '#ff7a7a') : 'var(--text)'};font-size:13px;font-weight:${opts.total ? '800' : '600'}">${value}</span>
+    </div>`;
 
   card.innerHTML = `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px 16px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline">
-        <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">${label} · ${d.commission_pct}% av vinsten</div>
-      </div>
-      <div style="font-size:28px;font-weight:800;color:${positive ? '#66dd99' : '#ff7a7a'};margin:6px 0 2px">${kr(d.balance)}</div>
-      <div style="font-size:11px;color:var(--text3)">
-        Intjänat ${kr(d.earned)}${d.opening ? ` + ingående ${kr(d.opening)}` : ''} − utbetalt ${kr(d.paid_out)}
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">
-        Intjänat i euro: ${eur(d.earned_eur)} · kurs 1 € = ${d.eur_sek_rate} kr
-      </div>
-      ${d.pending ? `<div style="font-size:11px;color:#ff9944;margin-top:6px">Väntar på betalning: ${kr(d.pending)} (räknas in när köpet markeras betalt)</div>` : ''}
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:16px">
+      <div style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">${label}</div>
+      <div style="font-size:34px;font-weight:800;color:${positive ? '#66dd99' : '#ff7a7a'};margin:4px 0 0;line-height:1.1">${krShort(d.balance)}</div>
+      ${d.pending ? `<div style="font-size:12px;color:var(--text3);margin-top:6px">+ ${krShort(d.pending)} när obetalda köp betalas</div>` : ''}
       ${warning}
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button onclick="openSettlementModal()" style="flex:1;background:var(--blue);border:none;border-radius:10px;color:#1a1409;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Registrera utbetalning</button>
-        <button onclick="toggleSettlementDetail()" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text2);padding:10px 14px;font-size:13px;cursor:pointer;font-family:inherit">Detaljer</button>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="openSettlementModal()" style="flex:1;background:var(--blue);border:none;border-radius:10px;color:#1a1409;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Registrera utbetalning</button>
+        <button id="stl-detail-btn" onclick="toggleSettlementDetail()" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text2);padding:11px 14px;font-size:14px;cursor:pointer;font-family:inherit">Detaljer</button>
       </div>
-      <div id="settlement-detail" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Intjänat per månad</div>
+
+      <div id="settlement-detail" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">Så räknas saldot</div>
+        ${sumRow(`Intjänat (${d.commission_pct} % av vinsten)`, kr(d.earned))}
+        ${d.opening ? sumRow('Ingående saldo', kr(d.opening)) : ''}
+        ${sumRow('Utbetalt', `− ${kr(d.paid_out)}`)}
+        ${sumRow(label, kr(d.balance), { total: true })}
+        <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5">
+          Vinsten räknas i euro (${eur(d.earned_eur)}) och växlas till kronor med kursen 1 € = ${d.eur_sek_rate} kr.
+        </div>
+
+        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:18px 0 4px">Intjänat per månad</div>
         ${monthRows}
-        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:14px 0 6px">Utbetalningar</div>
+
+        <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:18px 0 4px">Utbetalningar</div>
         ${entryRows}
       </div>
     </div>`;
@@ -102,7 +118,11 @@ function renderSettlement(d) {
 
 function toggleSettlementDetail() {
   const el = document.getElementById('settlement-detail');
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  const btn = document.getElementById('stl-detail-btn');
+  if (!el) return;
+  const open = el.style.display === 'none';
+  el.style.display = open ? 'block' : 'none';
+  if (btn) btn.textContent = open ? 'Dölj' : 'Detaljer';
 }
 
 function openSettlementModal() {
@@ -122,8 +142,8 @@ function setSettlementType(type) {
   document.getElementById('stl-btn-payout').classList.toggle('active', settlementEntryType === 'payout');
   document.getElementById('stl-btn-opening').classList.toggle('active', settlementEntryType === 'opening');
   document.getElementById('stl-hint').textContent = settlementEntryType === 'payout'
-    ? 'Minskar skulden — registreras i kronor när pengarna betalats ut.'
-    : 'Ökar skulden — använd en gång för saldot ni har sedan tidigare (t.ex. från Excel), i kronor.';
+    ? 'Pengar han har betalat ut till er. Minskar saldot.'
+    : 'Skuld från tiden innan appen räknade — fylls i en gång. Ökar saldot.';
 }
 
 async function saveSettlementEntry() {
