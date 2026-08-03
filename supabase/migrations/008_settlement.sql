@@ -5,14 +5,15 @@
 -- Det enda som lagras här är utbetalningar och ett eventuellt ingående saldo.
 -- Rättas ett pris i efterhand rättar sig saldot av sig självt.
 
--- 1. Utbetalningar och ingående saldo
+-- 1. Utbetalningar och ingående saldo. OBS: amount är alltid i SVENSKA KRONOR
+--    (försäljningarna är i euro och räknas om med kursen i konfigurationen).
 CREATE TABLE IF NOT EXISTS settlements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_admin_id UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
   -- 'payout'  = utbetalning till säljarna (minskar skulden)
   -- 'opening' = ingående saldo / justering (ökar skulden)
   type TEXT NOT NULL DEFAULT 'payout',
-  amount NUMERIC NOT NULL,
+  amount NUMERIC NOT NULL,          -- i kr
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   note TEXT,
   created_by UUID REFERENCES admins(id) ON DELETE SET NULL,
@@ -34,7 +35,8 @@ SELECT 'settlement_config',
        json_build_object(
          'seller_admin_id', (SELECT id FROM admins WHERE lower(username) = lower('DITT_ANVANDARNAMN')),
          'payer_admin_id',  (SELECT id FROM admins WHERE lower(username) = lower('HANS_ANVANDARNAMN')),
-         'commission_pct',  70
+         'commission_pct',  70,
+         'eur_sek_rate',    11      -- överenskommen kurs: 1 € = 11 kr
        )::text,
        now()
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
@@ -44,8 +46,21 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 SELECT
   (SELECT username FROM admins WHERE id = (value::json->>'seller_admin_id')::uuid) AS saljare,
   (SELECT username FROM admins WHERE id = (value::json->>'payer_admin_id')::uuid)  AS betalare,
-  value::json->>'commission_pct' AS procentsats
+  value::json->>'commission_pct' AS procentsats,
+  value::json->>'eur_sek_rate'   AS eurokurs
 FROM app_settings WHERE key = 'settlement_config';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Vill ni ändra eurokursen senare räcker det att köra:
+--
+--   UPDATE app_settings
+--   SET value = jsonb_set(value::jsonb, '{eur_sek_rate}', '11.5'::jsonb)::text,
+--       updated_at = now()
+--   WHERE key = 'settlement_config';
+--
+-- OBS: redan registrerade utbetalningar ligger kvar i kr och rörs inte, men
+-- INTJÄNAT räknas om med den nya kursen — även för gamla försäljningar.
+-- ─────────────────────────────────────────────────────────────────────────────
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- OBS — om ni någon gång ändrar procentsatsen (t.ex. 70 → 60):

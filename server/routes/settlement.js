@@ -5,6 +5,9 @@ const supabase = require('../lib/supabase');
 // 'cancelled' never counts; 'unpaid' is reported separately as pending.
 const PAID_STATUSES = ['paid', 'shipped', 'delivered'];
 const DEFAULT_COMMISSION_PCT = 70;
+// Sales are priced in EUR; the settlement between the partners is paid in SEK,
+// so everything in the ledger (payouts, opening balance, balance) is in kronor.
+const DEFAULT_EUR_SEK_RATE = 11;
 
 module.exports = () => {
   const router = require('express').Router();
@@ -54,6 +57,7 @@ module.exports = () => {
       if (!party) return;
       const { cfg, role } = party;
       const defaultPct = cfg.commission_pct ?? DEFAULT_COMMISSION_PCT;
+      const rate = cfg.eur_sek_rate ?? DEFAULT_EUR_SEK_RATE;
 
       const { data: sales, error: salesErr } = await supabase.from('sales')
         .select('id, created_at, status, commission_pct, sale_items(sell_price, buy_price, qty)')
@@ -61,6 +65,7 @@ module.exports = () => {
         .abortSignal(dbTimeout());
       if (salesErr) return res.status(500).json({ error: `Kunde inte läsa försäljningar: ${salesErr.message}` });
 
+      // Accumulated in EUR (the currency of the sales), converted to SEK below
       let earned = 0, pending = 0, missingBuyPrice = 0;
       const months = {};
       for (const s of sales || []) {
@@ -90,17 +95,26 @@ module.exports = () => {
       const sumOf = type => (entries || [])
         .filter(e => e.type === type)
         .reduce((a, e) => a + (parseFloat(e.amount) || 0), 0);
+      // Ledger entries are already in SEK — only the earnings need converting
       const opening = sumOf('opening');
       const paidOut = sumOf('payout');
+      const earnedSek = earned * rate;
+      const monthsSek = {};
+      for (const [key, val] of Object.entries(months)) monthsSek[key] = val * rate;
 
       res.json({
         role,
         commission_pct: defaultPct,
-        earned, pending, opening,
+        eur_sek_rate: rate,
+        earned: earnedSek,
+        earned_eur: earned,
+        pending: pending * rate,
+        pending_eur: pending,
+        opening,
         paid_out: paidOut,
-        balance: opening + earned - paidOut,
+        balance: opening + earnedSek - paidOut,
         missing_buy_price: missingBuyPrice,
-        months,
+        months: monthsSek,
         entries: entries || [],
       });
     } catch (e) {
@@ -135,7 +149,7 @@ module.exports = () => {
       }).select().abortSignal(dbTimeout()).single();
       if (error) return res.status(500).json({ error: error.message });
 
-      console.log(`[Settlement] ${entryType} € ${amt} registrerad av admin ${req.adminId}`);
+      console.log(`[Settlement] ${entryType} ${amt} kr registrerad av admin ${req.adminId}`);
       res.json({ entry: data });
     } catch (e) {
       console.error('[Settlement] POST /settlement/entry:', e.stack || e.message);
