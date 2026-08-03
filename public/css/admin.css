@@ -135,7 +135,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Views ── */
 .view { flex: 1; overflow: hidden; display: none; flex-direction: column; }
 .view.active { display: flex; }
-.historik-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* Layout lives inline in admin.html so a cached stylesheet can't break it */
+.historik-scroll { min-height: 0; }
 .historik-scroll::-webkit-scrollbar { display: none; }
 
 /* ══════════════════════════════════════════
