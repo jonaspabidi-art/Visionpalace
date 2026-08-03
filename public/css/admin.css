@@ -135,6 +135,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* ── Views ── */
 .view { flex: 1; overflow: hidden; display: none; flex-direction: column; }
 .view.active { display: flex; }
+.historik-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.historik-scroll::-webkit-scrollbar { display: none; }
 
 /* ══════════════════════════════════════════
    INVENTORY VIEW
