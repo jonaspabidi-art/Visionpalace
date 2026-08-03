@@ -364,6 +364,8 @@ async function doStatusUpdate(saleId, sid, newStatus, carrier, tracking) {
     const sa = document.getElementById('sa-' + sid);
     if (sa) sa.innerHTML = statusActionsHTML(d.sale, sid);
     showToast('Status uppdaterad', 'ok');
+    // Marking a sale paid moves its commission from pending into the balance
+    if (typeof loadSettlement === 'function') loadSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
 }
 
