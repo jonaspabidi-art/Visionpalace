@@ -30,6 +30,10 @@ ALTER TABLE sales ADD COLUMN IF NOT EXISTS commission_pct NUMERIC;
 -- 3. Konfiguration — ⚠️ FYLL I ERA TVÅ ANVÄNDARNAMN PÅ RADERNA NEDAN
 --    seller = kontot du och din bror delar (tjänar provisionen)
 --    payer  = bolagsägarens konto (betalar ut den)
+-- (Skriver om raden om den redan finns — fungerar oavsett hur app_settings
+--  är indexerad, till skillnad från ON CONFLICT.)
+DELETE FROM app_settings WHERE key = 'settlement_config';
+
 INSERT INTO app_settings (key, value, updated_at)
 SELECT 'settlement_config',
        json_build_object(
@@ -38,8 +42,7 @@ SELECT 'settlement_config',
          'commission_pct',  70,
          'eur_sek_rate',    11      -- överenskommen kurs: 1 € = 11 kr
        )::text,
-       now()
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+       now();
 
 -- 4. Verifiera att båda kontona hittades — BÅDA kolumnerna måste visa ett namn.
 --    Står det NULL är användarnamnet felstavat: rätta och kör steg 3 igen.
