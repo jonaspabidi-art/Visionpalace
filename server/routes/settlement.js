@@ -19,7 +19,11 @@ module.exports = () => {
     if (error || !data?.value) return null;
     try {
       const cfg = JSON.parse(data.value);
-      return (cfg.seller_admin_id && cfg.payer_admin_id) ? cfg : null;
+      if (!cfg.seller_admin_id || !cfg.payer_admin_id) return null;
+      // Same account on both sides means the two usernames in the SQL step
+      // resolved to one admin — surface it instead of showing nonsense figures
+      if (cfg.seller_admin_id === cfg.payer_admin_id) return { invalid: 'same_account' };
+      return cfg;
     } catch { return null; }
   }
 
@@ -31,6 +35,10 @@ module.exports = () => {
       // Not set up yet — flagged so the UI can stay completely silent instead
       // of showing an error to admins before the SQL step has been run
       res.status(503).json({ not_configured: true, error: 'Avräkningen är inte uppsatt än. Kör SQL-steget i Supabase först.' });
+      return null;
+    }
+    if (cfg.invalid === 'same_account') {
+      res.status(500).json({ error: 'Avräkningen är felkonfigurerad: säljare och betalare pekar på samma konto. Rätta användarnamnen i SQL-steget.' });
       return null;
     }
     const role = req.adminId === cfg.seller_admin_id ? 'seller'
