@@ -11,7 +11,7 @@ function switchTab(tab) {
   if (tab === 'broadcast') requestAnimationFrame(pinFeedToBottom);
   if (tab === 'inventory') loadInventory();
   if (tab === 'invoice') populateInvClientPicker();
-  if (tab === 'historik') loadSalesHistory();
+  if (tab === 'historik') { loadSalesHistory(); loadSettlement(); }
 }
 
 // ── Search toggle ──

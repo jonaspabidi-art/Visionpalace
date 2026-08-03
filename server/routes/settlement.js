@@ -1,0 +1,163 @@
+const { adminAuth } = require('../lib/auth');
+const supabase = require('../lib/supabase');
+
+// A sale only counts towards the commission once the money is actually in.
+// 'cancelled' never counts; 'unpaid' is reported separately as pending.
+const PAID_STATUSES = ['paid', 'shipped', 'delivered'];
+const DEFAULT_COMMISSION_PCT = 70;
+
+module.exports = () => {
+  const router = require('express').Router();
+  const dbTimeout = () => AbortSignal.timeout(10000);
+
+  async function loadConfig() {
+    const { data, error } = await supabase.from('app_settings')
+      .select('value').eq('key', 'settlement_config').abortSignal(dbTimeout()).maybeSingle();
+    if (error || !data?.value) return null;
+    try {
+      const cfg = JSON.parse(data.value);
+      return (cfg.seller_admin_id && cfg.payer_admin_id) ? cfg : null;
+    } catch { return null; }
+  }
+
+  // Only the two configured parties may see or touch the settlement — this is
+  // money between them. Responds and returns null when the caller isn't one.
+  async function requireParty(req, res) {
+    const cfg = await loadConfig();
+    if (!cfg) {
+      // Not set up yet — flagged so the UI can stay completely silent instead
+      // of showing an error to admins before the SQL step has been run
+      res.status(503).json({ not_configured: true, error: 'Avräkningen är inte uppsatt än. Kör SQL-steget i Supabase först.' });
+      return null;
+    }
+    const role = req.adminId === cfg.seller_admin_id ? 'seller'
+      : req.adminId === cfg.payer_admin_id ? 'payer' : null;
+    if (!role) { res.status(403).json({ error: 'Ingen avräkning kopplad till detta konto' }); return null; }
+    return { cfg, role };
+  }
+
+  // Margin on one sale. Rows without a buy price (shipping, ad-hoc lines) are
+  // skipped — they are pass-through, not profit, so they aren't shared.
+  function saleProfit(sale) {
+    return (sale.sale_items || []).reduce((sum, i) => {
+      if (i.buy_price == null) return sum;
+      const qty = i.qty || 1;
+      return sum + ((parseFloat(i.sell_price) || 0) - (parseFloat(i.buy_price) || 0)) * qty;
+    }, 0);
+  }
+
+  // The balance is derived, never stored: a corrected price or a deleted sale
+  // flows straight through instead of leaving a stale ledger row behind.
+  router.get('/settlement', adminAuth, async (req, res) => {
+    try {
+      const party = await requireParty(req, res);
+      if (!party) return;
+      const { cfg, role } = party;
+      const defaultPct = cfg.commission_pct ?? DEFAULT_COMMISSION_PCT;
+
+      const { data: sales, error: salesErr } = await supabase.from('sales')
+        .select('id, created_at, status, commission_pct, sale_items(sell_price, buy_price, qty)')
+        .eq('admin_id', cfg.seller_admin_id)
+        .abortSignal(dbTimeout());
+      if (salesErr) return res.status(500).json({ error: `Kunde inte läsa försäljningar: ${salesErr.message}` });
+
+      let earned = 0, pending = 0, missingBuyPrice = 0;
+      const months = {};
+      for (const s of sales || []) {
+        const status = s.status || 'unpaid';
+        if (status === 'cancelled') continue;
+        const pct = s.commission_pct != null ? parseFloat(s.commission_pct) : defaultPct;
+        const share = saleProfit(s) * pct / 100;
+        // Warn about sales where no row carries a buy price — those silently
+        // yield zero commission, which would quietly cost the sellers money
+        const items = s.sale_items || [];
+        if (items.length && !items.some(i => i.buy_price != null)) missingBuyPrice++;
+        if (PAID_STATUSES.includes(status)) {
+          earned += share;
+          const key = (s.created_at || '').substring(0, 7);
+          months[key] = (months[key] || 0) + share;
+        } else {
+          pending += share;
+        }
+      }
+
+      const { data: entries, error: entErr } = await supabase.from('settlements')
+        .select('*').eq('seller_admin_id', cfg.seller_admin_id)
+        .order('occurred_at', { ascending: false })
+        .abortSignal(dbTimeout());
+      if (entErr) return res.status(503).json({ error: `Kunde inte läsa utbetalningar: ${entErr.message}` });
+
+      const sumOf = type => (entries || [])
+        .filter(e => e.type === type)
+        .reduce((a, e) => a + (parseFloat(e.amount) || 0), 0);
+      const opening = sumOf('opening');
+      const paidOut = sumOf('payout');
+
+      res.json({
+        role,
+        commission_pct: defaultPct,
+        earned, pending, opening,
+        paid_out: paidOut,
+        balance: opening + earned - paidOut,
+        missing_buy_price: missingBuyPrice,
+        months,
+        entries: entries || [],
+      });
+    } catch (e) {
+      console.error('[Settlement] GET /settlement:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid hämtning av avräkning' });
+    }
+  });
+
+  // Register a payout (or an opening balance). Both parties may register —
+  // agreed with the owner: the same figures are visible to both accounts.
+  router.post('/settlement/entry', adminAuth, async (req, res) => {
+    try {
+      const party = await requireParty(req, res);
+      if (!party) return;
+      const { type, amount, occurred_at, note } = req.body;
+      const entryType = type === 'opening' ? 'opening' : 'payout';
+      const amt = parseFloat(amount);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: 'Ange ett belopp större än noll' });
+      }
+      const when = occurred_at && /^\d{4}-\d{2}-\d{2}$/.test(occurred_at)
+        ? new Date(`${occurred_at}T12:00:00`).toISOString()
+        : new Date().toISOString();
+
+      const { data, error } = await supabase.from('settlements').insert({
+        seller_admin_id: party.cfg.seller_admin_id,
+        type: entryType,
+        amount: amt,
+        occurred_at: when,
+        note: (note || '').trim() || null,
+        created_by: req.adminId,
+      }).select().abortSignal(dbTimeout()).single();
+      if (error) return res.status(500).json({ error: error.message });
+
+      console.log(`[Settlement] ${entryType} € ${amt} registrerad av admin ${req.adminId}`);
+      res.json({ entry: data });
+    } catch (e) {
+      console.error('[Settlement] POST /settlement/entry:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid registrering' });
+    }
+  });
+
+  router.delete('/settlement/entry/:id', adminAuth, async (req, res) => {
+    try {
+      const party = await requireParty(req, res);
+      if (!party) return;
+      const { error } = await supabase.from('settlements').delete()
+        .eq('id', req.params.id)
+        .eq('seller_admin_id', party.cfg.seller_admin_id)
+        .abortSignal(dbTimeout());
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[Settlement] DELETE entry:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid borttagning' });
+    }
+  });
+
+  return router;
+};
