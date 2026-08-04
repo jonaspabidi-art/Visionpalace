@@ -247,13 +247,14 @@ INKÖP (från `purchases`, med länk till originalfakturan) och BETALNINGAR (fr�
 `sale_payments`, med länk till kvittobilden).
 **Avräkningen (punkt 26) ingår medvetet inte** — ägaren bokför utbetalningarna
 till säljarna separat (hans beslut 2026-08-04). Saldot finns kvar i appen som förut.
-**Per konto eller gemensamt (ägarens besked 2026-08-04):** försäljningar och
-betalningar filtreras på `admin_id` och gäller bara det konto som laddar ner filen.
-**Inköpen är bolagets gemensamma** och filtreras därför inte — de står likadant i
-båda kontonas filer. Därför har inköpsraderna kolumnen "Inlagt av", rubriken säger
-"bokförs endast en gång" och filhuvudet har både kontonamn och en varning mot
-dubbelbokföring. "Inlagt av" hämtas via koppling till `admins`; går den inte att
-läsa hämtas inköpen om utan namn i stället för att sektionen faller bort.
+**Omfattning (ägarens besked 2026-08-04): filen täcker hela bolaget.** Bokföringen
+görs på ett bolag, så exporten filtrerar **inte** på `admin_id` — båda admin-kontonas
+försäljningar och de gemensamma inköpen ligger i samma fil, och en fil räcker oavsett
+vilket konto den laddas ner från. Kolumnerna **"Sålt av"** och **"Inlagt av"** håller
+ändå isär vem som gjort vad. Obs: Historik visar fortfarande bara det egna kontots
+sälj — därför står det "hela bolaget" på exportknappen.
+Båda namnkolumnerna hämtas via koppling till `admins`; går kopplingen inte att läsa
+görs om anropet utan den, så en sektion aldrig faller bort för en kolumns skull.
 **CSV-formatet:** semikolon, decimalkomma och UTF-8-BOM, annars öppnar svenska
 Excel filen som en kolumn med trasiga åäö. Inga momskolumner (export utanför EU).
 Ingen API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
