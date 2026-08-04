@@ -6,11 +6,16 @@ const supabase = require('../lib/supabase');
 // Invoices are a page or two — no need for the 100 MB the media route allows
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  // Base64 inflates by ~4/3 and the API caps a request at 32 MB
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 
-const MODEL = 'claude-haiku-4-5';
+// Haiku read the real invoice's prices and quantities correctly but turned the
+// letter S in "CT0582S-005" into a 5. A wrong ref doesn't just create a wrong
+// product — it poisons the ref lookup for years. Sonnet is markedly better at
+// character-level transcription on photos; the difference is ~6 öre an invoice.
+const MODEL = 'claude-sonnet-5';
 const DEFAULT_EUR_SEK_RATE = 11;
 
 // One row per article line on the invoice. Only what is printed is asked for —
@@ -28,11 +33,12 @@ const ROW_SCHEMA = {
         type: 'object',
         properties: {
           ref_code: { type: 'string', description: 'Artikelns referenskod, t.ex. CT0582S-005' },
-          description: { type: 'string', description: 'Resten av artikelraden, utan referenskoden' },
+          lens_size: { type: 'string', description: 'Linsstorleken direkt efter referenskoden, t.ex. 56. Tom sträng om den saknas.' },
+          description: { type: 'string', description: 'Produktbeskrivningen utan referenskod och utan linsstorlek, t.ex. Sunglass MAN METAL' },
           qty: { type: 'integer', description: 'Antal enheter på raden' },
           line_total: { type: 'number', description: 'Radens totalbelopp som vanlig decimal' },
         },
-        required: ['ref_code', 'description', 'qty', 'line_total'],
+        required: ['ref_code', 'lens_size', 'description', 'qty', 'line_total'],
         additionalProperties: false,
       },
     },
@@ -44,7 +50,8 @@ const ROW_SCHEMA = {
 const SYSTEM_PROMPT = `Du läser inköpsfakturor från glasögonleverantörer (oftast Kering Eyewear) och plockar ut artikelraderna.
 
 Regler:
-1. Referenskoden står inbäddad i artikelbeskrivningen, inte i en egen kolumn. Exempel: raden "CT0582S-005 56 Sunglass MAN METAL" har referenskoden "CT0582S-005". Talet direkt efter (56) är linsstorlek och ingår INTE i koden. Ta aldrig koden från ID- eller UPC-kolumnen.
+1. Referenskoden står inbäddad i artikelbeskrivningen, inte i en egen kolumn. Exempel: raden "CT0582S-005 56 Sunglass MAN METAL" har referenskoden "CT0582S-005", linsstorleken "56" och beskrivningen "Sunglass MAN METAL". Ta aldrig koden från ID- eller UPC-kolumnen.
+1b. VIKTIGAST AV ALLT: läs referenskoden tecken för tecken. Cartier-koder har formen CT + fyra siffror + EN BOKSTAV + bindestreck + tre siffror, till exempel CT0582S-005 och CT0622S-003. Tecknet precis före bindestrecket är nästan alltid en BOKSTAV, inte en siffra. Förväxla inte S med 5, O med 0, I eller l med 1, B med 8, eller Z med 2. Är du osäker på ett tecken, välj bokstaven som är rimlig för formatet framför siffran. En felläst referenskod är det värsta fel du kan göra här.
 2. Tal skrivs i europeiskt format där punkt är tusentalsavgränsare och komma är decimaltecken. "12.072,00" betyder 12072.00 — inte 12,072. Räkna om alla belopp till vanliga decimaltal.
 3. line_total är radens belopp i kolumnen "Net Total" (eller motsvarande radtotal), exakt som det står. Räkna inte om per styck.
 4. Valutan läser du från fakturans summering ("Invoice Summary", "Total amount" eller liknande). Anta aldrig en valuta — läs den.
@@ -109,9 +116,17 @@ module.exports = () => {
         const converted = currency === 'SEK' ? unitOriginal / rate
           : currency === 'EUR' ? unitOriginal
             : null;
+        const ref = String(r.ref_code || '').trim().toUpperCase();
+        // A brand prefix followed only by digits before the dash almost always
+        // means a letter was read as a digit (CT0582S-005 → CT05825-005).
+        // Flagged rather than corrected — guessing at someone's article number
+        // would be worse than pointing at it.
+        const suspiciousRef = /^[A-Z]{1,3}\d+-\d+$/.test(ref);
         return {
-          ref_code: String(r.ref_code || '').trim(),
+          ref_code: ref,
+          lens_size: String(r.lens_size || '').trim(),
           description: String(r.description || '').trim(),
+          suspicious_ref: suspiciousRef,
           qty,
           line_total: lineTotal,
           unit_original: Math.round(unitOriginal * 100) / 100,
