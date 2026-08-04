@@ -488,7 +488,7 @@ async function loadSalesHistory() {
           <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:capitalize">${monthName}</div>
           <div style="font-size:12px;color:var(--text3)">€ ${revenue.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} · vinst € ${profit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
-        <button onclick="exportBookkeeping('${key}')" style="background:none;border:none;color:#7aabff;font-size:12px;padding:0 0 10px;cursor:pointer;font-family:inherit">Exportera bokföring →</button>
+        <button onclick="exportBookkeeping('${key}')" style="background:none;border:none;color:#7aabff;font-size:12px;padding:0 0 10px;cursor:pointer;font-family:inherit">Exportera bokföring — hela bolaget →</button>
         ${saleRows}
       </div>`;
     }).join('');
