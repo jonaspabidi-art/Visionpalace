@@ -366,6 +366,11 @@ async function doStatusUpdate(saleId, sid, newStatus, carrier, tracking) {
     showToast('Status uppdaterad', 'ok');
     // Marking a sale paid moves its commission from pending into the balance
     if (typeof loadSettlement === 'function') loadSettlement();
+    // The moment payment is confirmed is the natural moment to attach the
+    // receipt — offer it right away instead of relying on remembering later
+    if (newStatus === 'paid' && typeof openPaymentModal === 'function') {
+      openPaymentModal(saleId, sid);
+    }
   } catch { showToast('Anslutningsfel', 'error'); }
 }
 
@@ -446,7 +451,7 @@ async function loadSalesHistory() {
         }).join('');
         const sid = sale.id.replace(/-/g,'');
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
-          <div onclick="toggleSaleDetail('${sid}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">
+          <div onclick="toggleSaleDetail('${sid}','${sale.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</span>
@@ -467,6 +472,7 @@ async function loadSalesHistory() {
             <div id="sa-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
               ${statusActionsHTML(sale, sid)}
             </div>
+            <div id="pay-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               <button onclick="event.stopPropagation();openSaleInvoice('${sale.id}')" style="background:none;border:1px solid rgba(100,150,255,.3);border-radius:8px;color:#7aabff;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Faktura</button>
               <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
@@ -485,13 +491,16 @@ async function loadSalesHistory() {
   } catch { listEl.innerHTML = '<div style="color:#ff7a7a;text-align:center;padding:40px 0">Fel vid laddning</div>'; }
 }
 
-function toggleSaleDetail(sid) {
+function toggleSaleDetail(sid, saleId) {
   const detail = document.getElementById('detail-' + sid);
   const chev = document.getElementById('chev-' + sid);
   if (!detail) return;
   const open = detail.style.display === 'none';
   detail.style.display = open ? 'block' : 'none';
   if (chev) chev.style.transform = open ? 'rotate(180deg)' : '';
+  // Payments load on first expand — keeps them off the list payload and means
+  // a missing sale_payments table can't take the whole history down
+  if (open && saleId && !loadedPayments.has(sid)) loadSalePayments(saleId, sid);
 }
 
 async function deleteSale(saleId, onDone) {

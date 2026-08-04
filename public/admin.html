@@ -297,6 +297,33 @@
   </div>
 </div>
 
+<!-- Payment (bank transfer receipt) modal -->
+<div class="modal-bg" id="payment-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Registrera betalning</div>
+    <div class="inv-field">
+      <label>Bild på betalningen</label>
+      <input class="inv-input" id="pay-file" type="file" accept="image/*" onchange="handlePayImage(this)">
+      <div id="pay-preview"></div>
+    </div>
+    <div class="inv-field">
+      <label>Belopp (€) — valfritt</label>
+      <input class="inv-input" id="pay-amount" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Lämna tomt om hela beloppet">
+    </div>
+    <div class="inv-field">
+      <label>Betalningsdatum</label>
+      <input class="inv-input" id="pay-date" type="date">
+    </div>
+    <div class="inv-field">
+      <label>Kommentar (valfritt)</label>
+      <input class="inv-input" id="pay-note" placeholder="ex. Banköverföring">
+    </div>
+    <button class="inv-gen-btn" onclick="savePayment()">Spara</button>
+    <button class="hbtn" style="width:100%;margin-top:8px;padding:12px;justify-content:center" onclick="closePaymentModal()">Avbryt</button>
+  </div>
+</div>
+
 <!-- Settlement entry modal -->
 <div class="modal-bg" id="settlement-modal">
   <div class="modal-sheet">
@@ -507,6 +534,7 @@
 <script src="/js/admin/lenses.js"></script>
 <script src="/js/admin/invoice.js"></script>
 <script src="/js/admin/sales.js"></script>
+<script src="/js/admin/payments.js"></script>
 <script src="/js/admin/settlement.js"></script>
 <script src="/js/admin/init.js"></script>
 </body>

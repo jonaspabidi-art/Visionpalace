@@ -165,6 +165,13 @@ module.exports = (io) => {
       updates.tracking_number = tracking_number || null;
       updates.shipped_at = new Date().toISOString();
     }
+    // For bookkeeping the date the money arrived is what counts, not the order
+    // date. Only stamped the first time so a later status change can't move it.
+    if (['paid', 'shipped', 'delivered'].includes(status)) {
+      const { data: existing } = await supabase.from('sales')
+        .select('paid_at').eq('id', req.params.id).maybeSingle();
+      if (existing && !existing.paid_at) updates.paid_at = new Date().toISOString();
+    }
     const { data: sale, error } = await supabase.from('sales')
       .update(updates).eq('id', req.params.id).eq('admin_id', req.adminId)
       .select('*, sale_items(*)').single();
@@ -175,6 +182,61 @@ module.exports = (io) => {
     }
     io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
     res.json({ ok: true, sale });
+  });
+
+  // ── Betalningar (kvitton på banköverföringar) ───────────────────────────────
+  // One row per payment so part payments work; amount may be null when the
+  // point is just to attach the receipt.
+
+  // Ownership check — a payment may only be touched on the caller's own sale
+  async function ownsSale(saleId, adminId) {
+    const { data } = await supabase.from('sales')
+      .select('id').eq('id', saleId).eq('admin_id', adminId).abortSignal(dbTimeout()).maybeSingle();
+    return !!data;
+  }
+
+  router.get('/sales/:id/payments', adminAuth, async (req, res) => {
+    if (!await ownsSale(req.params.id, req.adminId)) return res.status(404).json({ error: 'Hittades inte' });
+    const { data, error } = await supabase.from('sale_payments')
+      .select('*').eq('sale_id', req.params.id).order('paid_at', { ascending: false })
+      .abortSignal(dbTimeout());
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ payments: data || [] });
+  });
+
+  router.post('/sales/:id/payments', adminAuth, async (req, res) => {
+    try {
+      if (!await ownsSale(req.params.id, req.adminId)) return res.status(404).json({ error: 'Hittades inte' });
+      const { amount, paid_at, image_url, note } = req.body;
+      const amt = amount === '' || amount == null ? null : parseFloat(amount);
+      if (amt != null && (!Number.isFinite(amt) || amt < 0)) {
+        return res.status(400).json({ error: 'Ogiltigt belopp' });
+      }
+      const when = paid_at && /^\d{4}-\d{2}-\d{2}$/.test(paid_at)
+        ? new Date(`${paid_at}T12:00:00`).toISOString()
+        : new Date().toISOString();
+      const { data, error } = await supabase.from('sale_payments').insert({
+        sale_id: req.params.id,
+        amount: amt,
+        paid_at: when,
+        image_url: image_url || null,
+        note: (note || '').trim() || null,
+        created_by: req.adminId,
+      }).select().abortSignal(dbTimeout()).single();
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ payment: data });
+    } catch (e) {
+      console.error('[Payments] POST:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid registrering av betalning' });
+    }
+  });
+
+  router.delete('/sales/:saleId/payments/:id', adminAuth, async (req, res) => {
+    if (!await ownsSale(req.params.saleId, req.adminId)) return res.status(404).json({ error: 'Hittades inte' });
+    const { error } = await supabase.from('sale_payments').delete()
+      .eq('id', req.params.id).eq('sale_id', req.params.saleId).abortSignal(dbTimeout());
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
   });
 
   // Delete a sale (admin)
