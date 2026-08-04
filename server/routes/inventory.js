@@ -100,6 +100,30 @@ module.exports = (io) => {
     res.json({ item: data });
   });
 
+  // Update every pair of the same model at once. Lagret har en rad per par, så
+  // ett namn- eller prisbyte måste gälla hela högen — annars delar den upp sig
+  // i flera kort i vyn.
+  router.patch('/inventory', adminAuth, async (req, res) => {
+    const { ids, ref_code, name, buy_price, sell_price, notes, image } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids krävs' });
+    if (!name) return res.status(400).json({ error: 'Namn krävs' });
+    const update = { ref_code: ref_code || null, name, buy_price: buy_price || null,
+      sell_price: sell_price || null, notes: notes || null };
+    if (image !== undefined) update.image = image || null;
+    const { data, error } = await supabase.from('inventory').update(update).in('id', ids).select();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ items: data || [], updated: (data || []).length });
+  });
+
+  // Delete several pairs at once (hela högen). DELETE tar ingen kropp, därav POST.
+  router.post('/inventory/delete', adminAuth, async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids krävs' });
+    const { error } = await supabase.from('inventory').delete().in('id', ids);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, deleted: ids.length });
+  });
+
   // Delete inventory item
   router.delete('/inventory/:id', adminAuth, async (req, res) => {
     const { error } = await supabase.from('inventory').delete().eq('id', req.params.id);

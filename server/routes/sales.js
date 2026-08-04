@@ -67,13 +67,18 @@ module.exports = (io) => {
       // Look up product images server-side. Legacy inventory/lens rows store
       // base64 images — shipping those through the sale request (and back in
       // the response) made createSale hang for minutes on mobile connections.
-      const imgInvIds = [...new Set(items.filter(i => i.inventory_id).map(i => i.inventory_id))];
+      // A glasses line can carry several physical pairs. Lagret har en rad per
+      // par, så tre sålda par måste peka ut tre rader — annars ligger de kvar.
+      const lineIds = i => (Array.isArray(i.inventory_ids) && i.inventory_ids.length
+        ? i.inventory_ids.filter(Boolean)
+        : i.inventory_id ? [i.inventory_id] : []);
+      const imgInvIds = [...new Set(items.flatMap(lineIds))];
       const imgLensIds = [...new Set(items.filter(i => i.lens_id).map(i => i.lens_id))];
-      const imageByInv = {}, imageByLens = {};
+      const imageByInv = {}, buyByInv = {}, imageByLens = {};
       if (imgInvIds.length) {
         const { data } = await retryRead('bilduppslag lager', () =>
-          supabase.from('inventory').select('id, image').in('id', imgInvIds).abortSignal(dbTimeout()));
-        (data || []).forEach(r => { imageByInv[r.id] = r.image; });
+          supabase.from('inventory').select('id, image, buy_price').in('id', imgInvIds).abortSignal(dbTimeout()));
+        (data || []).forEach(r => { imageByInv[r.id] = r.image; buyByInv[r.id] = r.buy_price; });
       }
       if (imgLensIds.length) {
         const { data } = await retryRead('bilduppslag linser', () =>
@@ -82,7 +87,26 @@ module.exports = (io) => {
       }
       step('bilder');
 
-      const rows = items.map(i => ({
+      // Varje par har sitt eget inköpspris. Raden delas därför per inköpspris:
+      // är de lika blir det en rad med antal 3 (kort faktura), skiljer de sig
+      // blir det en rad per pris (rätt vinst i bokföring och avräkning).
+      const expanded = [];
+      for (const i of items) {
+        const ids = Array.isArray(i.inventory_ids) ? i.inventory_ids.filter(Boolean) : [];
+        if (!ids.length) { expanded.push(i); continue; }
+        const byPrice = new Map();
+        for (const id of ids) {
+          const buy = buyByInv[id] ?? i.buy_price ?? null;
+          const key = buy == null ? 'null' : String(buy);
+          if (!byPrice.has(key)) byPrice.set(key, { buy, ids: [] });
+          byPrice.get(key).ids.push(id);
+        }
+        for (const g of byPrice.values()) {
+          expanded.push({ ...i, inventory_id: g.ids[0], buy_price: g.buy, qty: g.ids.length });
+        }
+      }
+
+      const rows = expanded.map(i => ({
         sale_id: sale.id,
         inventory_id: i.inventory_id || null,
         lens_id: i.lens_id || null,
@@ -115,7 +139,21 @@ module.exports = (io) => {
       // stock) and must NEVER fail the request. Failures are logged loudly.
       try {
         // Remove sold glasses from inventory (shared across all admins)
-        const inventoryIds = items.filter(i => i.inventory_id).map(i => i.inventory_id);
+        const inventoryIds = [...new Set(items.flatMap(lineIds))];
+        // En äldre klient (cachad JS) skickar bara ett id med antal 3. Då pekas
+        // resten ut här på ref-koden, annars blir kvarvarande par kvar i lagret
+        // som spöken. Görs bara i städningen, som aldrig får fälla ett sälj.
+        for (const i of items) {
+          const qty = i.qty || 1;
+          const already = lineIds(i).length;
+          if (already >= qty || !i.inventory_id || !i.ref_code) continue;
+          const { data: extra } = await retryRead('extra lagerrader', () =>
+            supabase.from('inventory').select('id').eq('ref_code', i.ref_code)
+              .not('id', 'in', `(${inventoryIds.join(',')})`)
+              .limit(qty - already).abortSignal(dbTimeout()));
+          for (const row of extra || []) if (!inventoryIds.includes(row.id)) inventoryIds.push(row.id);
+          if (extra?.length) console.warn(`[Sale] ${invoice_number}: äldre klient sålde ${qty} av ${i.ref_code} — plockade ${extra.length} extra lagerrader`);
+        }
         if (inventoryIds.length) {
           const { error: delErr } = await supabase.from('inventory').delete().in('id', inventoryIds).abortSignal(dbTimeout());
           if (delErr) console.error(`[Sale] ${invoice_number}: lagerborttagning misslyckades: ${delErr.message}`);

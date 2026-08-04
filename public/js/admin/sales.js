@@ -4,14 +4,34 @@ let _lastSaleClientId = null;
 let _lastSaleItems = null;
 let _saleHistoryCache = {};
 
-function addToSaleCartFromCard(invId) {
-  const item = invItemsMap[invId];
-  if (!item) return;
-  const existing = saleCartItems.find(i => i.id === invId);
-  if (existing) existing.qty++;
-  else saleCartItems.push({ ...item, qty: 1 });
+// En korgrad är en modell, och den bär med sig de faktiska lagerraderna
+// (ids) den tagit ur högen. Antalet är alltid ids.length — det är så tre
+// sålda par också blir tre par borta ur lagret.
+function nextFreeInGroup(key) {
+  const g = invGroups[key];
+  if (!g) return null;
+  const taken = new Set(saleCartItems.find(i => i.id === key)?.ids || []);
+  return g.ids.find(id => !taken.has(id)) || null;
+}
+
+function addToSaleCartFromCard(key) {
+  const g = invGroups[key];
+  if (!g) return;
+  const id = nextFreeInGroup(key);
+  if (!id) { showToast(`Du har redan valt alla ${g.count} i lager`, 'error'); return; }
+  let entry = saleCartItems.find(i => i.id === key);
+  if (!entry) {
+    entry = {
+      id: key, ids: [], qty: 0,
+      name: g.name, ref_code: g.ref_code,
+      sell_price: g.sell_price, buy_price: g.buy_price, image: g.image,
+    };
+    saleCartItems.push(entry);
+  }
+  entry.ids.push(id);
+  entry.qty = entry.ids.length;
   updateSaleCartBadge();
-  showToast(`${item.name} tillagd i försäljning`, 'success');
+  showToast(`${g.name} tillagd i försäljning${entry.qty > 1 ? ` (${entry.qty} st)` : ''}`, 'success');
 }
 
 function updateSaleCartBadge() {
@@ -25,9 +45,9 @@ function updateSaleCartBadge() {
   document.getElementById('inv-fab')?.classList.toggle('raised', shown);
 }
 
-function openSaleModal(invId) {
-  if (invId && invItemsMap[invId] && !saleCartItems.find(i => i.id === invId)) {
-    saleCartItems.push({ ...invItemsMap[invId], qty: 1 });
+function openSaleModal(groupKey) {
+  if (groupKey && invGroups[groupKey] && !saleCartItems.find(i => i.id === groupKey)) {
+    addToSaleCartFromCard(groupKey);
   }
   const sel = document.getElementById('sale-client-pick');
   sel.innerHTML = '<option value="">Välj klient…</option>' +
@@ -46,11 +66,22 @@ function closeSaleModal() {
   if (s) s.value = '';
 }
 
-function updateSaleQty(invId, delta) {
-  const item = saleCartItems.find(i => i.id === invId);
-  if (!item) return;
-  item.qty = Math.max(1, item.qty + delta);
+function updateSaleQty(key, delta) {
+  const entry = saleCartItems.find(i => i.id === key);
+  if (!entry) return;
+  if (delta > 0) {
+    const id = nextFreeInGroup(key);
+    // Går aldrig att sälja fler än vad som faktiskt står i lagret
+    if (!id) { showToast(`Det finns bara ${invGroups[key]?.count ?? entry.qty} i lager`, 'error'); return; }
+    entry.ids.push(id);
+  } else {
+    if (entry.ids.length <= 1) return;
+    entry.ids.pop();
+  }
+  entry.qty = entry.ids.length;
   renderSaleCart();
+  renderSaleInvList();
+  updateSaleCartBadge();
 }
 
 function removeFromSaleCart(invId) {
@@ -101,33 +132,31 @@ function renderSaleCart() {
 function renderSaleInvList() {
   const list = document.getElementById('sale-inv-list');
   if (!list) return;
-  const items = Object.values(invItemsMap);
-  if (!items.length) {
+  const groups = Object.values(invGroups);
+  if (!groups.length) {
     list.innerHTML = '<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px 0">Lagret är tomt</div>';
     return;
   }
-  const inCart = new Set(saleCartItems.map(i => i.id));
-  list.innerHTML = items.map(item => `
-    <div class="sale-inv-item">
-      ${item.image
-        ? `<img class="sale-item-img" src="${item.image}" alt="">`
+  list.innerHTML = groups.map(g => {
+    const chosen = saleCartItems.find(i => i.id === g.key)?.qty || 0;
+    const left = g.count - chosen;
+    return `<div class="sale-inv-item">
+      ${g.image
+        ? `<img class="sale-item-img" src="${g.image}" alt="">`
         : `<div class="sale-item-img"></div>`}
       <div class="sale-item-info" style="flex:1;min-width:0">
-        <div class="sale-item-name">${esc(item.name)}</div>
-        <div class="sale-item-price">${item.sell_price != null ? `€ ${item.sell_price}` : '—'}</div>
+        <div class="sale-item-name">${esc(g.name)}${g.count > 1 ? ` <span style="color:var(--text3);font-size:11px">${g.count} st</span>` : ''}</div>
+        <div class="sale-item-price">${g.sell_price != null ? `€ ${g.sell_price}` : '—'}${chosen ? ` · ${chosen} vald${chosen > 1 ? 'a' : ''}` : ''}</div>
       </div>
-      ${inCart.has(item.id)
-        ? `<span style="color:var(--blue);font-size:12px;font-weight:700;flex-shrink:0">✓ Vald</span>`
-        : `<button class="sale-inv-add" onclick="addToSaleCartFromModal('${item.id}')">+</button>`}
-    </div>`).join('');
+      ${left > 0
+        ? `<button class="sale-inv-add" onclick="addToSaleCartFromModal('${g.key}')">+</button>`
+        : `<span style="color:var(--blue);font-size:12px;font-weight:700;flex-shrink:0">✓ Alla</span>`}
+    </div>`;
+  }).join('');
 }
 
-function addToSaleCartFromModal(invId) {
-  const item = invItemsMap[invId];
-  if (!item) return;
-  const existing = saleCartItems.find(i => i.id === invId);
-  if (existing) existing.qty++;
-  else saleCartItems.push({ ...item, qty: 1 });
+function addToSaleCartFromModal(key) {
+  addToSaleCartFromCard(key);
   renderSaleCart();
   renderSaleInvList();
 }
@@ -144,10 +173,12 @@ async function createSale() {
     // Legacy items carry base64 images; sending those made the request
     // multi-MB and the sale appeared to hang on "Skapar…" over mobile.
     const glassItems = saleCartItems.map(i => ({
-      inventory_id: i.id,
+      // Alla utpekade par följer med, så servern tar bort exakt dem ur lagret
+      inventory_ids: i.ids,
+      inventory_id: i.ids[0],
       name: i.name, ref_code: i.ref_code || null,
       sell_price: i.sell_price ?? null, buy_price: i.buy_price ?? null,
-      qty: i.qty
+      qty: i.ids.length
     }));
     const lensItems = lensCartItems.map(i => ({
       lens_id: i.lensId, lens_variant_id: i.variantId, lens_color: i.color,
@@ -214,7 +245,7 @@ function finishSaleUI(clientId, shipping) {
     ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
     ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
   ];
-  const soldInvIds = saleCartItems.map(i => i.id);
+  const soldInvIds = saleCartItems.flatMap(i => i.ids || []);
   const soldLenses = lensCartItems.length > 0;
   saleCartItems = [];
   lensCartItems = [];

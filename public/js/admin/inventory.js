@@ -7,25 +7,67 @@ async function loadInventory() {
   renderInventory(d.items || []);
 }
 
+// Lagret har en rad per fysiskt par — köper man in tre av samma modell blir
+// det tre rader. Raderna ligger kvar som de är (varje par har sitt eget
+// inköpspris och sin egen rad i inköpsloggen), men de visas som ETT kort med
+// antal, annars blir både lagret och katalogen full av dubbletter.
+function invGroupKey(item) {
+  const ref = String(item.ref_code || '').trim().toUpperCase();
+  return ref ? `ref:${ref}` : `namn:${String(item.name || '').trim().toLowerCase()}`;
+}
+
+// items kommer nyast först, så det första paret i varje hög får representera den
+function buildInvGroups(items) {
+  const groups = {};
+  for (const item of items) {
+    const key = invGroupKey(item);
+    if (!groups[key]) {
+      groups[key] = {
+        key, ids: [], items: [],
+        name: item.name, ref_code: item.ref_code,
+        sell_price: item.sell_price, buy_price: item.buy_price, image: item.image,
+      };
+    }
+    const g = groups[key];
+    g.ids.push(item.id);
+    g.items.push(item);
+    if (!g.image && item.image) g.image = item.image;
+  }
+  for (const g of Object.values(groups)) {
+    g.count = g.ids.length;
+    g.mixedPrice = g.items.some(i => String(i.sell_price ?? '') !== String(g.sell_price ?? ''));
+  }
+  return groups;
+}
+
 function renderInventory(items) {
   const grid = document.getElementById('inv-grid');
   invItemsMap = {};
-  if (!items.length) { grid.innerHTML = '<div class="inv-empty" style="grid-column:1/-1">Lagret är tomt</div>'; return; }
+  if (!items.length) {
+    invGroups = {};
+    grid.innerHTML = '<div class="inv-empty" style="grid-column:1/-1">Lagret är tomt</div>';
+    return;
+  }
   items.forEach(item => { invItemsMap[item.id] = item; });
-  grid.innerHTML = items.map(item => `
+  invGroups = buildInvGroups(items);
+  grid.innerHTML = Object.values(invGroups).map(g => `
     <div class="inv-card">
-      ${item.image
-        ? `<img class="inv-card-img" src="${item.image}" alt="${esc(item.name)}" loading="lazy">`
-        : `<div class="inv-card-img-ph">Ingen bild</div>`}
+      <div style="position:relative">
+        ${g.image
+          ? `<img class="inv-card-img" src="${g.image}" alt="${esc(g.name)}" loading="lazy">`
+          : `<div class="inv-card-img-ph">Ingen bild</div>`}
+        ${g.count > 1 ? `<span class="inv-count-badge">${g.count} st</span>` : ''}
+      </div>
       <div class="inv-card-body">
-        ${item.ref_code ? `<div class="inv-card-ref">${esc(item.ref_code)}</div>` : ''}
-        <div class="inv-card-name">${esc(item.name)}</div>
-        ${item.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
+        ${g.ref_code ? `<div class="inv-card-ref">${esc(g.ref_code)}</div>` : ''}
+        <div class="inv-card-name">${esc(g.name)}</div>
+        ${g.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(g.sell_price))}</div>` : ''}
+        ${g.mixedPrice ? `<div class="inv-card-warn">Olika säljpris på exemplaren — visar det senaste</div>` : ''}
         <!-- Sälj är det man gör hela dagen; redigera och ta bort ligger under
              prickarna så att den röda papperskorgen inte sitter bredvid -->
         <div class="inv-card-actions">
-          <button class="inv-sell-btn" onclick="addToSaleCartFromCard('${item.id}')">+ Sälj</button>
-          <button class="inv-card-more" onclick="openCardMenu('glasses','${item.id}')" aria-label="Fler val">···</button>
+          <button class="inv-sell-btn" onclick="addToSaleCartFromCard('${g.key}')">+ Sälj</button>
+          <button class="inv-card-more" onclick="openCardMenu('glasses','${g.key}')" aria-label="Fler val">···</button>
         </div>
       </div>
     </div>`).join('');
@@ -33,17 +75,21 @@ function renderInventory(items) {
 
 // ── Inventory CRUD ──
 let invFormItemId = null;
+let invFormGroupIds = null; // alla exemplar av modellen, när kortet öppnades från en hög
 let invFormImage = null; // image URL or null (undefined = unchanged on edit)
 let invFormImageBlob = null; // freshly picked image, uploaded on save
 let _refLookupLast = '';
 
-function openInvForm(itemId) {
+function openInvForm(itemId, groupKey) {
   invFormItemId = itemId;
+  invFormGroupIds = groupKey ? (invGroups[groupKey]?.ids || null) : null;
   invFormImage = undefined;
   invFormImageBlob = null;
   _refLookupLast = '';
   const item = itemId ? invItemsMap[itemId] : null;
-  document.getElementById('inv-form-title').textContent = item ? 'Redigera vara' : 'Ny vara';
+  document.getElementById('inv-form-title').textContent = !item ? 'Ny vara'
+    : invFormGroupIds && invFormGroupIds.length > 1 ? `Redigera vara · ${invFormGroupIds.length} exemplar`
+      : 'Redigera vara';
   document.getElementById('invf-name').value = item?.name || '';
   document.getElementById('invf-ref').value = item?.ref_code || '';
   document.getElementById('invf-sell').value = item?.sell_price ?? '';
@@ -95,6 +141,7 @@ async function lookupRefCode() {
 function closeInvForm() {
   document.getElementById('inv-form-modal').classList.remove('open');
   invFormItemId = null;
+  invFormGroupIds = null;
   invFormImage = undefined;
   invFormImageBlob = null;
 }
@@ -193,22 +240,38 @@ async function saveInvItem() {
 
   btn.textContent = 'Sparar…';
 
-  const r = invFormItemId
-    ? await api(`/api/inventory/${invFormItemId}`, { method: 'PATCH', body: JSON.stringify(body) })
-    : await api('/api/inventory', { method: 'POST', body: JSON.stringify(body) });
+  // Redigerar man en modell som finns i flera exemplar ska ändringen gälla alla
+  const groupIds = invFormGroupIds && invFormGroupIds.length > 1 ? invFormGroupIds : null;
+  const r = !invFormItemId
+    ? await api('/api/inventory', { method: 'POST', body: JSON.stringify(body) })
+    : groupIds
+      ? await api('/api/inventory', { method: 'PATCH', body: JSON.stringify({ ...body, ids: groupIds }) })
+      : await api(`/api/inventory/${invFormItemId}`, { method: 'PATCH', body: JSON.stringify(body) });
 
   btn.textContent = 'Spara'; btn.disabled = false;
 
   if (!r.ok) { showToast('Kunde inte spara varan', 'error'); return; }
+  if (groupIds) showToast(`${groupIds.length} exemplar uppdaterade`, 'success');
   closeInvForm();
   loadInventory();
 }
 
 async function deleteInvItem(id) {
-  if (!confirm('Ta bort denna vara permanent?')) return;
+  if (!confirm('Ta bort detta exemplar permanent?')) return;
   const r = await api(`/api/inventory/${id}`, { method: 'DELETE' });
   if (!r.ok) { showToast('Kunde inte ta bort varan', 'error'); return; }
   delete invItemsMap[id];
+  loadInventory();
+}
+
+async function deleteInvGroup(key) {
+  const g = invGroups[key];
+  if (!g) return;
+  const what = g.count > 1 ? `alla ${g.count} exemplar av "${g.name}"` : `"${g.name}"`;
+  if (!confirm(`Ta bort ${what} permanent?`)) return;
+  const r = await api('/api/inventory/delete', { method: 'POST', body: JSON.stringify({ ids: g.ids }) });
+  if (!r.ok) { showToast('Kunde inte ta bort varan', 'error'); return; }
+  g.ids.forEach(id => delete invItemsMap[id]);
   loadInventory();
 }
 
@@ -216,7 +279,9 @@ async function deleteInvItem(id) {
 // förloppet som en notis och dubbeltryck stoppas av flaggan i stället
 let _catalogBusy = false;
 async function generateCatalogPDF() {
-  const items = Object.values(invItemsMap);
+  // En modell per uppslag, inte ett kort per fysiskt par — annars blev
+  // katalogen sidor lång av samma glasögon om och om igen
+  const items = Object.values(invGroups);
   if (!items.length) { showToast('Lagret är tomt', 'error'); return; }
   if (_catalogBusy) return;
   _catalogBusy = true;
@@ -281,6 +346,12 @@ async function generateCatalogPDF() {
       doc.text(ns[0] + (ns.length > 1 ? '…' : ''), x + 4, y + IH + 13);
       doc.setFontSize(13);
       doc.text(item.sell_price != null ? `€ ${Number(item.sell_price).toLocaleString('sv-SE')}` : '—', x + 4, y + IH + 21);
+      // Antalet i lager, högerställt på prisraden — köparen ser direkt om vi
+      // kan leverera flera av samma modell
+      if (item.count > 1) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(140, 140, 140);
+        doc.text(`${item.count} in stock`, x + CW - 4, y + IH + 21, { align: 'right' });
+      }
       col++; if (col >= COLS) { col = 0; y += CH + RGAP; }
     }
 
@@ -302,7 +373,7 @@ async function generateCatalogPDF() {
 }
 
 function showCatalogClientPicker() {
-  const items = Object.values(invItemsMap);
+  const items = Object.values(invGroups);
   if (!items.length) { showToast('Lagret är tomt', 'error'); return; }
   const list = document.getElementById('cat-picker-list');
   const active = clients.filter(c => !c.is_inactive);
@@ -326,7 +397,7 @@ function closeCatalogClientPicker() {
 
 async function sendCatalogToClient(clientId) {
   closeCatalogClientPicker();
-  const items = Object.values(invItemsMap);
+  const items = Object.values(invGroups);
   if (!items.length) return;
 
   showToast('Genererar och skickar katalog…', 'success');
@@ -385,6 +456,12 @@ async function sendCatalogToClient(clientId) {
       doc.text(ns[0] + (ns.length > 1 ? '…' : ''), x + 4, y + IH + 13);
       doc.setFontSize(13);
       doc.text(item.sell_price != null ? `€ ${Number(item.sell_price).toLocaleString('sv-SE')}` : '—', x + 4, y + IH + 21);
+      // Antalet i lager, högerställt på prisraden — köparen ser direkt om vi
+      // kan leverera flera av samma modell
+      if (item.count > 1) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(140, 140, 140);
+        doc.text(`${item.count} in stock`, x + CW - 4, y + IH + 21, { align: 'right' });
+      }
       col++; if (col >= COLS) { col = 0; y += CH + RGAP; }
     }
     const total = doc.getNumberOfPages();
