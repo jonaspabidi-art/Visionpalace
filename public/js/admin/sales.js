@@ -481,14 +481,43 @@ async function loadSalesHistory() {
         </div>`;
       }).join('');
       return `<div style="margin-bottom:24px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
           <div style="font-size:13px;font-weight:700;color:var(--text2);text-transform:capitalize">${monthName}</div>
           <div style="font-size:12px;color:var(--text3)">€ ${revenue.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})} · vinst € ${profit.toLocaleString('sv-SE',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
         </div>
+        <button onclick="exportBookkeeping('${key}')" style="background:none;border:none;color:#7aabff;font-size:12px;padding:0 0 10px;cursor:pointer;font-family:inherit">Exportera bokföring →</button>
         ${saleRows}
       </div>`;
     }).join('');
   } catch { listEl.innerHTML = '<div style="color:#ff7a7a;text-align:center;padding:40px 0">Fel vid laddning</div>'; }
+}
+
+// Bookkeeping export for one month. Delivered through the share sheet on
+// mobile — a plain download link lands somewhere hard to find in an iOS PWA.
+async function exportBookkeeping(month) {
+  showToast('Skapar underlag…', 'ok');
+  try {
+    const r = await api(`/api/export/bookkeeping?month=${month}`);
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showToast(d.error || 'Kunde inte skapa exporten', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const name = `bokforing-${month}.csv`;
+    const file = new File([blob], name, { type: 'text/csv' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch { showToast('Anslutningsfel', 'error'); }
 }
 
 function toggleSaleDetail(sid, saleId) {

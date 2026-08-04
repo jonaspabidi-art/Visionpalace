@@ -236,14 +236,19 @@ förbetalda API-krediter hos Anthropic (min. $5 — räcker i åratal på denna 
 5. Felväg: om AI-anropet misslyckas visas ett tydligt fel och man använder
    vanliga skapa produkt-flödet — inget annat påverkas.
 
-### 25. Bokföringsexport (CSV per månad och admin)
-**Lösning:** Knapp under Historik: välj månad → `GET /api/export/bookkeeping?month=YYYY-MM`
-(adminAuth) → CSV med två sektioner (eller två filer): **Försäljningar** (datum,
-fakturanummer, klient, varor, belopp, vinst — från `sales`+`sale_items` filtrerat
-på `admin_id` + månad) och **Inköp** (datum, vara, ref, inköpspris, källa — från
-`purchases`). Inga momskolumner (UK-export). CSV räcker för import i
-Fortnox/Visma/Bokio eller vidarebefordran till redovisningskonsult; ingen
-API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
+### 25. ✅ KLART (2026-08-04) — Bokföringsexport (CSV per månad och admin)
+**Byggt:** `GET /api/export/bookkeeping?month=YYYY-MM` (adminAuth) +
+"Exportera bokföring →" under varje månadsrubrik i Historik. Filen delas via
+delningsmenyn på mobil (`navigator.share`) med nedladdning som reserv — en ren
+nedladdningslänk hamnar svårhittat i en iOS-PWA.
+**Fyra sektioner i en fil:** FÖRSÄLJNINGAR (en rad per vara med datum, betaldatum,
+fakturanr, kund, status, ref, antal, á-pris, belopp, inköpspris, vinst + summarad),
+INKÖP (från `purchases`, med länk till originalfakturan), BETALNINGAR (från
+`sale_payments`, med länk till kvittobilden) och UTBETALNINGAR TILL SÄLJARE i
+kronor (från `settlements` — visas bara för de två konton avräkningen gäller).
+**CSV-formatet:** semikolon, decimalkomma och UTF-8-BOM, annars öppnar svenska
+Excel filen som en kolumn med trasiga åäö. Inga momskolumner (export utanför EU).
+Ingen API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
 
 ### 26. ✅ KLART (2026-07-12) — Avräkningskonto (70 % provision till säljarna)
 **Bakgrund:** Två personer delar ett admin-konto och säljer under bolagsägarens
@@ -263,9 +268,7 @@ och körs i Supabase. Innan dess svarar endpointen `not_configured` och kortet �
 **Satsändring:** `sales.commission_pct` fryser satsen per sälj; kör backfillen som
 står dokumenterad i SQL-filen INNAN satsen ändras, annars räknas historiken om.
 
-**Byggordning:** 23 → 25 → 24 (exporten ger värde direkt; AI-importen är störst
-och bygger på inköpsloggen). 23+25 ryms i en session; 24 är en egen session.
-Punkt 26 är redan klar och är oberoende av 23–25.
+**Byggordning:** 23 → 24 → 25, allt klart 2026-08-04. Punkt 26 gjordes separat.
 
 ---
 
@@ -279,8 +282,7 @@ Punkt 26 är redan klar och är oberoende av 23–25.
 | 4 | P1: punkt 8–9 (fakturasekvens + transaktionell försäljning, SQL-migration) | Ja — omstart |
 | 5 | P1: punkt 10–12 + P2 efter behov | Ja — omstart |
 | 6 | P3: punkt 16–19 (refaktor + CI + CLAUDE.md) | Nej |
-| 7 | Nytt: punkt 23 + 25 (inköpslogg, "köpt av", bokföringsexport; SQL-migration) | Ja — omstart |
-| 8 | Nytt: punkt 24 (AI-avläsning av Kering-order, kräver ANTHROPIC_API_KEY) | Ja — omstart |
+| ~~7~~ | ~~Punkt 23 + 24 + 25 (inköpslogg, betalningsbilder, AI-import, bokföringsexport)~~ ✅ klar 2026-08-04 | — |
 | ~~—~~ | ~~Punkt 26 (avräkningskonto)~~ ✅ klar 2026-07-12 | — |
 
 **Testchecklista efter varje deploy:** admin-login, klient-login, skicka meddelande åt båda håll (med bild), skapa sälj (lagret uppdateras i UI), broadcast med bild (landar på senaste), push-notis till båda admin-enheterna + klick landar rätt, katalog-PDF.
