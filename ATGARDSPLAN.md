@@ -294,6 +294,29 @@ utanför skärmen så fort notisknappen syntes.
 - Sidhuvudet: **+ Bjud in** visas på Klienter där man faktiskt bjuder in, och
   notiser + utloggning ligger i en kontomeny bakom prickarna. En gulprick på
   menyknappen så länge notiser inte är påslagna.
+### 28. ✅ KLART (2026-08-04) — Dubbletter i lagret slås ihop i vyn
+**Bakgrund:** Ägaren: "Nu skapas de som enskilda produkter och katalogen blir lång
+pga dubbletter." Lagret har en rad per fysiskt par (fakturaimport av 3 st ger 3 rader).
+**Bugg som hittades på vägen:** antalsräknaren i försäljningen registrerade antal 3
+men tog bara bort **en** lagerrad — två par låg kvar som spöken. Bevisat mot koden
+(`sale_items qty: 3`, `DELETE ?id=in.(i1)`).
+**Beslut:** raderna ligger kvar en per par i databasen — varje par har eget
+inköpspris och egen rad i inköpsloggen, och både avräkning och bokföring bygger på
+det. Ihopslagningen görs **bara i vyn**, på ref-koden (fallback: namnet).
+**Byggt:**
+- `invGroups` (klient) grupperar `invItemsMap`; Lager visar ett kort per modell med
+  "N st". Olika säljpris i samma hög flaggas och det senaste visas.
+- Korgraden bär `ids[]` — antal är alltid `ids.length`, och man kan aldrig välja
+  fler än vad som står i lagret. Sälj skickar `inventory_ids` så servern tar bort
+  exakt de paren.
+- Servern delar raden **per inköpspris**: lika priser ⇒ en rad med antal 3 (kort
+  faktura), olika ⇒ en rad per pris (rätt vinst). Äldre klient som bara skickar
+  antal får resten utpekad via ref-koden i städningssteget.
+- `PATCH /inventory` (ids) och `POST /inventory/delete` (ids) — en ändring gäller
+  hela högen, annars delar den upp sig i flera kort.
+- Katalogen: en post per modell, med **"N in stock"** (ägarens val 2026-08-04).
+- Säljer det andra kontot ett par som ligger i min korg plockas det ur korgen.
+
 **Att veta:** katalog-PDF:erna visade förloppet i knappen de startades från. Den
 knappen ligger nu i en meny som stängs, så förloppet visas som notis i stället och
 dubbeltryck stoppas av en flagga (`_catalogBusy` / `_lensCatalogBusy`).

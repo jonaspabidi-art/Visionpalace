@@ -55,19 +55,40 @@ function runFromInvMenu(fn) {
 }
 
 // ── Menyn på en enskild vara ──
+// För glasögon är id en modellnyckel, inte en lagerrad — flera likadana par
+// visas som ett kort, så valen måste säga vad de gäller: hela högen eller ett
+// exemplar ur den.
 function openCardMenu(kind, id) {
-  const item = kind === 'lens' ? lensesMap[id] : invItemsMap[id];
-  if (!item) return;
-  document.getElementById('card-menu-title').textContent = item.name || 'Varan';
-  const rows = kind === 'lens'
-    ? [
+  if (kind === 'lens') {
+    const lens = lensesMap[id];
+    if (!lens) return;
+    document.getElementById('card-menu-title').textContent = lens.name || 'Linsen';
+    document.getElementById('card-menu-rows').innerHTML = [
       invMenuRow('Redigera lins', 'Namn, pris, färger och antal', `runFromCardMenu(() => openLensForm('${id}'))`),
       invMenuRow('Ta bort lins', 'Tas bort permanent', `runFromCardMenu(() => deleteLensItem('${id}'))`, true),
-    ]
-    : [
-      invMenuRow('Redigera vara', 'Namn, ref, pris och bild', `runFromCardMenu(() => openInvForm('${id}'))`),
-      invMenuRow('Ta bort vara', 'Tas bort permanent ur lagret', `runFromCardMenu(() => deleteInvItem('${id}'))`, true),
-    ];
+    ].join('');
+    document.getElementById('card-menu-modal').classList.add('open');
+    return;
+  }
+
+  const g = invGroups[id];
+  if (!g) return;
+  document.getElementById('card-menu-title').textContent =
+    g.count > 1 ? `${g.name} · ${g.count} st i lager` : (g.name || 'Varan');
+  const rows = [
+    invMenuRow('Redigera vara',
+      g.count > 1 ? `Ändringen gäller alla ${g.count} exemplaren` : 'Namn, ref, pris och bild',
+      `runFromCardMenu(() => openInvForm('${g.ids[0]}','${g.key}'))`),
+  ];
+  if (g.count > 1) {
+    rows.push(invMenuRow('Ta bort ett exemplar', `${g.count - 1} blir kvar i lagret`,
+      `runFromCardMenu(() => deleteInvItem('${g.ids[0]}'))`, true));
+    rows.push(invMenuRow(`Ta bort alla ${g.count}`, 'Hela modellen försvinner ur lagret',
+      `runFromCardMenu(() => deleteInvGroup('${g.key}'))`, true));
+  } else {
+    rows.push(invMenuRow('Ta bort vara', 'Tas bort permanent ur lagret',
+      `runFromCardMenu(() => deleteInvGroup('${g.key}'))`, true));
+  }
   document.getElementById('card-menu-rows').innerHTML = rows.join('');
   document.getElementById('card-menu-modal').classList.add('open');
 }

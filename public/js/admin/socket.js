@@ -102,8 +102,25 @@ function connectSocket() {
     if (currentClientId === d.client_id) markMsgsReadUI();
   });
   socket.on('inventory:sold', d => {
-    (d.ids || []).forEach(id => delete invItemsMap[id]);
+    const gone = new Set(d.ids || []);
+    gone.forEach(id => delete invItemsMap[id]);
     if (activeInvTab === 'glasses') renderInventory(Object.values(invItemsMap));
+    // Hann den andra admin sälja ett par som ligger i min korg måste det ut,
+    // annars säljs ett par som inte finns
+    if (typeof saleCartItems !== 'undefined' && gone.size) {
+      let dropped = 0;
+      saleCartItems.forEach(entry => {
+        const before = entry.ids.length;
+        entry.ids = entry.ids.filter(id => !gone.has(id));
+        entry.qty = entry.ids.length;
+        dropped += before - entry.ids.length;
+      });
+      saleCartItems = saleCartItems.filter(e => e.ids.length);
+      if (dropped) {
+        showToast(`${dropped} ${dropped === 1 ? 'vara' : 'varor'} såldes av det andra kontot och togs ur din försäljning`, 'error');
+        renderSaleCart();
+      }
+    }
     renderSaleInvList();
     updateSaleCartBadge();
   });
