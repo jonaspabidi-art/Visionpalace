@@ -33,12 +33,10 @@ const ROW_SCHEMA = {
         type: 'object',
         properties: {
           ref_code: { type: 'string', description: 'Artikelns referenskod, t.ex. CT0582S-005' },
-          lens_size: { type: 'string', description: 'Linsstorleken direkt efter referenskoden, t.ex. 56. Tom sträng om den saknas.' },
-          description: { type: 'string', description: 'Produktbeskrivningen utan referenskod och utan linsstorlek, t.ex. Sunglass MAN METAL' },
           qty: { type: 'integer', description: 'Antal enheter på raden' },
           line_total: { type: 'number', description: 'Radens totalbelopp som vanlig decimal' },
         },
-        required: ['ref_code', 'lens_size', 'description', 'qty', 'line_total'],
+        required: ['ref_code', 'qty', 'line_total'],
         additionalProperties: false,
       },
     },
@@ -47,10 +45,10 @@ const ROW_SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM_PROMPT = `Du läser inköpsfakturor från glasögonleverantörer (oftast Kering Eyewear) och plockar ut artikelraderna.
+const SYSTEM_PROMPT = `Du läser inköpsfakturor från glasögonleverantörer (oftast Kering Eyewear) och plockar ut referenskod, antal och radbelopp. Produktnamn ska du INTE läsa av — de namnges för hand efteråt.
 
 Regler:
-1. Referenskoden står inbäddad i artikelbeskrivningen, inte i en egen kolumn. Exempel: raden "CT0582S-005 56 Sunglass MAN METAL" har referenskoden "CT0582S-005", linsstorleken "56" och beskrivningen "Sunglass MAN METAL". Ta aldrig koden från ID- eller UPC-kolumnen.
+1. Referenskoden står inbäddad i artikelbeskrivningen, inte i en egen kolumn. Exempel: raden "CT0582S-005 56 Sunglass MAN METAL" har referenskoden "CT0582S-005". Talet direkt efter (56) är linsstorlek och ingår inte i koden, och resten är beskrivning som du ignorerar. Ta aldrig koden från ID- eller UPC-kolumnen.
 1b. VIKTIGAST AV ALLT: läs referenskoden tecken för tecken. Cartier-koder har formen CT + fyra siffror + EN BOKSTAV + bindestreck + tre siffror, till exempel CT0582S-005 och CT0622S-003. Tecknet precis före bindestrecket är nästan alltid en BOKSTAV, inte en siffra. Förväxla inte S med 5, O med 0, I eller l med 1, B med 8, eller Z med 2. Är du osäker på ett tecken, välj bokstaven som är rimlig för formatet framför siffran. En felläst referenskod är det värsta fel du kan göra här.
 2. Tal skrivs i europeiskt format där punkt är tusentalsavgränsare och komma är decimaltecken. "12.072,00" betyder 12072.00 — inte 12,072. Räkna om alla belopp till vanliga decimaltal.
 3. line_total är radens belopp i kolumnen "Net Total" (eller motsvarande radtotal), exakt som det står. Räkna inte om per styck.
@@ -124,8 +122,6 @@ module.exports = () => {
         const suspiciousRef = /^[A-Z]{1,3}\d+-\d+$/.test(ref);
         return {
           ref_code: ref,
-          lens_size: String(r.lens_size || '').trim(),
-          description: String(r.description || '').trim(),
           suspicious_ref: suspiciousRef,
           qty,
           line_total: lineTotal,
