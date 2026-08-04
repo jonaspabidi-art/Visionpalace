@@ -42,6 +42,26 @@ module.exports = (io) => {
     res.json({ match: null });
   });
 
+  // Log the purchase when stock is added. The inventory row is deleted on sale,
+  // so this is the only lasting record that the item was ever bought.
+  // Fire-and-forget on purpose: bookkeeping must never block adding stock, and
+  // it must not fail before the 009 migration has been run.
+  function logPurchase({ item, adminId, source = 'manual', qty = 1, documentUrl = null }) {
+    supabase.from('purchases').insert({
+      admin_id: adminId,
+      inventory_id: item.id,
+      name: item.name,
+      ref_code: item.ref_code || null,
+      buy_price: item.buy_price ?? null,
+      qty,
+      source,
+      document_url: documentUrl,
+      purchased_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error) console.error(`[Purchase] Kunde inte logga inköp av "${item.name}": ${error.message}`);
+    }, e => console.error('[Purchase] Logging kastade:', e?.message || e));
+  }
+
   // Add inventory item
   router.post('/inventory', adminAuth, async (req, res) => {
     const { ref_code, name, buy_price, sell_price, notes, image } = req.body;
@@ -52,7 +72,20 @@ module.exports = (io) => {
       image: image || null, added_at: new Date().toISOString()
     }).select().single();
     if (error) return res.status(500).json({ error: error.message });
+    logPurchase({ item: data, adminId: req.adminId });
     res.json({ item: data });
+  });
+
+  // Purchase log (bookkeeping). Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD
+  router.get('/purchases', adminAuth, async (req, res) => {
+    let q = supabase.from('purchases')
+      .select('id, name, ref_code, buy_price, qty, source, document_url, purchased_at, admin_id')
+      .order('purchased_at', { ascending: false });
+    if (req.query.from) q = q.gte('purchased_at', `${req.query.from}T00:00:00Z`);
+    if (req.query.to) q = q.lte('purchased_at', `${req.query.to}T23:59:59Z`);
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ purchases: data || [] });
   });
 
   // Update inventory item
