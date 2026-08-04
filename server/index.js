@@ -32,6 +32,7 @@ app.use('/api', require('./routes/lenses')(io));
 app.use('/api', require('./routes/sales')(io));
 app.use('/api', require('./routes/settlement')(io));
 app.use('/api', require('./routes/orders')(io));
+app.use('/api', require('./routes/export')(io));
 app.use('/api', require('./routes/upload')(io));
 app.use('/api', require('./routes/push')(io));
 
