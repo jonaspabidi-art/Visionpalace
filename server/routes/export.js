@@ -115,29 +115,8 @@ module.exports = () => {
       }
       lines.push('');
 
-      // ── Utbetalningar till säljarna (i kronor) ───────────────────────────
-      // Only shown to the two accounts the settlement concerns
-      const { data: cfgRow } = await supabase.from('app_settings')
-        .select('value').eq('key', 'settlement_config').maybeSingle();
-      let cfg = null;
-      try { cfg = cfgRow?.value ? JSON.parse(cfgRow.value) : null; } catch { cfg = null; }
-      if (cfg && (req.adminId === cfg.seller_admin_id || req.adminId === cfg.payer_admin_id)) {
-        const { data: entries, error: sErr } = await supabase.from('settlements')
-          .select('*').eq('seller_admin_id', cfg.seller_admin_id)
-          .gte('occurred_at', from).lt('occurred_at', to)
-          .order('occurred_at', { ascending: true });
-        push('UTBETALNINGAR TILL SÄLJARE (kr)');
-        if (sErr) {
-          push(`Kunde inte läsas: ${sErr.message}`);
-        } else {
-          push('Datum', 'Typ', 'Belopp (kr)', 'Kommentar');
-          for (const e of entries || []) {
-            push(date(e.occurred_at), e.type === 'payout' ? 'Utbetalning' : 'Ingående saldo',
-              num(e.amount), e.note || '');
-          }
-        }
-        lines.push('');
-      }
+      // Avräkningen mellan säljarna och bolaget hör inte hemma här — ägaren
+      // bokför utbetalningarna separat. Saldot finns kvar i appen som förut.
 
       const header = [
         row('Vision Palace — bokföringsunderlag'),

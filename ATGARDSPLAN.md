@@ -241,11 +241,12 @@ förbetalda API-krediter hos Anthropic (min. $5 — räcker i åratal på denna 
 "Exportera bokföring →" under varje månadsrubrik i Historik. Filen delas via
 delningsmenyn på mobil (`navigator.share`) med nedladdning som reserv — en ren
 nedladdningslänk hamnar svårhittat i en iOS-PWA.
-**Fyra sektioner i en fil:** FÖRSÄLJNINGAR (en rad per vara med datum, betaldatum,
+**Tre sektioner i en fil:** FÖRSÄLJNINGAR (en rad per vara med datum, betaldatum,
 fakturanr, kund, status, ref, antal, á-pris, belopp, inköpspris, vinst + summarad),
-INKÖP (från `purchases`, med länk till originalfakturan), BETALNINGAR (från
-`sale_payments`, med länk till kvittobilden) och UTBETALNINGAR TILL SÄLJARE i
-kronor (från `settlements` — visas bara för de två konton avräkningen gäller).
+INKÖP (från `purchases`, med länk till originalfakturan) och BETALNINGAR (från
+`sale_payments`, med länk till kvittobilden).
+**Avräkningen (punkt 26) ingår medvetet inte** — ägaren bokför utbetalningarna
+till säljarna separat (hans beslut 2026-08-04). Saldot finns kvar i appen som förut.
 **CSV-formatet:** semikolon, decimalkomma och UTF-8-BOM, annars öppnar svenska
 Excel filen som en kolumn med trasiga åäö. Inga momskolumner (export utanför EU).
 Ingen API-integration mot bokföringsprogram byggs förrän exporten visat sig otillräcklig.
