@@ -75,8 +75,9 @@ function renderOrderRows() {
   const box = document.getElementById('order-rows');
   box.innerHTML = orderRows.map((row, i) => {
     const known = row.known;
-    const tint = known ? 'rgba(100,220,150,.07)' : 'rgba(255,153,68,.07)';
-    const edge = known ? 'rgba(100,220,150,.25)' : 'rgba(255,153,68,.3)';
+    const suspect = row.suspicious_ref && !known;
+    const tint = suspect ? 'rgba(255,90,90,.08)' : known ? 'rgba(100,220,150,.07)' : 'rgba(255,153,68,.07)';
+    const edge = suspect ? 'rgba(255,90,90,.35)' : known ? 'rgba(100,220,150,.25)' : 'rgba(255,153,68,.3)';
     const orig = row.currency_original && row.currency_original !== 'EUR'
       ? `${row.unit_original.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${row.currency_original}/st`
       : '';
@@ -84,10 +85,15 @@ function renderOrderRows() {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         ${row.image ? `<img src="${row.image}" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:var(--text)">${esc(row.ref_code)}</div>
           <div style="font-size:11px;color:var(--text3)">${known ? 'Känd sedan tidigare' : 'Ny vara — fyll i namn och säljpris'}${orig ? ` · ${orig}` : ''}</div>
         </div>
         <button onclick="removeOrderRow(${i})" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0" title="Ta bort raden">✕</button>
+      </div>
+      <div class="inv-field" style="margin-bottom:8px">
+        <label>Referenskod</label>
+        <input class="inv-input" value="${esc(row.ref_code)}" style="font-weight:700${suspect ? ';border-color:rgba(255,90,90,.5)' : ''}"
+               onchange="updateOrderRow(${i},'ref_code',this.value)">
+        ${suspect ? `<div style="font-size:11px;color:#ff7a7a;margin-top:4px;line-height:1.4">⚠ Kontrollera koden mot fakturan. Tecknet före bindestrecket är en siffra — där brukar det stå en bokstav (S läses lätt som 5).</div>` : ''}
       </div>
       <div class="inv-field" style="margin-bottom:8px">
         <label>Namn</label>
@@ -115,12 +121,30 @@ function renderOrderRows() {
   document.getElementById('order-import-btn').textContent = `Lägg in ${total} varor i lagret`;
 }
 
-function updateOrderRow(i, field, value) {
-  if (!orderRows[i]) return;
-  orderRows[i][field] = value;
+async function updateOrderRow(i, field, value) {
+  const row = orderRows[i];
+  if (!row) return;
+  row[field] = value;
   if (field === 'qty') {
     const total = orderRows.reduce((s, r) => s + (parseInt(r.qty, 10) || 0), 0);
     document.getElementById('order-import-btn').textContent = `Lägg in ${total} varor i lagret`;
+  }
+  // A corrected ref may well be one we already know — look it up again so the
+  // saved name, image and sell price come back instead of being retyped
+  if (field === 'ref_code') {
+    const ref = String(value || '').trim().toUpperCase();
+    row.ref_code = ref;
+    row.suspicious_ref = /^[A-Z]{1,3}\d+-\d+$/.test(ref);
+    const match = await lookupOrderRef(ref);
+    if (match) {
+      row.known = true;
+      row.name = match.name || row.name;
+      row.sell_price = match.sell_price ?? row.sell_price;
+      row.image = match.image || row.image;
+    } else {
+      row.known = false;
+    }
+    renderOrderRows();
   }
 }
 
