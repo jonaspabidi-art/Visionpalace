@@ -164,9 +164,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* Inventory toolbar */
 .inv-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 14px 0; flex-shrink: 0; }
-.inv-catalog-btn { padding: 8px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-.inv-catalog-btn.primary { background: var(--blue); border-color: var(--blue); color: #1a1409; }
-.inv-catalog-btn:active { opacity: 0.75; }
 
 /* Catalog client picker */
 #cat-picker-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 200; align-items: flex-end; }
@@ -178,8 +175,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .inv-card-actions { display: flex; gap: 6px; margin-top: 6px; }
 .inv-edit-btn { flex: 1; padding: 8px 0; background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .inv-edit-btn:active { opacity: 0.75; }
-.inv-del-btn { width: 34px; padding: 8px 0; background: none; border: 1px solid var(--border); color: #ff5555; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: inherit; }
-.inv-del-btn:active { background: rgba(255,80,80,.12); }
 
 /* FAB — add item */
 .inv-fab { position: absolute; bottom: 16px; right: 16px; width: 52px; height: 52px; background: var(--blue); border: none; border-radius: 50%; color: #1a1409; font-size: 26px; font-weight: 300; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(201,169,110,.25); z-index: 10; }

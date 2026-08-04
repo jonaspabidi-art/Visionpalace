@@ -7,6 +7,7 @@ function switchTab(tab) {
   const titles = { broadcast: 'Sändningar', clients: 'Klienter', inventory: 'Lager', invoice: 'Faktura', historik: 'Historik' };
   document.getElementById('header-title').textContent = titles[tab] || tab;
   document.getElementById('search-toggle-btn').style.display = tab === 'broadcast' ? '' : 'none';
+  document.getElementById('invite-open-btn').style.display = tab === 'clients' ? '' : 'none';
   if (tab !== 'broadcast' && searchVisible) toggleSearch();
   if (tab === 'broadcast') requestAnimationFrame(pinFeedToBottom);
   if (tab === 'inventory') loadInventory();
@@ -44,10 +45,11 @@ document.getElementById('bc-text').addEventListener('keydown', e => {
 document.getElementById('bc-text').addEventListener('input', function () { autoResize(this); });
 
 // ── Invites ──
-document.getElementById('invite-open-btn').onclick = () => {
+function openInviteModal() {
   document.getElementById('invite-links').innerHTML = '';
   document.getElementById('invite-modal').classList.add('open');
-};
+}
+document.getElementById('invite-open-btn').onclick = openInviteModal;
 document.getElementById('gen-invites-btn').onclick = async () => {
   const count = parseInt(document.getElementById('invite-count').value) || 1;
   const r = await api('/api/invite', { method: 'POST', body: JSON.stringify({ count }) });
@@ -166,11 +168,20 @@ function timeAgo(iso) {
 }
 
 // ── Push / Notifications ──
+// Notisvalet ligger i kontomenyn. Så länge det inte är påslaget lyser en prick
+// på menyknappen, annars vore det gömt.
+let notifNeeded = false;
+
+function markNotifState(needed) {
+  notifNeeded = needed;
+  document.getElementById('header-menu-btn')?.classList.toggle('has-dot', needed);
+}
+
 async function setupPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   if (Notification.permission === 'denied') return;
   if (Notification.permission === 'default') {
-    document.getElementById('notif-btn').style.display = '';
+    markNotifState(true);
     return;
   }
   await registerAdminPushSub();
@@ -178,9 +189,10 @@ async function setupPush() {
 
 async function enableNotifs() {
   const perm = await Notification.requestPermission();
-  document.getElementById('notif-btn').style.display = 'none';
-  if (perm !== 'granted') return;
+  markNotifState(false);
+  if (perm !== 'granted') { showToast('Notiser är avstängda i telefonens inställningar', 'error'); return; }
   await registerAdminPushSub();
+  showToast('Notiser påslagna', 'success');
 }
 
 function showToast(msg, type) {
