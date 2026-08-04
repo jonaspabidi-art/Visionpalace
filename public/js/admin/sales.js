@@ -18,8 +18,11 @@ function updateSaleCartBadge() {
   const total = saleCartItems.reduce((s, i) => s + i.qty, 0) + lensCartItems.reduce((s, i) => s + i.qty, 0);
   const btn = document.getElementById('inv-sell-open-btn');
   const badge = document.getElementById('sale-cart-badge');
-  btn.style.display = (total > 0 || activeInvTab === 'lenses') ? '' : 'none';
+  const shown = total > 0 || activeInvTab === 'lenses';
+  btn.style.display = shown ? '' : 'none';
   badge.textContent = total > 0 ? total : '';
+  // Plusknappen får inte hamna under säljstapeln
+  document.getElementById('inv-fab')?.classList.toggle('raised', shown);
 }
 
 function openSaleModal(invId) {

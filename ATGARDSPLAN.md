@@ -271,6 +271,26 @@ står dokumenterad i SQL-filen INNAN satsen ändras, annars räknas historiken o
 
 **Byggordning:** 23 → 24 → 25, allt klart 2026-08-04. Punkt 26 gjordes separat.
 
+### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
+**Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
+På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan
+flikarna Glasögon/Linser utanför vänsterkanten. I sidhuvudet sköts "Logga ut"
+utanför skärmen så fort notisknappen syntes.
+**Gjort:**
+- Verktygsraden i Lager är en rad: flikarna till vänster, allt annat bakom **Mer**
+  (Läs in order, Katalog PDF, Skicka katalog — olika val för glasögon och linser).
+- Varje vara har bara **+ Sälj** kvar plus prickar; Redigera och Ta bort ligger i
+  en meny per vara, så den röda papperskorgen inte längre sitter bredvid säljknappen.
+- Kundvagnen är en **bred stapel längst ner** i stället för en liten knapp uppe i
+  hörnet. Plusknappen flyttar upp när stapeln visas.
+- Sidhuvudet: **+ Bjud in** visas på Klienter där man faktiskt bjuder in, och
+  notiser + utloggning ligger i en kontomeny bakom prickarna. En gulprick på
+  menyknappen så länge notiser inte är påslagna.
+**Att veta:** katalog-PDF:erna visade förloppet i knappen de startades från. Den
+knappen ligger nu i en meny som stängs, så förloppet visas som notis i stället och
+dubbeltryck stoppas av en flagga (`_catalogBusy` / `_lensCatalogBusy`).
+De nya klasserna ligger inline i `admin.html` av samma skäl som scrollen i Historik.
+
 ---
 
 ## Prioriteringsförslag per session

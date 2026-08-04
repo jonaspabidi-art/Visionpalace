@@ -13,6 +13,70 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300;1,400&family=Montserrat:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/admin.css">
+<style>
+/* Lagervyn — nya knappar och menyer. Ligger här och inte i admin.css av samma
+   skäl som scrollen i Historik: /admin serveras utan cache medan
+   /css/admin.css går via service workern, och en gammal stylesheet får inte
+   kunna lämna säljstapeln eller menyerna felplacerade. */
+.inv-toolbar { justify-content: space-between; }
+.inv-more-btn {
+  padding: 8px 16px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text2); font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; flex-shrink: 0;
+}
+.inv-more-btn:active { opacity: .75; }
+
+/* Säljstapeln — bred och längst ner, dit tummen når */
+.inv-sell-bar {
+  position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 11;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 15px 18px; background: var(--blue); border: none; border-radius: 14px;
+  color: #1a1409; font-size: 15px; font-weight: 700; font-family: inherit;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+.inv-sell-bar:active { opacity: .85; }
+#sale-cart-badge:not(:empty) {
+  background: rgba(26,20,9,.9); color: var(--blue); border-radius: 11px;
+  padding: 2px 9px; font-size: 13px; font-weight: 700;
+}
+.inv-fab.raised { bottom: 86px; }
+
+/* Prickarna på en vara */
+.inv-sell-btn { flex: 1; }
+.inv-card-more {
+  width: 34px; flex-shrink: 0; padding: 8px 0; background: var(--surface2);
+  border: 1px solid var(--border); color: var(--text2); border-radius: 8px;
+  font-size: 13px; font-weight: 700; letter-spacing: 1px; cursor: pointer;
+  font-family: inherit; line-height: 1;
+}
+.inv-card-more:active { opacity: .75; }
+
+/* Prick på menyknappen när notiser inte är påslagna */
+.icon-btn.has-dot { position: relative; }
+.icon-btn.has-dot::after {
+  content: ''; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--blue); border: 2px solid var(--surface);
+}
+
+/* Menyrader i bottenark */
+.sheet-heading { font-size: 13px; font-weight: 700; color: var(--text2); margin-bottom: 12px; }
+.sheet-rows { display: flex; flex-direction: column; gap: 8px; }
+.sheet-row {
+  display: block; width: 100%; text-align: left; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  cursor: pointer; font-family: inherit;
+}
+.sheet-row:active { opacity: .75; }
+.sheet-row-label { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
+.sheet-row-sub { display: block; font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.4; }
+.sheet-row.danger .sheet-row-label { color: #ff6b6b; }
+.sheet-cancel {
+  width: 100%; margin-top: 12px; padding: 14px; background: none;
+  border: 1px solid var(--border); border-radius: 12px; color: var(--text2);
+  font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.sheet-cancel:active { opacity: .75; }
+</style>
 <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
@@ -44,10 +108,12 @@
   <div class="app-header">
     <div class="header-logo"><img src="/logo.png" alt="VP"></div>
     <div class="header-title" id="header-title">Sändningar</div>
+    <!-- Bjud in visas på Klienter där man faktiskt bjuder in; notiser och
+         utloggning ligger under prickarna. Fyra knappar samtidigt sköt ut
+         "Logga ut" utanför skärmkanten på telefon. -->
     <button class="icon-btn" id="search-toggle-btn" title="Sök" style="font-size:13px;font-weight:600;letter-spacing:0.3px">Sök</button>
-    <button class="hbtn" id="notif-btn" onclick="enableNotifs()" style="display:none">🔔 Notiser</button>
-    <button class="hbtn primary" id="invite-open-btn">+ Bjud in</button>
-    <button class="hbtn" id="logout-btn">Logga ut</button>
+    <button class="hbtn primary" id="invite-open-btn" style="display:none">+ Bjud in</button>
+    <button class="icon-btn" id="header-menu-btn" onclick="openHeaderMenu()" aria-label="Meny">···</button>
   </div>
 
   <!-- Search bar (hidden by default) -->
@@ -96,30 +162,28 @@
 
     <!-- Inventory view -->
     <div class="view" id="inventory-view">
+      <!-- One row only: what you are looking at on the left, everything else
+           behind Mer. Tre knappar i rad radbröt till "Läs / in / order" på
+           telefon och tryckte undan flikarna utanför skärmkanten. -->
       <div class="inv-toolbar">
         <div class="lager-tab-toggle">
           <button id="lager-tab-glasses" class="lager-tab-btn active" onclick="switchLagerTab('glasses')">Glasögon</button>
           <button id="lager-tab-lenses"  class="lager-tab-btn"        onclick="switchLagerTab('lenses')">Linser</button>
         </div>
-        <div id="inv-cat-glasses" style="display:flex;gap:6px">
-          <button class="inv-catalog-btn" onclick="openOrderImport()">Läs in order</button>
-          <button class="inv-catalog-btn" onclick="generateCatalogPDF()">Katalog PDF</button>
-          <button class="inv-catalog-btn" onclick="showCatalogClientPicker()">Skicka katalog</button>
-        </div>
-        <div id="inv-cat-lenses" style="display:none;gap:6px">
-          <button class="inv-catalog-btn" id="lens-cat-pdf-btn" onclick="generateLensCatalogPDF()">Katalog PDF</button>
-          <button class="inv-catalog-btn" onclick="showLensCatalogClientPicker()">Skicka katalog</button>
-        </div>
-        <button class="inv-catalog-btn primary" id="inv-sell-open-btn" onclick="openSaleModal(null)" style="display:none">
-          Sälj varor <span id="sale-cart-badge" style="background:#1a1409;color:var(--blue);border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px"></span>
-        </button>
+        <button class="inv-more-btn" onclick="openInvMenu()">Mer</button>
       </div>
       <div class="inv-scroll">
         <div class="inv-grid" id="inv-grid">
           <div class="inv-empty">Laddar lager…</div>
         </div>
       </div>
-      <button class="inv-fab" onclick="activeInvTab === 'lenses' ? openLensForm(null) : openInvForm(null)">+</button>
+      <button class="inv-fab" id="inv-fab" onclick="activeInvTab === 'lenses' ? openLensForm(null) : openInvForm(null)">+</button>
+      <!-- Kundvagnen som en bred stapel längst ner i stället för en liten
+           knapp uppe i hörnet — den är målet för hela flödet -->
+      <button class="inv-sell-bar" id="inv-sell-open-btn" onclick="openSaleModal(null)" style="display:none">
+        <span>Sälj varor</span>
+        <span id="sale-cart-badge"></span>
+      </button>
     </div>
 
     <!-- Invoice view -->
@@ -295,6 +359,34 @@
     </div>
     <div id="invite-links"></div>
     <button class="hbtn" style="width:100%;margin-top:12px;padding:12px;justify-content:center" onclick="document.getElementById('invite-modal').classList.remove('open')">Stäng</button>
+  </div>
+</div>
+
+<!-- Kontomenyn i sidhuvudet -->
+<div class="modal-bg" id="header-menu-modal" onclick="if(event.target===this)closeHeaderMenu()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="sheet-rows" id="header-menu-rows"></div>
+    <button class="sheet-cancel" onclick="closeHeaderMenu()">Avbryt</button>
+  </div>
+</div>
+
+<!-- Lager: Mer-menyn -->
+<div class="modal-bg" id="inv-menu-modal" onclick="if(event.target===this)closeInvMenu()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="sheet-rows" id="inv-menu-rows"></div>
+    <button class="sheet-cancel" onclick="closeInvMenu()">Avbryt</button>
+  </div>
+</div>
+
+<!-- Lager: menyn på en enskild vara -->
+<div class="modal-bg" id="card-menu-modal" onclick="if(event.target===this)closeCardMenu()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="sheet-heading" id="card-menu-title"></div>
+    <div class="sheet-rows" id="card-menu-rows"></div>
+    <button class="sheet-cancel" onclick="closeCardMenu()">Avbryt</button>
   </div>
 </div>
 
@@ -549,6 +641,7 @@
 <script src="/js/admin/clients.js"></script>
 <script src="/js/admin/inventory.js"></script>
 <script src="/js/admin/lenses.js"></script>
+<script src="/js/admin/invmenu.js"></script>
 <script src="/js/admin/invoice.js"></script>
 <script src="/js/admin/sales.js"></script>
 <script src="/js/admin/payments.js"></script>

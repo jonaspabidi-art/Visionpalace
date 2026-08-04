@@ -21,10 +21,10 @@ async function login() {
   } catch { err.textContent = 'Anslutningsfel'; }
 }
 
-document.getElementById('logout-btn').onclick = () => {
+function logout() {
   localStorage.removeItem('vp_admin_token');
   location.reload();
-};
+}
 
 function api(url, opts = {}) {
   return fetch(url, {

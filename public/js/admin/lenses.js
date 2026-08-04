@@ -9,8 +9,6 @@ function switchLagerTab(tab) {
   activeInvTab = tab;
   document.getElementById('lager-tab-glasses').classList.toggle('active', tab === 'glasses');
   document.getElementById('lager-tab-lenses').classList.toggle('active', tab === 'lenses');
-  document.getElementById('inv-cat-glasses').style.display = tab === 'glasses' ? '' : 'none';
-  document.getElementById('inv-cat-lenses').style.display  = tab === 'lenses'  ? '' : 'none';
   updateSaleCartBadge();
   if (tab === 'glasses') loadInventory();
   else loadLenses();
@@ -47,7 +45,7 @@ function renderLenses(items) {
         ${chips ? `<div class="lens-var-chips">${chips}</div>` : ''}
         <div class="inv-card-actions">
           <button class="inv-edit-btn" onclick="openLensForm('${lens.id}')">Redigera</button>
-          <button class="inv-del-btn" onclick="deleteLensItem('${lens.id}')" title="Ta bort">🗑</button>
+          <button class="inv-card-more" onclick="openCardMenu('lens','${lens.id}')" aria-label="Fler val">···</button>
         </div>
       </div>
     </div>`;
@@ -174,11 +172,13 @@ async function deleteLensItem(id) {
 }
 
 // ── Lens catalog PDF ──
+let _lensCatalogBusy = false;
 async function generateLensCatalogPDF() {
   const items = Object.values(lensesMap);
   if (!items.length) { showToast('Inga linser i lager', 'error'); return; }
-  const btn = document.getElementById('lens-cat-pdf-btn');
-  btn.textContent = 'Genererar…'; btn.disabled = true;
+  if (_lensCatalogBusy) return;
+  _lensCatalogBusy = true;
+  showToast('Skapar katalog…', 'ok');
   if (!window.jspdf) {
     await new Promise((res, rej) => {
       const s = document.createElement('script');
@@ -195,7 +195,7 @@ async function generateLensCatalogPDF() {
   } catch (e) {
     showToast('PDF-fel: ' + e.message, 'error');
   } finally {
-    btn.textContent = 'Katalog PDF'; btn.disabled = false;
+    _lensCatalogBusy = false;
   }
 }
 

@@ -21,10 +21,11 @@ function renderInventory(items) {
         ${item.ref_code ? `<div class="inv-card-ref">${esc(item.ref_code)}</div>` : ''}
         <div class="inv-card-name">${esc(item.name)}</div>
         ${item.sell_price != null ? `<div class="inv-card-price">€ ${esc(String(item.sell_price))}</div>` : ''}
+        <!-- Sälj är det man gör hela dagen; redigera och ta bort ligger under
+             prickarna så att den röda papperskorgen inte sitter bredvid -->
         <div class="inv-card-actions">
-          <button class="inv-edit-btn" onclick="openInvForm('${item.id}')">Redigera</button>
           <button class="inv-sell-btn" onclick="addToSaleCartFromCard('${item.id}')">+ Sälj</button>
-          <button class="inv-del-btn" onclick="deleteInvItem('${item.id}')" title="Ta bort">🗑</button>
+          <button class="inv-card-more" onclick="openCardMenu('glasses','${item.id}')" aria-label="Fler val">···</button>
         </div>
       </div>
     </div>`).join('');
@@ -211,12 +212,15 @@ async function deleteInvItem(id) {
   loadInventory();
 }
 
+// Knappen ligger i Mer-menyn, som är stängd medan PDF:en byggs — därför visas
+// förloppet som en notis och dubbeltryck stoppas av flaggan i stället
+let _catalogBusy = false;
 async function generateCatalogPDF() {
   const items = Object.values(invItemsMap);
   if (!items.length) { showToast('Lagret är tomt', 'error'); return; }
-
-  const btn = document.querySelector('.inv-catalog-btn');
-  btn.textContent = 'Genererar…'; btn.disabled = true;
+  if (_catalogBusy) return;
+  _catalogBusy = true;
+  showToast('Skapar katalog…', 'ok');
 
   if (!window.jspdf) {
     await new Promise((res, rej) => {
@@ -293,7 +297,7 @@ async function generateCatalogPDF() {
   } catch (e) {
     showToast('PDF-fel: ' + e.message, 'error');
   } finally {
-    btn.textContent = 'Katalog PDF'; btn.disabled = false;
+    _catalogBusy = false;
   }
 }
 
