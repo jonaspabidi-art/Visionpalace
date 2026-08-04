@@ -38,6 +38,12 @@ module.exports = () => {
       const lines = [];
       const push = (...v) => lines.push(row(...v));
 
+      // Vilket konto filen kommer från — annars går två månadsfiler inte att
+      // skilja åt när de ligger bredvid varandra hos redovisningen
+      const { data: me } = await supabase.from('admins')
+        .select('display_name, username').eq('id', req.adminId).maybeSingle();
+      const adminName = me?.display_name || me?.username || '';
+
       // ── Försäljningar ────────────────────────────────────────────────────
       const { data: sales, error: salesErr } = await supabase.from('sales')
         .select('*, sale_items(*), clients(display_name, admin_label)')
@@ -46,7 +52,7 @@ module.exports = () => {
         .order('created_at', { ascending: true });
       if (salesErr) return res.status(500).json({ error: salesErr.message });
 
-      push('FÖRSÄLJNINGAR');
+      push('FÖRSÄLJNINGAR — endast detta admin-kontos försäljningar');
       push('Datum', 'Betaldatum', 'Fakturanr', 'Kund', 'Status', 'Vara', 'Ref',
         'Antal', 'Á-pris (EUR)', 'Belopp (EUR)', 'Inköpspris (EUR)', 'Vinst (EUR)');
       let revTotal = 0, profitTotal = 0;
@@ -70,23 +76,34 @@ module.exports = () => {
       lines.push('');
 
       // ── Inköp ────────────────────────────────────────────────────────────
-      const { data: purchases, error: pErr } = await supabase.from('purchases')
-        .select('*')
+      // Inköpen görs gemensamt för bolaget och filtreras därför inte per konto.
+      // De står alltså likadant i båda admin-kontonas filer — därav kolumnen
+      // "Inlagt av" och varningen i rubriken, så inget bokförs två gånger.
+      // "Inlagt av" hämtas genom en koppling till admins. Skulle den kopplingen
+      // inte gå att läsa är inköpen ändå det viktiga — då hämtas de utan namn
+      // i stället för att sektionen faller bort.
+      const purchaseQuery = cols => supabase.from('purchases').select(cols)
         .gte('purchased_at', from).lt('purchased_at', to)
         .order('purchased_at', { ascending: true });
+      let { data: purchases, error: pErr } = await purchaseQuery('*, admins(display_name, username)');
+      if (pErr) {
+        console.warn(`[Export] Inköp med "inlagt av" misslyckades (${pErr.message}) — hämtar utan`);
+        ({ data: purchases, error: pErr } = await purchaseQuery('*'));
+      }
 
-      push('INKÖP');
+      push('INKÖP — gemensamma för bolaget, bokförs endast en gång');
       if (pErr) {
         push(`Kunde inte läsas: ${pErr.message}`);
       } else {
-        push('Datum', 'Vara', 'Ref', 'Antal', 'Inköpspris (EUR)', 'Summa (EUR)', 'Källa', 'Dokument');
+        push('Datum', 'Vara', 'Ref', 'Antal', 'Inköpspris (EUR)', 'Summa (EUR)', 'Källa', 'Inlagt av', 'Dokument');
         let buyTotal = 0;
         for (const p of purchases || []) {
           const qty = p.qty || 1;
           const unit = parseFloat(p.buy_price) || 0;
           buyTotal += unit * qty;
           push(date(p.purchased_at), p.name || '', p.ref_code || '', qty, num(unit), num(unit * qty),
-            p.source === 'order_import' ? 'Fakturaimport' : 'Manuell', p.document_url || '');
+            p.source === 'order_import' ? 'Fakturaimport' : 'Manuell',
+            p.admins?.display_name || p.admins?.username || '', p.document_url || '');
         }
         push('Summa', '', '', '', '', num(buyTotal));
       }
@@ -122,7 +139,9 @@ module.exports = () => {
         row('Vision Palace — bokföringsunderlag'),
         row('Månad', month),
         row('Genererad', new Date().toISOString().substring(0, 10)),
+        row('Konto', adminName),
         row('Valuta', 'EUR där inget annat anges. Ingen moms (export utanför EU).'),
+        row('Obs', 'Försäljningar och betalningar gäller endast detta konto. Inköpen är bolagets gemensamma och står likadant i det andra kontots fil — bokför dem endast en gång.'),
         '',
       ].join('\r\n');
 
