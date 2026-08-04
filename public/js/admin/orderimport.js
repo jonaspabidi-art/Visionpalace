@@ -49,7 +49,10 @@ async function handleOrderFile(input) {
       return {
         ...row,
         known: !!match,
-        name: match?.name || row.description || row.ref_code,
+        // Names on the invoices don't match what the products are called here,
+        // so they are never read off — a known ref brings its saved name back,
+        // an unknown one is left blank to be typed in
+        name: match?.name || '',
         sell_price: match?.sell_price ?? '',
         image: match?.image || null,
       };
@@ -97,7 +100,8 @@ function renderOrderRows() {
       </div>
       <div class="inv-field" style="margin-bottom:8px">
         <label>Namn</label>
-        <input class="inv-input" value="${esc(row.name)}" onchange="updateOrderRow(${i},'name',this.value)">
+        <input class="inv-input" value="${esc(row.name)}" placeholder="Skriv namn på varan"
+               style="${row.name ? '' : 'border-color:rgba(255,153,68,.45)'}" onchange="updateOrderRow(${i},'name',this.value)">
       </div>
       <div class="inv-row-grid">
         <div class="inv-field" style="margin-bottom:0">
@@ -156,7 +160,10 @@ function removeOrderRow(i) {
 
 async function importOrderRows() {
   const missing = orderRows.filter(r => !String(r.name || '').trim());
-  if (missing.length) { showToast('Alla rader måste ha ett namn', 'error'); return; }
+  if (missing.length) {
+    showToast(`Fyll i namn på ${missing.length === 1 ? `${missing[0].ref_code}` : `${missing.length} varor`}`, 'error');
+    return;
+  }
 
   const btn = document.getElementById('order-import-btn');
   const original = btn.textContent;
