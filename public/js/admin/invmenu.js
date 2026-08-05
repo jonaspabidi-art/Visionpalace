@@ -76,6 +76,10 @@ function openCardMenu(kind, id) {
   document.getElementById('card-menu-title').textContent =
     g.count > 1 ? `${g.name} · ${g.count} st i lager` : (g.name || 'Varan');
   const rows = [
+    invMenuRow('Lägg till ett exemplar', `${g.count} st → ${g.count + 1} st`,
+      `runFromCardMenu(() => restockItem('${g.ids[0]}', 1))`),
+    invMenuRow('Lägg till flera…', 'Ange hur många som kommit in',
+      `runFromCardMenu(() => openRestockModal('${g.key}'))`),
     invMenuRow('Redigera vara',
       g.count > 1 ? `Ändringen gäller alla ${g.count} exemplaren` : 'Namn, ref, pris och bild',
       `runFromCardMenu(() => openInvForm('${g.ids[0]}','${g.key}'))`),

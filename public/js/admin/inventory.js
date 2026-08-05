@@ -264,6 +264,49 @@ async function deleteInvItem(id) {
   loadInventory();
 }
 
+// ── Fylla på lagret ──
+// Kopierar en befintlig rad i stället för att man skapar om produkten. Namn,
+// ref, priser och bild följer med, så högen förblir en hög.
+let _restockKey = null;
+
+async function restockItem(id, qty) {
+  try {
+    const r = await api(`/api/inventory/${id}/restock`, { method: 'POST', body: JSON.stringify({ qty }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(d.error || 'Kunde inte fylla på lagret', 'error'); return; }
+    showToast(d.added === 1 ? 'Ett exemplar tillagt' : `${d.added} exemplar tillagda`, 'success');
+    loadInventory();
+  } catch { showToast('Anslutningsfel', 'error'); }
+}
+
+function openRestockModal(key) {
+  const g = invGroups[key];
+  if (!g) return;
+  _restockKey = key;
+  document.getElementById('restock-title').textContent = g.name || 'Varan';
+  document.getElementById('restock-sub').textContent =
+    `Finns ${g.count} st i lagret. De nya får samma ref, priser och bild.`;
+  document.getElementById('restock-qty').value = '1';
+  document.getElementById('restock-modal').classList.add('open');
+}
+
+function closeRestockModal() {
+  document.getElementById('restock-modal').classList.remove('open');
+  _restockKey = null;
+}
+
+async function saveRestock() {
+  const g = invGroups[_restockKey];
+  const qty = parseInt(document.getElementById('restock-qty').value, 10);
+  if (!g || !(qty > 0)) { showToast('Ange hur många', 'error'); return; }
+  const btn = document.querySelector('#restock-modal .inv-gen-btn');
+  btn.textContent = 'Lägger till…'; btn.disabled = true;
+  const id = g.ids[0];
+  closeRestockModal();
+  await restockItem(id, qty);
+  btn.textContent = 'Lägg till'; btn.disabled = false;
+}
+
 async function deleteInvGroup(key) {
   const g = invGroups[key];
   if (!g) return;

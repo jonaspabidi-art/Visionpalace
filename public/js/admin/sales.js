@@ -1,6 +1,7 @@
 // ── Sale cart ──
 let saleCartItems = []; // { id, name, ref_code, sell_price, qty, image }
 let _lastSaleClientId = null;
+let _lastSaleBuyerName = '';
 let _lastSaleItems = null;
 let _saleHistoryCache = {};
 
@@ -53,7 +54,12 @@ function openSaleModal(groupKey) {
   sel.innerHTML = '<option value="">Välj klient…</option>' +
     clients.filter(c => !c.is_inactive).map(c =>
       `<option value="${c.id}">${esc(c.admin_label || c.display_name)}</option>`
-    ).join('');
+    ).join('') +
+    '<option value="__walkin">Kund utanför appen…</option>';
+  sel.value = '';
+  const walkin = document.getElementById('sale-walkin-name');
+  if (walkin) walkin.value = '';
+  onSaleBuyerChange();
   renderSaleCart();
   renderSaleInvList();
   renderSaleLensList();
@@ -161,9 +167,20 @@ function addToSaleCartFromModal(key) {
   renderSaleInvList();
 }
 
+function onSaleBuyerChange() {
+  const walkin = document.getElementById('sale-client-pick').value === '__walkin';
+  const box = document.getElementById('sale-walkin');
+  if (box) box.style.display = walkin ? '' : 'none';
+  if (walkin) document.getElementById('sale-walkin-name')?.focus();
+}
+
 async function createSale() {
-  const clientId = document.getElementById('sale-client-pick').value;
-  if (!clientId) { showToast('Välj en klient', 'error'); return; }
+  const picked = document.getElementById('sale-client-pick').value;
+  const isWalkin = picked === '__walkin';
+  const clientId = isWalkin ? '' : picked;
+  const walkinName = (document.getElementById('sale-walkin-name')?.value || '').trim();
+  if (!clientId && !isWalkin) { showToast('Välj en köpare', 'error'); return; }
+  if (isWalkin && !walkinName) { showToast('Skriv namnet på köparen', 'error'); return; }
   if (!saleCartItems.length && !lensCartItems.length) { showToast('Inga varor valda', 'error'); return; }
   const btn = document.querySelector('#sale-modal .inv-gen-btn');
   btn.textContent = 'Skapar…'; btn.disabled = true;
@@ -192,7 +209,7 @@ async function createSale() {
     try {
       r = await api('/api/sales', {
         method: 'POST',
-        body: JSON.stringify({ client_id: clientId, items }),
+        body: JSON.stringify({ client_id: clientId || null, customer_name: isWalkin ? walkinName : null, items }),
         signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(30000) : undefined
       });
     } catch (e) {
@@ -200,7 +217,7 @@ async function createSale() {
       // been created server-side — verify before showing an error, so the
       // user never creates the same sale twice.
       btn.textContent = 'Kontrollerar…';
-      const created = await verifySaleCreated(clientId, saleItemsSummary(items));
+      const created = await verifySaleCreated(clientId, walkinName, saleItemsSummary(items));
       if (!created) {
         showToast('Fick inget svar från servern. Kontrollera i Historik om försäljningen skapades innan du försöker igen.', 'error');
         return;
@@ -209,7 +226,7 @@ async function createSale() {
     if (r && !r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Fel vid skapande av försäljning', 'error'); return; }
     // The sale IS created at this point — a UI hiccup below must never
     // masquerade as a failed sale
-    try { finishSaleUI(clientId, shipping); }
+    try { finishSaleUI(clientId, shipping, isWalkin ? walkinName : ''); }
     catch (e) {
       console.error('UI-uppdatering efter sälj misslyckades:', e);
       closeSaleModal();
@@ -225,21 +242,25 @@ function saleItemsSummary(items) {
   return items.map(i => `${i.name}×${i.qty || 1}`).sort().join('|');
 }
 
-async function verifySaleCreated(clientId, sentSummary) {
+async function verifySaleCreated(clientId, buyerName, sentSummary) {
   try {
-    const r = await api(`/api/sales/client/${clientId}`);
+    // Utan klient finns ingen klientlista att titta i — då får hela listan
+    // gås igenom och köparens namn avgöra
+    const r = await api(clientId ? `/api/sales/client/${clientId}` : '/api/sales');
     if (!r.ok) return false;
     const d = await r.json();
     return (d.sales || []).some(s =>
       Date.now() - new Date(s.created_at) < 10 * 60 * 1000 &&
+      (clientId || (s.customer_name || '').trim() === buyerName) &&
       saleItemsSummary(s.sale_items || []) === sentSummary
     );
   } catch { return false; }
 }
 
 // Success path: clear the cart, update inventory UI and show the banner
-function finishSaleUI(clientId, shipping) {
+function finishSaleUI(clientId, shipping, buyerName) {
   _lastSaleClientId = clientId;
+  _lastSaleBuyerName = buyerName || '';
   _lastSaleItems = [
     ...saleCartItems,
     ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
@@ -268,7 +289,7 @@ function showSaleSuccessBanner() {
   const fillBtn = document.createElement('button');
   fillBtn.textContent = 'Generera faktura →';
   fillBtn.style.cssText = 'background:var(--blue);border:none;border-radius:10px;color:#1a1409;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0';
-  fillBtn.onclick = () => { fillInvoiceFromSale(_lastSaleClientId, _lastSaleItems); t.remove(); };
+  fillBtn.onclick = () => { fillInvoiceFromSale(_lastSaleClientId, _lastSaleItems, null, _lastSaleBuyerName); t.remove(); };
   const msg = document.createElement('span');
   msg.textContent = 'Försäljning skapad!';
   msg.style.flex = '1';
@@ -281,13 +302,18 @@ function showSaleSuccessBanner() {
   setTimeout(() => { if (t.parentElement) t.remove(); }, 10000);
 }
 
-function fillInvoiceFromSale(clientId, items, invoiceNumber) {
+function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
   switchTab('invoice');
   populateInvClientPicker();
   setTimeout(() => {
     const sel = document.getElementById('inv-client-pick');
-    sel.value = clientId;
+    sel.value = clientId || '';
     fillInvClient(clientId);
+    // Köpare utanför appen har ingen klientpost — då är namnet allt vi har
+    if (!clientId && buyerName) {
+      const nameEl = document.getElementById('inv-cust-name');
+      if (nameEl) nameEl.value = buyerName;
+    }
     if (invoiceNumber) {
       const numEl = document.getElementById('inv-number');
       if (numEl) numEl.value = invoiceNumber;
@@ -308,7 +334,7 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber) {
 function openSaleInvoice(saleId) {
   const sale = _saleHistoryCache[saleId];
   if (!sale) return;
-  fillInvoiceFromSale(sale.client_id, sale.sale_items || [], sale.invoice_number);
+  fillInvoiceFromSale(sale.client_id, sale.sale_items || [], sale.invoice_number, sale.customer_name);
 }
 
 // ── Sale status helpers ──
@@ -459,7 +485,9 @@ async function loadSalesHistory() {
       const monthName = new Date(yr, mo - 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
       const saleRows = ms.map(sale => {
         _saleHistoryCache[sale.id] = sale;
-        const clientName = sale.clients?.admin_label || sale.clients?.display_name || '—';
+        // Sälj utan klient bär köparens namn direkt på raden
+        const clientName = sale.clients?.admin_label || sale.clients?.display_name
+          || (sale.customer_name ? `${esc(sale.customer_name)} <span style="color:var(--text3);font-size:11px">· utanför appen</span>` : '—');
         const saleRev = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
         const saleProfit = (sale.sale_items || []).reduce((s, i) => {
           if (i.buy_price == null) return s;

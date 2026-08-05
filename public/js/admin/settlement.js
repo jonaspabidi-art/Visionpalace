@@ -104,9 +104,7 @@ function renderSettlement(d) {
         ${sumRow('Utbetalt', `− ${kr(d.paid_out)}`)}
         ${sumRow(label, kr(d.balance), { total: true })}
         <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5">
-          Vinsten räknas i euro (${eur(d.earned_eur)}). Varje försäljning växlas
-          med den kurs som gällde när den gjordes${rateSpan(d)}.
-          <button onclick="openRateModal()" style="background:none;border:none;color:#7aabff;font-size:11px;padding:0;cursor:pointer;font-family:inherit;text-decoration:underline">Ändra kursen för nya sälj</button>
+          Vinsten räknas i euro (${eur(d.earned_eur)}) och växlas till kronor med kursen 1 € = ${d.eur_sek_rate} kr.
         </div>
 
         <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:18px 0 4px">Intjänat per månad</div>
@@ -116,17 +114,6 @@ function renderSettlement(d) {
         ${entryRows}
       </div>
     </div>`;
-}
-
-// Euron rör sig under året, så historiken kan bära flera kurser samtidigt.
-// Står det bara en behöver vi inte tjata om det.
-function rateSpan(d) {
-  const rates = (d.rates_used || []).filter(r => r > 0);
-  const nice = n => Number(n).toLocaleString('sv-SE', { maximumFractionDigits: 2 });
-  if (rates.length > 1) {
-    return `, ${nice(rates[0])}–${nice(rates[rates.length - 1])} kr/€ hittills. Nya sälj: ${nice(d.eur_sek_rate)} kr/€`;
-  }
-  return `, just nu ${nice(d.eur_sek_rate)} kr/€`;
 }
 
 function toggleSettlementDetail() {
@@ -177,39 +164,6 @@ async function saveSettlementEntry() {
     if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Kunde inte spara', 'error'); return; }
     closeSettlementModal();
     showToast('Registrerad', 'success');
-    loadSettlement();
-  } catch { showToast('Anslutningsfel', 'error'); }
-  finally { btn.textContent = 'Spara'; btn.disabled = false; }
-}
-
-// ── Växelkursen ──
-function openRateModal() {
-  document.getElementById('rate-input').value = settlementData?.eur_sek_rate ?? '';
-  document.getElementById('rate-modal').classList.add('open');
-  document.getElementById('rate-input').focus();
-}
-
-function closeRateModal() {
-  document.getElementById('rate-modal').classList.remove('open');
-}
-
-async function saveRate() {
-  const value = parseFloat(document.getElementById('rate-input').value);
-  if (!(value > 0)) { showToast('Ange en kurs', 'error'); return; }
-  const btn = document.querySelector('#rate-modal .inv-gen-btn');
-  btn.textContent = 'Sparar…'; btn.disabled = true;
-  try {
-    const r = await api('/api/settlement/rate', { method: 'PATCH', body: JSON.stringify({ eur_sek_rate: value }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { showToast(d.error || 'Kunde inte spara kursen', 'error'); return; }
-    closeRateModal();
-    // Har migration 010 inte körts saknar gamla sälj sin frysta kurs, och då
-    // räknas historiken faktiskt om — det måste synas, inte tigas ihjäl
-    if (d.unfrozen_sales) {
-      showToast(`Kursen sparad, men ${d.unfrozen_sales} äldre sälj saknar egen kurs och räknas om. Kör migration 010.`, 'error');
-    } else {
-      showToast(`Nya sälj växlas nu med ${value} kr/€`, 'success');
-    }
     loadSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Spara'; btn.disabled = false; }
