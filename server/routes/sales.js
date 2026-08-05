@@ -53,13 +53,18 @@ module.exports = (io) => {
       const invoice_number = await generateInvoiceNumber();
       step('nr');
       const createdAtIso = new Date().toISOString();
-      let { data: sale, error } = await supabase.from('sales').insert({
+      // customer_name skickas BARA när det behövs. Kolumnen tillkommer i
+      // migration 010, och tas den med på varje sälj avvisar databasen även
+      // helt vanliga försäljningar tills SQL:en är körd.
+      const saleRow = {
         client_id: client_id || null,
-        customer_name: client_id ? null : buyerName,
         invoice_number, notes: notes || null,
         admin_id: req.adminId,
-        created_at: createdAtIso
-      }).select().abortSignal(dbTimeout()).single();
+        created_at: createdAtIso,
+      };
+      if (!client_id) saleRow.customer_name = buyerName;
+      let { data: sale, error } = await supabase.from('sales').insert(saleRow)
+        .select().abortSignal(dbTimeout()).single();
       if (error) {
         // The insert may have reached the database even though the response
         // was lost on a stalled connection — verify before failing
@@ -68,7 +73,17 @@ module.exports = (io) => {
           q = client_id ? q.eq('client_id', client_id) : q.eq('customer_name', buyerName);
           return q.gte('created_at', createdAtIso).abortSignal(dbTimeout()).maybeSingle();
         });
-        if (!existing) return res.status(500).json({ error: `försäljning: ${error.message}` });
+        if (!existing) {
+          // Säger databasen att kolumnen inte finns är det SQL-steget som
+          // saknas, inte något fel på försäljningen — säg det rakt ut
+          if (/customer_name|client_id/.test(error.message || '')) {
+            console.error(`[Sale] Migration 010 saknas: ${error.message}`);
+            return res.status(503).json({
+              error: 'Försäljning till kund utanför appen kräver att SQL-steget körs i Supabase (010_walkin_customers.sql). Välj en klient så länge.',
+            });
+          }
+          return res.status(500).json({ error: `försäljning: ${error.message}` });
+        }
         console.warn(`[Sale] ${invoice_number}: insert-svar förlorat men raden fanns — fortsätter`);
         sale = existing;
       }
