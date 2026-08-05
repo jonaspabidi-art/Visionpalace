@@ -21,6 +21,25 @@ module.exports = (io) => {
     return res;
   }
 
+  // Villkoren som gäller just nu. Bäst-möjligt: kan de inte läsas skapas säljet
+  // ändå, och avräkningen faller tillbaka på konfigurationen som förut.
+  async function settlementTerms() {
+    try {
+      const { data } = await supabase.from('app_settings')
+        .select('value').eq('key', 'settlement_config').abortSignal(dbTimeout()).maybeSingle();
+      const cfg = data?.value ? JSON.parse(data.value) : null;
+      const pct = Number(cfg?.commission_pct);
+      const rate = Number(cfg?.eur_sek_rate);
+      return {
+        commission_pct: Number.isFinite(pct) && pct > 0 ? pct : null,
+        eur_sek_rate: Number.isFinite(rate) && rate > 0 ? rate : null,
+      };
+    } catch (e) {
+      console.warn('[Sale] Kunde inte läsa avräkningsvillkoren:', e?.message || e);
+      return { commission_pct: null, eur_sek_rate: null };
+    }
+  }
+
   async function generateInvoiceNumber() {
     const mm = String(new Date().getMonth() + 1).padStart(2, '0');
     const prefix = `VP${mm}-`;
@@ -47,9 +66,16 @@ module.exports = (io) => {
       const invoice_number = await generateInvoiceNumber();
       step('nr');
       const createdAtIso = new Date().toISOString();
+      // Kursen och provisionssatsen fryses på säljet. Euron rör sig under året,
+      // och utan det här skulle en kursändring i augusti räkna om ett sälj från
+      // mars. Misslyckas uppslaget lämnas de tomma — då används konfigurationens
+      // värden som förut, och ett sälj får aldrig falla på det här.
+      const terms = await settlementTerms();
       let { data: sale, error } = await supabase.from('sales').insert({
         client_id, invoice_number, notes: notes || null,
         admin_id: req.adminId,
+        commission_pct: terms.commission_pct,
+        eur_sek_rate: terms.eur_sek_rate,
         created_at: createdAtIso
       }).select().abortSignal(dbTimeout()).single();
       if (error) {

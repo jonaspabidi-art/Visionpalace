@@ -67,30 +67,46 @@ module.exports = () => {
       const defaultPct = cfg.commission_pct ?? DEFAULT_COMMISSION_PCT;
       const rate = cfg.eur_sek_rate ?? DEFAULT_EUR_SEK_RATE;
 
-      const { data: sales, error: salesErr } = await supabase.from('sales')
-        .select('id, created_at, status, commission_pct, sale_items(sell_price, buy_price, qty)')
-        .eq('admin_id', cfg.seller_admin_id)
-        .abortSignal(dbTimeout());
+      // Kursen läses per försäljning. Euron rör sig under året, så ett sälj
+      // från mars ska växlas till mars kurs — inte till den som råkar gälla
+      // den dag saldot visas. Saknas den (sälj äldre än migration 010)
+      // används konfigurationens kurs, precis som förut.
+      const rateFallbackQuery = cols => supabase.from('sales').select(cols)
+        .eq('admin_id', cfg.seller_admin_id).abortSignal(dbTimeout());
+      let { data: sales, error: salesErr } =
+        await rateFallbackQuery('id, created_at, status, commission_pct, eur_sek_rate, sale_items(sell_price, buy_price, qty)');
+      if (salesErr) {
+        console.warn(`[Settlement] Kunde inte läsa eur_sek_rate (${salesErr.message}) — läser utan`);
+        ({ data: sales, error: salesErr } =
+          await rateFallbackQuery('id, created_at, status, commission_pct, sale_items(sell_price, buy_price, qty)'));
+      }
       if (salesErr) return res.status(500).json({ error: `Kunde inte läsa försäljningar: ${salesErr.message}` });
 
-      // Accumulated in EUR (the currency of the sales), converted to SEK below
-      let earned = 0, pending = 0, missingBuyPrice = 0;
+      // Andelen räknas i euro per sälj och växlas direkt med säljets egen kurs
+      let earnedEur = 0, pendingEur = 0, earned = 0, pending = 0;
+      let missingBuyPrice = 0, mixedRates = new Set();
       const months = {};
       for (const s of sales || []) {
         const status = s.status || 'unpaid';
         if (status === 'cancelled') continue;
         const pct = s.commission_pct != null ? parseFloat(s.commission_pct) : defaultPct;
-        const share = saleProfit(s) * pct / 100;
+        const saleRate = s.eur_sek_rate != null && parseFloat(s.eur_sek_rate) > 0
+          ? parseFloat(s.eur_sek_rate) : rate;
+        mixedRates.add(saleRate);
+        const shareEur = saleProfit(s) * pct / 100;
+        const shareSek = shareEur * saleRate;
         // Warn about sales where no row carries a buy price — those silently
         // yield zero commission, which would quietly cost the sellers money
         const items = s.sale_items || [];
         if (items.length && !items.some(i => i.buy_price != null)) missingBuyPrice++;
         if (PAID_STATUSES.includes(status)) {
-          earned += share;
+          earnedEur += shareEur;
+          earned += shareSek;
           const key = (s.created_at || '').substring(0, 7);
-          months[key] = (months[key] || 0) + share;
+          months[key] = (months[key] || 0) + shareSek;
         } else {
-          pending += share;
+          pendingEur += shareEur;
+          pending += shareSek;
         }
       }
 
@@ -103,31 +119,58 @@ module.exports = () => {
       const sumOf = type => (entries || [])
         .filter(e => e.type === type)
         .reduce((a, e) => a + (parseFloat(e.amount) || 0), 0);
-      // Ledger entries are already in SEK — only the earnings need converting
+      // Ledger entries are already in SEK; earnings are converted per sale above
       const opening = sumOf('opening');
       const paidOut = sumOf('payout');
-      const earnedSek = earned * rate;
-      const monthsSek = {};
-      for (const [key, val] of Object.entries(months)) monthsSek[key] = val * rate;
 
       res.json({
         role,
         commission_pct: defaultPct,
-        eur_sek_rate: rate,
-        earned: earnedSek,
-        earned_eur: earned,
-        pending: pending * rate,
-        pending_eur: pending,
+        eur_sek_rate: rate,             // kursen som gäller för NYA sälj
+        rates_used: [...mixedRates].sort((a, b) => a - b),
+        earned,
+        earned_eur: earnedEur,
+        pending,
+        pending_eur: pendingEur,
         opening,
         paid_out: paidOut,
-        balance: opening + earnedSek - paidOut,
+        balance: opening + earned - paidOut,
         missing_buy_price: missingBuyPrice,
-        months: monthsSek,
+        months,
         entries: entries || [],
       });
     } catch (e) {
       console.error('[Settlement] GET /settlement:', e.stack || e.message);
       if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid hämtning av avräkning' });
+    }
+  });
+
+  // Ändra kursen som gäller framåt. Historiken rörs inte — varje sälj bär sin
+  // egen kurs sedan migration 010, vilket är hela poängen med den här knappen.
+  router.patch('/settlement/rate', adminAuth, async (req, res) => {
+    try {
+      const party = await requireParty(req, res);
+      if (!party) return;
+      const value = parseFloat(req.body.eur_sek_rate);
+      if (!Number.isFinite(value) || value <= 0 || value > 100) {
+        return res.status(400).json({ error: 'Ange en kurs mellan 0 och 100 kr per euro' });
+      }
+      const next = { ...party.cfg, eur_sek_rate: value };
+      const { error } = await supabase.from('app_settings')
+        .update({ value: JSON.stringify(next), updated_at: new Date().toISOString() })
+        .eq('key', 'settlement_config').abortSignal(dbTimeout());
+      if (error) return res.status(500).json({ error: error.message });
+
+      // Utan frysningen skulle historiken räknas om här — säg till om den saknas
+      const { count } = await supabase.from('sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('admin_id', party.cfg.seller_admin_id).is('eur_sek_rate', null)
+        .abortSignal(dbTimeout());
+      console.log(`[Settlement] Kursen satt till ${value} kr/€ av admin ${req.adminId}`);
+      res.json({ eur_sek_rate: value, unfrozen_sales: count || 0 });
+    } catch (e) {
+      console.error('[Settlement] PATCH /settlement/rate:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel vid kursändring' });
     }
   });
 
