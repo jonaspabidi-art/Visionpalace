@@ -274,8 +274,26 @@ kort överst i Historik. Saldot **räknas fram** ur försäljningarna varje gån
 - Varning visas för sälj där ingen rad har inköpspris (ger tyst 0 i provision).
 **Uppsättning:** `supabase/migrations/008_settlement.sql` — användarnamnen fylls i
 och körs i Supabase. Innan dess svarar endpointen `not_configured` och kortet är dolt.
-**Satsändring:** `sales.commission_pct` fryser satsen per sälj; kör backfillen som
-står dokumenterad i SQL-filen INNAN satsen ändras, annars räknas historiken om.
+**Satsändring:** `sales.commission_pct` fryser satsen per sälj.
+
+### 29. ✅ KLART (2026-08-05) — Eurokursen fryses per försäljning
+**Bakgrund:** Ägaren: "Euro är ju olika under året." Kursen låg som EN siffra i
+`settlement_config` och användes på ALLA sälj — en kursändring i augusti räknade om
+ett sälj från mars. Fällan stod till och med dokumenterad i 008: *"INTJÄNAT räknas
+om med den nya kursen — även för gamla försäljningar."*
+**Byggt:**
+- `supabase/migrations/010_frozen_rate.sql` — `sales.eur_sek_rate` + backfill av
+  både kurs och sats vid dagens värden, så inga siffror ändras den dag den körs.
+- Sälj stämplas med kurs och sats vid skapandet (`settlementTerms()` i sales.js).
+  Bäst-möjligt: kan konfigurationen inte läsas skapas säljet ändå med tomma fält
+  och avräkningen faller tillbaka på konfigurationen som förut.
+- Avräkningen växlar **per sälj** med säljets egen kurs; `rates_used` visar spannet.
+- `PATCH /settlement/rate` + kursruta i appen (Historik → Detaljer → Ändra kursen).
+  Svaret räknar sälj utan egen kurs; är de fler än noll varnar appen om att
+  migration 010 inte körts, eftersom historiken då faktiskt räknas om.
+**Ägarens Excel (genomgången 2026-08-05):** kolumnen "30 % av vinsten" betyder att
+30 % **dras av** — säljarna får 70 %, vilket är vad appen räknar. Excelfilens
+eurodel använde kursen 10,578, inte 11.
 
 **Byggordning:** 23 → 24 → 25, allt klart 2026-08-04. Punkt 26 gjordes separat.
 
