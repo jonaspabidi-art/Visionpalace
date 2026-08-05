@@ -274,28 +274,38 @@ kort överst i Historik. Saldot **räknas fram** ur försäljningarna varje gån
 - Varning visas för sälj där ingen rad har inköpspris (ger tyst 0 i provision).
 **Uppsättning:** `supabase/migrations/008_settlement.sql` — användarnamnen fylls i
 och körs i Supabase. Innan dess svarar endpointen `not_configured` och kortet är dolt.
-**Satsändring:** `sales.commission_pct` fryser satsen per sälj.
-
-### 29. ✅ KLART (2026-08-05) — Eurokursen fryses per försäljning
-**Bakgrund:** Ägaren: "Euro är ju olika under året." Kursen låg som EN siffra i
-`settlement_config` och användes på ALLA sälj — en kursändring i augusti räknade om
-ett sälj från mars. Fällan stod till och med dokumenterad i 008: *"INTJÄNAT räknas
-om med den nya kursen — även för gamla försäljningar."*
-**Byggt:**
-- `supabase/migrations/010_frozen_rate.sql` — `sales.eur_sek_rate` + backfill av
-  både kurs och sats vid dagens värden, så inga siffror ändras den dag den körs.
-- Sälj stämplas med kurs och sats vid skapandet (`settlementTerms()` i sales.js).
-  Bäst-möjligt: kan konfigurationen inte läsas skapas säljet ändå med tomma fält
-  och avräkningen faller tillbaka på konfigurationen som förut.
-- Avräkningen växlar **per sälj** med säljets egen kurs; `rates_used` visar spannet.
-- `PATCH /settlement/rate` + kursruta i appen (Historik → Detaljer → Ändra kursen).
-  Svaret räknar sälj utan egen kurs; är de fler än noll varnar appen om att
-  migration 010 inte körts, eftersom historiken då faktiskt räknas om.
-**Ägarens Excel (genomgången 2026-08-05):** kolumnen "30 % av vinsten" betyder att
-30 % **dras av** — säljarna får 70 %, vilket är vad appen räknar. Excelfilens
-eurodel använde kursen 10,578, inte 11.
+**Satsändring:** `sales.commission_pct` fryser satsen per sälj; kör backfillen som
+står dokumenterad i SQL-filen INNAN satsen ändras, annars räknas historiken om.
+**Eurokursen: EN fast kurs, medvetet (ägarens beslut 2026-08-05).** Kurs per
+försäljning byggdes och backades på hans begäran: *"jag vill ha kvar kursen på
+samma som innan, de behövs inte att vi gör olika per köp."* Kursen ligger alltså
+kvar i `settlement_config` och gäller alla sälj. **Följden att känna till:** ändras
+den räknas hela historiken om — även gamla sälj. Vill man ändå ändra den, frys först
+historiken med `UPDATE sales SET eur_sek_rate = ...` (kolumnen finns inte längre;
+återinför den i så fall från git-historiken, PR #36).
 
 **Byggordning:** 23 → 24 → 25, allt klart 2026-08-04. Punkt 26 gjordes separat.
+
+### 30. ✅ KLART (2026-08-05) — Sälja till kund utanför appen
+**Bakgrund:** Ägaren: "ibland gör vi försäljningar med folk som inte har appen."
+`sales.client_id` var obligatorisk, så det gick inte alls.
+**Byggt:** `supabase/migrations/010_walkin_customers.sql` — `customer_name`,
+`client_id` blir valfri, och ett CHECK som kräver **antingen** klient **eller**
+namn så inget sälj kan bli utan köpare. I säljrutan finns valet "Kund utanför
+appen…" som fäller ut ett namnfält. Historik och bokföringsexport visar namnet.
+**Att veta:** en sådan köpare får inga notiser och ser inget i appen — det står i
+rutan. Push och socket-utskick hoppas över när `client_id` saknas, och
+verifieringen efter ett tappat svar söker på namnet i stället för klientlistan.
+
+### 31. ✅ KLART (2026-08-05) — Fylla på antal på en befintlig vara
+**Bakgrund:** Ägaren: "nu är de 3 av en modell men vi har 4 så ska kunna trycka
+plus." Tidigare fick man skapa om produkten, med risk att namn eller pris skrevs
+olika så högen delade upp sig i två kort.
+**Byggt:** `POST /inventory/:id/restock` kopierar raden (ref, namn, priser, bild,
+anteckning) så många gånger som anges, max 50. Varumenyn har "Lägg till ett
+exemplar · 3 st → 4 st" och "Lägg till flera…".
+**Bokföring:** varje nytt exemplar loggas i `purchases` precis som när en vara
+skapas — annars hade lagret vuxit utan spår i inköpsloggen.
 
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."

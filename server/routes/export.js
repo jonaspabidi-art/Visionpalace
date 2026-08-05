@@ -66,7 +66,7 @@ module.exports = () => {
       const soldBy = s => s.admins?.display_name || s.admins?.username || '';
       let revTotal = 0, profitTotal = 0;
       for (const s of sales || []) {
-        const client = s.clients?.admin_label || s.clients?.display_name || '';
+        const client = s.clients?.admin_label || s.clients?.display_name || s.customer_name || '';
         for (const it of s.sale_items || []) {
           const qty = it.qty || 1;
           const sell = parseFloat(it.sell_price) || 0;
@@ -129,7 +129,7 @@ module.exports = () => {
           for (const pay of payments || []) {
             const s = byId[pay.sale_id] || {};
             push(date(pay.paid_at), s.invoice_number || '',
-              s.clients?.admin_label || s.clients?.display_name || '', soldBy(s),
+              s.clients?.admin_label || s.clients?.display_name || s.customer_name || '', soldBy(s),
               pay.amount == null ? '' : num(pay.amount), pay.note || '', pay.image_url || '');
           }
         }

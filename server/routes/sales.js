@@ -21,25 +21,6 @@ module.exports = (io) => {
     return res;
   }
 
-  // Villkoren som gäller just nu. Bäst-möjligt: kan de inte läsas skapas säljet
-  // ändå, och avräkningen faller tillbaka på konfigurationen som förut.
-  async function settlementTerms() {
-    try {
-      const { data } = await supabase.from('app_settings')
-        .select('value').eq('key', 'settlement_config').abortSignal(dbTimeout()).maybeSingle();
-      const cfg = data?.value ? JSON.parse(data.value) : null;
-      const pct = Number(cfg?.commission_pct);
-      const rate = Number(cfg?.eur_sek_rate);
-      return {
-        commission_pct: Number.isFinite(pct) && pct > 0 ? pct : null,
-        eur_sek_rate: Number.isFinite(rate) && rate > 0 ? rate : null,
-      };
-    } catch (e) {
-      console.warn('[Sale] Kunde inte läsa avräkningsvillkoren:', e?.message || e);
-      return { commission_pct: null, eur_sek_rate: null };
-    }
-  }
-
   async function generateInvoiceNumber() {
     const mm = String(new Date().getMonth() + 1).padStart(2, '0');
     const prefix = `VP${mm}-`;
@@ -61,29 +42,32 @@ module.exports = (io) => {
     let t = t0;
     const step = (label) => { const now = Date.now(); steps.push(`${label} ${now - t}ms`); t = now; };
     try {
-      const { client_id, items, notes } = req.body;
-      if (!client_id || !items?.length) return res.status(400).json({ error: 'client_id och items krävs' });
+      // Köparen är antingen en klient i appen eller bara ett namn — ibland
+      // säljs det till någon som inte är inbjuden. Ett av dem krävs.
+      const { client_id, customer_name, items, notes } = req.body;
+      const buyerName = String(customer_name || '').trim();
+      if (!client_id && !buyerName) {
+        return res.status(400).json({ error: 'Välj en klient eller skriv namnet på köparen' });
+      }
+      if (!items?.length) return res.status(400).json({ error: 'items krävs' });
       const invoice_number = await generateInvoiceNumber();
       step('nr');
       const createdAtIso = new Date().toISOString();
-      // Kursen och provisionssatsen fryses på säljet. Euron rör sig under året,
-      // och utan det här skulle en kursändring i augusti räkna om ett sälj från
-      // mars. Misslyckas uppslaget lämnas de tomma — då används konfigurationens
-      // värden som förut, och ett sälj får aldrig falla på det här.
-      const terms = await settlementTerms();
       let { data: sale, error } = await supabase.from('sales').insert({
-        client_id, invoice_number, notes: notes || null,
+        client_id: client_id || null,
+        customer_name: client_id ? null : buyerName,
+        invoice_number, notes: notes || null,
         admin_id: req.adminId,
-        commission_pct: terms.commission_pct,
-        eur_sek_rate: terms.eur_sek_rate,
         created_at: createdAtIso
       }).select().abortSignal(dbTimeout()).single();
       if (error) {
         // The insert may have reached the database even though the response
         // was lost on a stalled connection — verify before failing
-        const { data: existing } = await retryRead('säljverifiering', () =>
-          supabase.from('sales').select().eq('invoice_number', invoice_number).eq('client_id', client_id)
-            .gte('created_at', createdAtIso).abortSignal(dbTimeout()).maybeSingle());
+        const { data: existing } = await retryRead('säljverifiering', () => {
+          let q = supabase.from('sales').select().eq('invoice_number', invoice_number);
+          q = client_id ? q.eq('client_id', client_id) : q.eq('customer_name', buyerName);
+          return q.gte('created_at', createdAtIso).abortSignal(dbTimeout()).maybeSingle();
+        });
         if (!existing) return res.status(500).json({ error: `försäljning: ${error.message}` });
         console.warn(`[Sale] ${invoice_number}: insert-svar förlorat men raden fanns — fortsätter`);
         sale = existing;
@@ -209,8 +193,11 @@ module.exports = (io) => {
       // with its items would ship any legacy base64 images back over the wire
       res.json({ sale });
       // Notify the client that a purchase was registered (fire-and-forget —
-      // must never affect the sale itself)
-      webPushClient(client_id, 'Vision Palace', 'Ett nytt köp har registrerats på ditt konto', { url: '/client', tab: 'purchases' }).catch(() => {});
+      // must never affect the sale itself). En köpare utanför appen har ingen
+      // enhet att pinga.
+      if (client_id) {
+        webPushClient(client_id, 'Vision Palace', 'Ett nytt köp har registrerats på ditt konto', { url: '/client', tab: 'purchases' }).catch(() => {});
+      }
     } catch (e) {
       console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.stack || e.message);
       const done = steps.length ? steps.map(s => s.split(' ')[0]).join(', ') : 'inga';
@@ -240,11 +227,14 @@ module.exports = (io) => {
       .update(updates).eq('id', req.params.id).eq('admin_id', req.adminId)
       .select('*, sale_items(*)').single();
     if (error || !sale) return res.status(error ? 500 : 404).json({ error: error?.message || 'Hittades inte' });
-    if (status === 'shipped') {
-      const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
-      webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`, { url: '/client', tab: 'purchases' }).catch(() => {});
+    // Säljet kan sakna klient (köpare utanför appen) — då finns ingen att nå
+    if (sale.client_id) {
+      if (status === 'shipped') {
+        const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
+        webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`, { url: '/client', tab: 'purchases' }).catch(() => {});
+      }
+      io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
     }
-    io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
     res.json({ ok: true, sale });
   });
 
