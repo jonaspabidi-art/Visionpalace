@@ -108,7 +108,8 @@ module.exports = () => {
           const unit = parseFloat(p.buy_price) || 0;
           buyTotal += unit * qty;
           push(date(p.purchased_at), p.name || '', p.ref_code || '', qty, num(unit), num(unit * qty),
-            p.source === 'order_import' ? 'Fakturaimport' : 'Manuell',
+            p.source === 'order_import' ? 'Fakturaimport'
+              : p.source === 'preorder' ? 'Förbeställning' : 'Manuell',
             p.admins?.display_name || p.admins?.username || '', p.document_url || '');
         }
         push('Summa', '', '', '', '', num(buyTotal));

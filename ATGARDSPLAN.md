@@ -307,6 +307,27 @@ exemplar · 3 st → 4 st" och "Lägg till flera…".
 **Bokföring:** varje nytt exemplar loggas i `purchases` precis som när en vara
 skapas — annars hade lagret vuxit utan spår i inköpsloggen.
 
+### 32. ✅ KLART (2026-08-06) — Förbeställningar
+**Bakgrund:** Ägaren: "vi säljer ibland på pre orders … leverans tid mellan 1-6
+veckor. När vi säljer på preorder är inte produkten i vårat lager." Kunden
+förbetalar oftast.
+**Modell:** en förbeställning är ett vanligt sälj med `is_preorder` och ett
+leveransspann i veckor. **Varan passerar aldrig lagret** — den går från Cartier
+rakt till kunden (ägarens besked 2026-08-06). Inget lagersaldo rörs, varken vid
+sälj eller när varan kommer.
+**Bokföring:** Cartier-fakturan hängs på ordern (`supplier_doc_url`). Då skrivs
+inköpet till `purchases` med `source:'preorder'` och `sale_id`, en gång per sälj
+— `sale_id` är det som hindrar dubbelbokföring om fakturan byts ut.
+**⚠ Att veta:** ligger samma par även på en Cartier-faktura som körs genom
+fakturaimporten bokförs inköpet två gånger och paret hamnar dessutom i lagret.
+Ta bort den raden vid importen.
+**Provision:** räknas när kunden betalat, som vanligt (ägarens val 2026-08-06).
+Förbeställningsrutan sätter status betald direkt, eftersom de förbetalar.
+**Kunden ser** ett lila Pre-order-märke, hur länge sedan den beställdes, ett
+beräknat ankomstspann som datum och en förloppsstapel. Efter sista datumet byter
+texten till att det tar längre tid än väntat i stället för att bara se förfallet ut.
+**SQL:** `supabase/migrations/011_preorders.sql`.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan

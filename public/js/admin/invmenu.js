@@ -36,6 +36,7 @@ function openInvMenu() {
       invMenuRow('Skicka katalog', 'Skicka linskatalogen till en klient', 'runFromInvMenu(showLensCatalogClientPicker)'),
     ]
     : [
+      invMenuRow('Sälj förbeställning', 'För en vara som beställs hem åt kunden', 'runFromInvMenu(openPreorderModal)'),
       invMenuRow('Läs in order', 'Läs av en leverantörsfaktura och fyll på lagret', 'runFromInvMenu(openOrderImport)'),
       invMenuRow('Katalog PDF', 'Spara katalogen som PDF', 'runFromInvMenu(generateCatalogPDF)'),
       invMenuRow('Skicka katalog', 'Skicka katalogen till en klient', 'runFromInvMenu(showCatalogClientPicker)'),

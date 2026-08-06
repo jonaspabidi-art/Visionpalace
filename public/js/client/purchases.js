@@ -29,6 +29,46 @@ function renderPurchases(sales) {
     const s = map[status] || map.unpaid;
     return `<span style="background:${s.bg};color:${s.color};border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">${s.label}</span>`;
   };
+  // A pre-order is bought before it exists — ordered from the supplier and
+  // 1-6 weeks away. Showing how long ago it was ordered and how long is left
+  // is the whole point: otherwise the buyer has no idea whether to worry.
+  const preorderBlock = (sale) => {
+    if (!sale.is_preorder) return '';
+    const from = new Date(sale.created_at);
+    const days = Math.max(0, Math.floor((Date.now() - from) / 86400000));
+    const ago = days === 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`;
+    const addWeeks = w => { const d = new Date(from); d.setDate(d.getDate() + w * 7); return d; };
+    const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const min = sale.eta_weeks_min, max = sale.eta_weeks_max;
+    const hasWindow = min != null || max != null;
+    const lo = addWeeks(Math.min(min ?? 0, max ?? 0));
+    const hi = addWeeks(Math.max(min ?? 0, max ?? 0));
+
+    let line, tone = '#bb88ff', pct = 0;
+    if (sale.arrived_at) {
+      line = 'Arrived — shipping to you shortly';
+      tone = '#66dd99'; pct = 100;
+    } else if (!hasWindow) {
+      line = `Ordered ${ago}`;
+      pct = 0;
+    } else if (Date.now() > hi.getTime()) {
+      line = 'Taking longer than expected — we are chasing it with the supplier';
+      tone = '#ff9944'; pct = 100;
+    } else {
+      line = `Estimated arrival ${fmt(lo)} – ${fmt(hi)}`;
+      const span = hi.getTime() - from.getTime();
+      pct = span > 0 ? Math.min(100, Math.max(3, ((Date.now() - from.getTime()) / span) * 100)) : 0;
+    }
+    return `<div style="padding:10px 0;border-top:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:7px">
+        <span style="font-size:13px;color:${tone};font-weight:600">${line}</span>
+        <span style="font-size:11px;color:var(--text3);white-space:nowrap">Ordered ${ago}</span>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${tone};border-radius:3px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  };
   const buildTrackingUrl = (carrier, number) => {
     if (!number) return null;
     const c = (carrier || '').toLowerCase();
@@ -68,8 +108,9 @@ function renderPurchases(sales) {
         </div>` : '';
     return `<div class="sale-card">
       <div class="sale-card-header">
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <div class="sale-card-date">${date}</div>
+          ${sale.is_preorder ? `<span style="background:rgba(187,136,255,.13);color:#bb88ff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">Pre-order</span>` : ''}
           ${statusBadge(status)}
         </div>
         <div class="sale-card-meta">
@@ -81,6 +122,7 @@ function renderPurchases(sales) {
         </div>
       </div>
       <div class="sale-items">${itemsHTML}</div>
+      ${preorderBlock(sale)}
       ${trackingHTML}
       <div class="sale-card-footer">
         <span class="sale-total-label">Total</span>

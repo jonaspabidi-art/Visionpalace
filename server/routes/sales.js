@@ -44,8 +44,9 @@ module.exports = (io) => {
     try {
       // Köparen är antingen en klient i appen eller bara ett namn — ibland
       // säljs det till någon som inte är inbjuden. Ett av dem krävs.
-      const { client_id, customer_name, items, notes } = req.body;
+      const { client_id, customer_name, items, notes, is_preorder } = req.body;
       const buyerName = String(customer_name || '').trim();
+      const preorder = !!is_preorder;
       if (!client_id && !buyerName) {
         return res.status(400).json({ error: 'Välj en klient eller skriv namnet på köparen' });
       }
@@ -63,6 +64,17 @@ module.exports = (io) => {
         created_at: createdAtIso,
       };
       if (!client_id) saleRow.customer_name = buyerName;
+      // Förbeställningsfälten skickas bara för förbeställningar, av samma skäl
+      // som customer_name: vanliga sälj ska aldrig bero på migration 011.
+      if (preorder) {
+        const weeks = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 && n <= 104 ? n : null; };
+        const min = weeks(req.body.eta_weeks_min);
+        const max = weeks(req.body.eta_weeks_max);
+        saleRow.is_preorder = true;
+        saleRow.eta_weeks_min = min;
+        // Bakvänt spann skulle avvisas av databasen — vänd det i stället
+        saleRow.eta_weeks_max = min != null && max != null && max < min ? min : max;
+      }
       let { data: sale, error } = await supabase.from('sales').insert(saleRow)
         .select().abortSignal(dbTimeout()).single();
       if (error) {
@@ -76,6 +88,12 @@ module.exports = (io) => {
         if (!existing) {
           // Säger databasen att kolumnen inte finns är det SQL-steget som
           // saknas, inte något fel på försäljningen — säg det rakt ut
+          if (/is_preorder|eta_weeks/.test(error.message || '')) {
+            console.error(`[Sale] Migration 011 saknas: ${error.message}`);
+            return res.status(503).json({
+              error: 'Förbeställningar kräver att SQL-steget körs i Supabase (011_preorders.sql).',
+            });
+          }
           if (/customer_name|client_id/.test(error.message || '')) {
             console.error(`[Sale] Migration 010 saknas: ${error.message}`);
             return res.status(503).json({
@@ -217,6 +235,78 @@ module.exports = (io) => {
       console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.stack || e.message);
       const done = steps.length ? steps.map(s => s.split(' ')[0]).join(', ') : 'inga';
       if (!res.headersSent) res.status(500).json({ error: `Serverfel vid skapande av försäljning (klarade steg: ${done})` });
+    }
+  });
+
+  // ── Förbeställningar ──
+  // Varan har kommit in från leverantören. Lagret rörs inte — ett förbeställt
+  // par går från Cartier rakt till kunden och passerar aldrig lagret i appen.
+  router.post('/sales/:id/arrived', adminAuth, async (req, res) => {
+    try {
+      const { data: sale, error } = await supabase.from('sales')
+        .update({ arrived_at: new Date().toISOString() })
+        .eq('id', req.params.id).eq('admin_id', req.adminId)
+        .select('id, client_id, arrived_at, invoice_number').abortSignal(dbTimeout()).single();
+      if (error) {
+        if (/arrived_at/.test(error.message || '')) {
+          return res.status(503).json({ error: 'Förbeställningar kräver att SQL-steget körs i Supabase (011_preorders.sql).' });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+      if (!sale) return res.status(404).json({ error: 'Hittades inte' });
+      if (sale.client_id) {
+        webPushClient(sale.client_id, 'Din förbeställning har kommit!',
+          'Varan är inne hos oss och skickas snart.', { url: '/client', tab: 'purchases' }).catch(() => {});
+      }
+      console.log(`[Sale] ${sale.invoice_number}: förbeställning inkommen`);
+      res.json({ sale });
+    } catch (e) {
+      console.error('[Sale] POST /sales/:id/arrived:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel' });
+    }
+  });
+
+  // Leverantörsfakturan för förbeställningen. Den är bokföringens underlag för
+  // inköpet, eftersom paret aldrig går genom lagret och alltså aldrig loggas
+  // av fakturaimporten. Inköpsraden skrivs en gång per sälj.
+  router.post('/sales/:id/supplier-doc', adminAuth, async (req, res) => {
+    try {
+      const url = String(req.body.document_url || '').trim();
+      if (!url) return res.status(400).json({ error: 'Ingen fil' });
+      const { data: sale, error } = await supabase.from('sales')
+        .update({ supplier_doc_url: url })
+        .eq('id', req.params.id).eq('admin_id', req.adminId)
+        .select('*, sale_items(*)').abortSignal(dbTimeout()).single();
+      if (error) {
+        if (/supplier_doc_url/.test(error.message || '')) {
+          return res.status(503).json({ error: 'Förbeställningar kräver att SQL-steget körs i Supabase (011_preorders.sql).' });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+      if (!sale) return res.status(404).json({ error: 'Hittades inte' });
+
+      // Bokföringen ska inte kunna dubblera inköpet om fakturan byts ut
+      const { data: already } = await supabase.from('purchases')
+        .select('id').eq('sale_id', sale.id).abortSignal(dbTimeout());
+      if (!already?.length) {
+        const rows = (sale.sale_items || [])
+          .filter(i => i.buy_price != null)
+          .map(i => ({
+            admin_id: req.adminId, inventory_id: null, sale_id: sale.id,
+            name: i.name, ref_code: i.ref_code || null,
+            buy_price: i.buy_price, qty: i.qty || 1,
+            source: 'preorder', document_url: url,
+            purchased_at: new Date().toISOString(),
+          }));
+        if (rows.length) {
+          const { error: pErr } = await supabase.from('purchases').insert(rows).abortSignal(dbTimeout());
+          if (pErr) console.error(`[Sale] Inköpslogg för förbeställning misslyckades: ${pErr.message}`);
+        }
+      }
+      res.json({ sale, logged: !already?.length });
+    } catch (e) {
+      console.error('[Sale] POST /sales/:id/supplier-doc:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Serverfel' });
     }
   });
 
