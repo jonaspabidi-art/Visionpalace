@@ -521,9 +521,11 @@ async function loadSalesHistory() {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</span>
                 ${isWalkinSale ? `<span style="font-size:10px;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:1px 6px;white-space:nowrap">utanför appen</span>` : ''}
+                ${sale.is_preorder ? `<span style="font-size:10px;color:#bb88ff;background:rgba(187,136,255,.13);border-radius:6px;padding:2px 7px;font-weight:700;white-space:nowrap">Förbeställning</span>` : ''}
                 <span id="sbadge-${sid}">${saleStatusBadge(sale.status || 'unpaid')}</span>
               </div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''} · ${itemCount} vara${itemCount !== 1 ? 'r' : ''}</div>
+              ${sale.is_preorder ? `<div style="font-size:11px;color:${sale.arrived_at ? '#66dd99' : '#bb88ff'};margin-top:3px">${esc(preorderStatusText(sale))}</div>` : ''}
             </div>
             <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:12px">
               <div style="text-align:right">
@@ -539,6 +541,7 @@ async function loadSalesHistory() {
               ${statusActionsHTML(sale, sid)}
             </div>
             <div id="pay-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"></div>
+            ${sale.is_preorder ? preorderActionsHTML(sale) : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               <button onclick="event.stopPropagation();openSaleInvoice('${sale.id}')" style="background:none;border:1px solid rgba(100,150,255,.3);border-radius:8px;color:#7aabff;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Faktura</button>
               <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>

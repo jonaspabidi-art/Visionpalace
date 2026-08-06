@@ -380,6 +380,70 @@
   </div>
 </div>
 
+<!-- Sälja en förbeställning: varan finns inte i lagret ännu -->
+<div class="modal-bg" id="preorder-modal" onclick="if(event.target===this)closePreorderModal()">
+  <div class="modal-sheet" style="max-height:88vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Sälj förbeställning</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      För varor som beställs hem åt kunden. Lagret rörs inte.
+    </div>
+
+    <div class="inv-field">
+      <label>Köpare</label>
+      <select class="inv-input" id="pre-client-pick" onchange="onPreBuyerChange()">
+        <option value="">Välj klient…</option>
+      </select>
+    </div>
+    <div class="inv-field" id="pre-walkin" style="display:none">
+      <label>Namn på köparen</label>
+      <input class="inv-input" id="pre-walkin-name" placeholder="ex. Rojne" autocomplete="off">
+    </div>
+
+    <div class="inv-field">
+      <label>Referenskod</label>
+      <input class="inv-input" id="pre-ref" placeholder="ex. CT0582S-005" autocomplete="off"
+             style="font-weight:700" onchange="lookupPreorderRef()">
+      <div id="pre-ref-hint" style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.45"></div>
+    </div>
+    <div class="inv-field">
+      <label>Namn på varan</label>
+      <input class="inv-input" id="pre-name" placeholder="Skriv namn" autocomplete="off">
+    </div>
+    <div class="inv-row-grid">
+      <div class="inv-field" style="margin-bottom:0">
+        <label>Antal</label>
+        <input class="inv-input" id="pre-qty" type="number" min="1" step="1" inputmode="numeric" value="1">
+      </div>
+      <div class="inv-field" style="margin-bottom:0">
+        <label>Säljpris (€)</label>
+        <input class="inv-input" id="pre-sell" type="number" step="0.01" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+    <div class="inv-field" style="margin-top:10px">
+      <label>Inköpspris (€)</label>
+      <input class="inv-input" id="pre-buy" type="number" step="0.01" inputmode="decimal" placeholder="0">
+    </div>
+
+    <div class="inv-field">
+      <label>Beräknad leveranstid</label>
+      <div class="inv-row-grid">
+        <input class="inv-input" id="pre-eta-min" type="number" min="0" max="104" step="1" inputmode="numeric" value="1" placeholder="Från">
+        <input class="inv-input" id="pre-eta-max" type="number" min="0" max="104" step="1" inputmode="numeric" value="6" placeholder="Till">
+      </div>
+      <div id="pre-eta-hint" style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.45"></div>
+    </div>
+
+    <label style="display:flex;align-items:center;gap:10px;padding:12px 0;font-size:14px;color:var(--text);cursor:pointer">
+      <input type="checkbox" id="pre-paid" checked style="width:20px;height:20px;accent-color:var(--blue)">
+      Kunden har betalat
+    </label>
+
+    <button class="inv-gen-btn" onclick="createPreorder()">Skapa förbeställning</button>
+    <button class="hbtn" style="width:100%;margin-top:8px;padding:12px;justify-content:center" onclick="closePreorderModal()">Avbryt</button>
+  </div>
+</div>
+
 <!-- Lager: fylla på fler exemplar av en modell som redan finns -->
 <div class="modal-bg" id="restock-modal" onclick="if(event.target===this)closeRestockModal()">
   <div class="modal-sheet">
@@ -674,6 +738,7 @@
 <script src="/js/admin/inventory.js"></script>
 <script src="/js/admin/lenses.js"></script>
 <script src="/js/admin/invmenu.js"></script>
+<script src="/js/admin/preorder.js"></script>
 <script src="/js/admin/invoice.js"></script>
 <script src="/js/admin/sales.js"></script>
 <script src="/js/admin/payments.js"></script>
