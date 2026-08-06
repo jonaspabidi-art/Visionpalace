@@ -485,9 +485,12 @@ async function loadSalesHistory() {
       const monthName = new Date(yr, mo - 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
       const saleRows = ms.map(sale => {
         _saleHistoryCache[sale.id] = sale;
-        // Sälj utan klient bär köparens namn direkt på raden
+        // Sälj utan klient bär köparens namn direkt på raden. Namnet måste
+        // förbli ren text — det körs genom esc() nedan, så markering läggs som
+        // ett eget element i stället.
         const clientName = sale.clients?.admin_label || sale.clients?.display_name
-          || (sale.customer_name ? `${esc(sale.customer_name)} <span style="color:var(--text3);font-size:11px">· utanför appen</span>` : '—');
+          || sale.customer_name || '—';
+        const isWalkinSale = !sale.clients && !!sale.customer_name;
         const saleRev = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
         const saleProfit = (sale.sale_items || []).reduce((s, i) => {
           if (i.buy_price == null) return s;
@@ -517,6 +520,7 @@ async function loadSalesHistory() {
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:14px;font-weight:700;color:var(--text)">${esc(clientName)}</span>
+                ${isWalkinSale ? `<span style="font-size:10px;color:var(--text3);border:1px solid var(--border);border-radius:6px;padding:1px 6px;white-space:nowrap">utanför appen</span>` : ''}
                 <span id="sbadge-${sid}">${saleStatusBadge(sale.status || 'unpaid')}</span>
               </div>
               <div style="font-size:11px;color:var(--text3);margin-top:2px">${date}${sale.invoice_number ? ` · ${esc(sale.invoice_number)}` : ''} · ${itemCount} vara${itemCount !== 1 ? 'r' : ''}</div>
