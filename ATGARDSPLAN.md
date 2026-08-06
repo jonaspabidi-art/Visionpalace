@@ -370,6 +370,30 @@ innehåller åäö eller svenska ord — nya notiser kan alltså inte smyga in p
   hade annars en status men ingen väg vidare.
 - Sista svenska strängarna i kundappen bort ("Aktivera notiser…", "Frakt").
 
+### 35. ✅ KLART (2026-08-06) — Bokföringsexport: CSV eller PDF
+**Bakgrund:** Ägaren: "kan du göra så man kan välja mellan csv och pdf? Pdf ska
+va snygg med vår logga."
+**Byggt:** Knappen i Historik öppnar ett format­val. CSV är oförändrad och går
+rakt in i redovisningsprogrammet. PDF byggs i appen ur `?format=json` på samma
+endpoint — samma siffror, bara ett annat omslag.
+**PDF:en:** loggan och Cormorant-ordmärket överst, månaden stort till höger, en
+sammanfattningsruta (omsättning/vinst/inköp) och tre sektioner i fakturans stil.
+Renderas med html2pdf ur HTML, precis som fakturan, i stället för att ritas fält
+för fält. Loggan bakas in som data-URI — html2canvas ritar inte en bild som
+fortfarande laddas.
+**Layoutdetalj:** allt utom varunamnet är `white-space:nowrap`. Utan det bryts
+datum och personnamn mitt itu, vilket är svårläst i ett underlag man stämmer av
+rad för rad.
+
+### 36. ✅ KLART (2026-08-06) — Testerna ligger i repot
+**Bakgrund:** hela testsviten låg i en temporär katalog och försvann när
+containern startades om mitt i arbetet. Allt som byggts sedan session 7 var
+testat, men inget av det gick att köra om.
+**Nu:** `tests/` med `npm test` (server) och `npm run test:ui` (webbläsare), plus
+en README med de fällor som kostat mest tid: mockade `.single()`-svar måste vara
+objekt och inte arrayer, `html2pdf` går inte att nå från testmiljön och stubbas,
+och layoutfel syns inte i textkontroller — höjder måste mätas.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan

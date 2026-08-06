@@ -34,6 +34,11 @@ module.exports = () => {
       const [y, m] = month.split('-').map(Number);
       const from = new Date(Date.UTC(y, m - 1, 1)).toISOString();
       const to = new Date(Date.UTC(y, m, 1)).toISOString();
+      // Samma underlag oavsett format. CSV går till redovisningsprogrammet,
+      // PDF byggs i appen ur JSON och är den man mailar eller skriver ut.
+      const asJson = String(req.query.format || '').toLowerCase() === 'json';
+      const report = { month, admin: '', sales: [], purchases: [], payments: [],
+        totals: { revenue: 0, profit: 0, purchases: 0 } };
 
       const lines = [];
       const push = (...v) => lines.push(row(...v));
@@ -43,6 +48,7 @@ module.exports = () => {
       const { data: me } = await supabase.from('admins')
         .select('display_name, username').eq('id', req.adminId).maybeSingle();
       const adminName = me?.display_name || me?.username || '';
+      report.admin = adminName;
 
       // ── Försäljningar ────────────────────────────────────────────────────
       // Båda admin-kontonas försäljningar i samma fil (ägarens besked
@@ -79,8 +85,16 @@ module.exports = () => {
           push(date(s.created_at), date(s.paid_at), s.invoice_number || '', client, soldBy(s),
             STATUS_SV[s.status || 'unpaid'] || s.status || '', it.name || '', it.ref_code || '',
             qty, num(sell), num(amount), hasBuy ? num(buy) : '', profit == null ? '' : num(profit));
+          report.sales.push({
+            date: date(s.created_at), paid_at: date(s.paid_at), invoice: s.invoice_number || '',
+            client, sold_by: soldBy(s), status: STATUS_SV[s.status || 'unpaid'] || s.status || '',
+            name: it.name || '', ref: it.ref_code || '', qty,
+            sell, amount, buy, profit, preorder: !!s.is_preorder,
+          });
         }
       }
+      report.totals.revenue = revTotal;
+      report.totals.profit = profitTotal;
       push('Summa', '', '', '', '', '', '', '', '', '', num(revTotal), '', num(profitTotal));
       lines.push('');
 
@@ -107,11 +121,18 @@ module.exports = () => {
           const qty = p.qty || 1;
           const unit = parseFloat(p.buy_price) || 0;
           buyTotal += unit * qty;
+          const source = p.source === 'order_import' ? 'Fakturaimport'
+            : p.source === 'preorder' ? 'Förbeställning' : 'Manuell';
           push(date(p.purchased_at), p.name || '', p.ref_code || '', qty, num(unit), num(unit * qty),
-            p.source === 'order_import' ? 'Fakturaimport'
-              : p.source === 'preorder' ? 'Förbeställning' : 'Manuell',
-            p.admins?.display_name || p.admins?.username || '', p.document_url || '');
+            source, p.admins?.display_name || p.admins?.username || '', p.document_url || '');
+          report.purchases.push({
+            date: date(p.purchased_at), name: p.name || '', ref: p.ref_code || '',
+            qty, unit, amount: unit * qty, source,
+            added_by: p.admins?.display_name || p.admins?.username || '',
+            document: p.document_url || '',
+          });
         }
+        report.totals.purchases = buyTotal;
         push('Summa', '', '', '', '', num(buyTotal));
       }
       lines.push('');
@@ -129,9 +150,14 @@ module.exports = () => {
           const byId = Object.fromEntries((sales || []).map(s => [s.id, s]));
           for (const pay of payments || []) {
             const s = byId[pay.sale_id] || {};
-            push(date(pay.paid_at), s.invoice_number || '',
-              s.clients?.admin_label || s.clients?.display_name || s.customer_name || '', soldBy(s),
+            const payer = s.clients?.admin_label || s.clients?.display_name || s.customer_name || '';
+            push(date(pay.paid_at), s.invoice_number || '', payer, soldBy(s),
               pay.amount == null ? '' : num(pay.amount), pay.note || '', pay.image_url || '');
+            report.payments.push({
+              date: date(pay.paid_at), invoice: s.invoice_number || '', client: payer,
+              sold_by: soldBy(s), amount: pay.amount == null ? null : Number(pay.amount),
+              note: pay.note || '', receipt: pay.image_url || '',
+            });
           }
         }
       } else {
@@ -151,6 +177,11 @@ module.exports = () => {
         row('Valuta', 'EUR där inget annat anges. Ingen moms (export utanför EU).'),
         '',
       ].join('\r\n');
+
+      if (asJson) {
+        console.log(`[Export] ${month} som JSON: ${report.sales.length} rader`);
+        return res.json(report);
+      }
 
       const csv = BOM + header + lines.join('\r\n') + '\r\n';
       console.log(`[Export] ${month}: ${(sales || []).length} sälj, ${(purchases || []).length} inköp`);

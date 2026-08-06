@@ -459,6 +459,16 @@
   </div>
 </div>
 
+<!-- Bokföringsexport: välj format -->
+<div class="modal-bg" id="export-menu-modal" onclick="if(event.target===this)closeExportMenu()">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="sheet-heading" id="export-menu-title"></div>
+    <div class="sheet-rows" id="export-menu-rows"></div>
+    <button class="sheet-cancel" onclick="closeExportMenu()">Avbryt</button>
+  </div>
+</div>
+
 <!-- Lager: Mer-menyn -->
 <div class="modal-bg" id="inv-menu-modal" onclick="if(event.target===this)closeInvMenu()">
   <div class="modal-sheet">
@@ -739,6 +749,7 @@
 <script src="/js/admin/lenses.js"></script>
 <script src="/js/admin/invmenu.js"></script>
 <script src="/js/admin/preorder.js"></script>
+<script src="/js/admin/exportpdf.js"></script>
 <script src="/js/admin/invoice.js"></script>
 <script src="/js/admin/sales.js"></script>
 <script src="/js/admin/payments.js"></script>
