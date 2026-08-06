@@ -50,7 +50,7 @@ module.exports = (io) => {
     io.to(`client:${clientId}`).emit('admin:new_message', { message: full.data });
     io.to(`admin-${req.adminId}`).emit('message:sent', { message: full.data });
 
-    webPushClient(clientId, 'Vision Palace', 'Nytt meddelande', { url: '/client', tab: 'messages' }).catch(() => {});
+    webPushClient(clientId, 'Vision Palace', 'New message', { url: '/client', tab: 'messages' }).catch(() => {});
     if (client.onesignal_player_id) {
       await sendPushToPlayer(client.onesignal_player_id, 'Vision Palace', 'Nytt meddelande från admin', { type: 'message', client_id: clientId });
     }

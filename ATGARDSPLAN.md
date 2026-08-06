@@ -349,6 +349,27 @@ och bara rubriken syntes — men texten låg kvar i DOM:en, så textbaserade
 kontroller såg ingenting. Varje månadsgrupp är därför ett eget flex-barn med
 `flex-shrink:0`, och testet mäter numera `.sale-card`-höjden.
 
+### 34. ✅ KLART (2026-08-06) — Kundappen på engelska rakt igenom + tydligare UX
+**Bakgrund:** Ägaren: "notiser vid köp och skickad leverans måste vara på engelska
+också" + gör appen begriplig utan instruktioner.
+**Notiser (alla fyra som kan nå en kund):**
+| Händelse | Före | Efter |
+|---|---|---|
+| Nytt köp | "Ett nytt köp har registrerats på ditt konto" | "A new order has been added to your account" |
+| Skickad | "Ditt paket är på väg! … Spårning:" | "Your order is on its way … Tracking:" |
+| Förbeställning inne | "Din förbeställning har kommit!" | "Your pre-order has arrived" |
+| Nytt meddelande | "Nytt meddelande" | "New message" |
+`test-push-english.js` läser källkoden och fäller varje `webPushClient`-anrop som
+innehåller åäö eller svenska ord — nya notiser kan alltså inte smyga in på svenska.
+**UX:**
+- Tomma vyer säger vad som kommer att hända i stället för bara att det är tomt.
+  **Obs:** varje tom vy finns på TVÅ ställen — statiskt i `client.html` och i JS.
+  Det statiska visas först; ändras bara det ena byter rutan utseende vid omritning.
+- Obetald order visar "Awaiting payment" + **How to pay**, som öppnar Messages med
+  "Could you send me the payment details for invoice VP08-011?" förifyllt. Kunden
+  hade annars en status men ingen väg vidare.
+- Sista svenska strängarna i kundappen bort ("Aktivera notiser…", "Frakt").
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan
