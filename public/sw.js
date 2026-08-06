@@ -1,4 +1,4 @@
-const CACHE = 'vp-v41';
+const CACHE = 'vp-v42';
 const SHELL = ['/client', '/manifest.json'];
 
 self.addEventListener('install', e => {

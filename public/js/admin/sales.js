@@ -563,7 +563,44 @@ async function loadSalesHistory() {
 
 // Bookkeeping export for one month. Delivered through the share sheet on
 // mobile — a plain download link lands somewhere hard to find in an iOS PWA.
-async function exportBookkeeping(month) {
+// CSV går rakt in i redovisningsprogrammet, PDF är den man mailar eller
+// skriver ut. Valet ligger i en meny i stället för två knappar per månad.
+function exportBookkeeping(month) {
+  document.getElementById('export-menu-rows').innerHTML = [
+    invMenuRow('Excel-fil (CSV)', 'För redovisningsprogrammet', `runFromExportMenu(() => exportBookkeepingCsv('${month}'))`),
+    invMenuRow('PDF', 'Att maila, skriva ut eller spara', `runFromExportMenu(() => exportBookkeepingPdf('${month}'))`),
+  ].join('');
+  document.getElementById('export-menu-title').textContent = `Bokföringsunderlag ${month}`;
+  document.getElementById('export-menu-modal').classList.add('open');
+}
+
+function closeExportMenu() {
+  document.getElementById('export-menu-modal').classList.remove('open');
+}
+
+function runFromExportMenu(fn) {
+  closeExportMenu();
+  setTimeout(() => fn(), 60);
+}
+
+// Delas via delningsmenyn på mobil — en nedladdningslänk hamnar svårhittat
+// i en iOS-PWA. Används för både CSV och PDF.
+async function deliverExport(blob, name, type) {
+  const file = new File([blob], name, { type });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+async function exportBookkeepingCsv(month) {
   showToast('Skapar underlag…', 'ok');
   try {
     const r = await api(`/api/export/bookkeeping?month=${month}`);
@@ -572,20 +609,7 @@ async function exportBookkeeping(month) {
       showToast(d.error || 'Kunde inte skapa exporten', 'error');
       return;
     }
-    const blob = await r.blob();
-    const name = `bokforing-${month}.csv`;
-    const file = new File([blob], name, { type: 'text/csv' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: name }); return; }
-      catch (e) { if (e.name === 'AbortError') return; }
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    await deliverExport(await r.blob(), `bokforing-${month}.csv`, 'text/csv');
   } catch { showToast('Anslutningsfel', 'error'); }
 }
 
