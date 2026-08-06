@@ -102,8 +102,14 @@ let asked=null, downloaded=null;
     checks.push(['rubriken visar månaden på svenska', html.text.includes('juli 2026')]);
     const plain = html.text.replace(/\u00a0/g, ' ');
     checks.push(['summorna finns', plain.includes('5 215,00') && plain.includes('2 302,55')]);
-    checks.push(['alla tre sektionerna finns',
-      html.text.includes('Försäljningar') && html.text.includes('Inköp') && html.text.includes('Betalningar')]);
+    checks.push(['försäljningar och inköp finns',
+      html.text.includes('Försäljningar') && html.text.includes('Inköp')]);
+    // Statuskolumnen och betaldatumet säger redan om fakturan är betald —
+    // en egen betalningssektion i PDF:en blir bara upprepning
+    checks.push(['ingen betalningssektion i PDF:en', !html.text.includes('Registrerade inbetalningar')]);
+    checks.push(['betald-status finns kvar i tabellen',
+      html.text.includes('Betald') && html.text.includes('Obetald')]);
+    checks.push(['betaldatum finns kvar i tabellen', html.text.includes('2026-07-12')]);
     checks.push(['varan visas med ref', html.text.includes('Cartier Première (CT0582S-005)')]);
     checks.push(['förbeställningens inköp märks', html.text.includes('Förbeställning')]);
     checks.push(['inga JS-fel', errors.length===0]);
