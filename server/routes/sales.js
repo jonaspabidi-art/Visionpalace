@@ -433,5 +433,64 @@ module.exports = (io) => {
     res.json({ sales: data || [] });
   });
 
+  // Kontoutdrag till kunden för deras egen bokföring. OBS: kunderna sitter i
+  // UK och Dubai, inte i Sverige — deras Excel vill ha komma som avgränsare
+  // och punkt som decimaltecken, tvärtom mot bokföringsexporten.
+  router.get('/purchases/me/statement', clientAuth, async (req, res) => {
+    try {
+      const year = String(req.query.year || '').trim();
+      let q = supabase.from('sales').select('*, sale_items(*)')
+        .eq('client_id', req.client.id).order('created_at', { ascending: true });
+      if (/^\d{4}$/.test(year)) {
+        q = q.gte('created_at', `${year}-01-01T00:00:00Z`).lt('created_at', `${Number(year) + 1}-01-01T00:00:00Z`);
+      }
+      const { data: sales, error } = await q.abortSignal(dbTimeout());
+      if (error) return res.status(500).json({ error: error.message });
+
+      const cell = v => {
+        if (v == null) return '';
+        const s = String(v);
+        return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const num = v => (v == null || v === '' ? '' : (Number(v) || 0).toFixed(2));
+      const row = (...v) => v.map(cell).join(',');
+      const STATUS_EN = { unpaid: 'Unpaid', paid: 'Paid', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled' };
+
+      const lines = [
+        row('Vision Palace — statement of purchases'),
+        row('Customer', req.client.full_name || req.client.display_name || ''),
+        row('Period', /^\d{4}$/.test(year) ? year : 'All time'),
+        row('Generated', new Date().toISOString().substring(0, 10)),
+        row('Currency', 'EUR'),
+        '',
+        row('Date', 'Invoice', 'Status', 'Item', 'Ref', 'Qty', 'Unit price', 'Amount'),
+      ];
+      let total = 0, outstanding = 0;
+      for (const s of sales || []) {
+        if (s.status === 'cancelled') continue;
+        const date = String(s.created_at || '').substring(0, 10);
+        for (const it of s.sale_items || []) {
+          const qty = it.qty || 1;
+          const amount = (parseFloat(it.sell_price) || 0) * qty;
+          total += amount;
+          if ((s.status || 'unpaid') === 'unpaid') outstanding += amount;
+          lines.push(row(date, s.invoice_number || '', STATUS_EN[s.status || 'unpaid'] || '',
+            it.name || '', it.ref_code || '', qty, num(it.sell_price), num(amount)));
+        }
+      }
+      lines.push(row('Total', '', '', '', '', '', '', num(total)));
+      lines.push(row('Outstanding', '', '', '', '', '', '', num(outstanding)));
+
+      const name = `vision-palace-statement-${/^\d{4}$/.test(year) ? year : 'all'}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      // Explicit \uFEFF, inte ett osynligt tecken i koden
+      res.send('\uFEFF' + lines.join('\r\n') + '\r\n');
+    } catch (e) {
+      console.error('[Statement] Misslyckades:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Could not build the statement' });
+    }
+  });
+
   return router;
 };

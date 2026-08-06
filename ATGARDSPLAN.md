@@ -328,6 +328,27 @@ beräknat ankomstspann som datum och en förloppsstapel. Efter sista datumet byt
 texten till att det tar längre tid än väntat i stället för att bara se förfallet ut.
 **SQL:** `supabase/migrations/011_preorders.sql`.
 
+### 33. ✅ KLART (2026-08-06) — Kundens Purchases-vy
+**Bakgrund:** Ägaren ville ha statistik, t.ex. hur mycket kunden handlat per månad.
+**Byggt (allt på engelska, som resten av kundappen):**
+- **Översikt överst:** "Outstanding €4 197 · 3 orders" och "2 On the way"
+  (förbeställningar som inte kommit + skickade paket). Båda är tryckbara och
+  filtrerar listan; ett tryck till visar allt igen.
+- **Månadsgrupper** med månadssumma, som admin-sidans Historik.
+- **Order again** på varje vara → öppnar Messages med "I'd like to order more of
+  X (REF)" förifyllt. Gör historiken till en säljkanal.
+- **Download statement** — `GET /purchases/me/statement` (clientAuth), CSV.
+  **OBS: komma som avgränsare och punkt som decimaltecken**, tvärtom mot
+  bokföringsexporten — kunderna sitter i UK, inte i Sverige.
+- Avbrutna köp syns kvar i listan men räknas aldrig i saldo eller månadssumma.
+**Livstidssumma utelämnad medvetet:** att visa en återförsäljare att de handlat
+för 187 000 € är ett förhandlingsargument man ger bort gratis.
+**⚠ Fallgrop som kostade tid:** `.purchases-scroll` är en flex-kolumn. Flex-barn
+**krymper** när innehållet blir högre än skärmen, så korten pressades till 2 px
+och bara rubriken syntes — men texten låg kvar i DOM:en, så textbaserade
+kontroller såg ingenting. Varje månadsgrupp är därför ett eget flex-barn med
+`flex-shrink:0`, och testet mäter numera `.sale-card`-höjden.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan

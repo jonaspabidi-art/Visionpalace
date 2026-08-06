@@ -1,10 +1,57 @@
+let allPurchases = [];
+let purchaseFilter = 'all';   // 'all' | 'unpaid' | 'arriving'
+
 async function loadPurchases() {
   try {
     const r = await fetch('/api/purchases/me', { headers: { 'x-session-token': session.session_token } });
     if (!r.ok) return;
     const d = await r.json();
-    renderPurchases(d.sales || []);
+    allPurchases = d.sales || [];
+    renderPurchases(allPurchases);
   } catch(e) {}
+}
+
+function setPurchaseFilter(f) {
+  purchaseFilter = purchaseFilter === f ? 'all' : f;
+  renderPurchases(allPurchases);
+}
+
+// On its way: a pre-order that has not landed yet, or a parcel in transit
+function isArriving(sale) {
+  if (sale.status === 'cancelled') return false;
+  if (sale.is_preorder && !sale.arrived_at) return true;
+  return sale.status === 'shipped';
+}
+
+function saleTotal(sale) {
+  return (sale.sale_items || []).reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
+}
+
+const money = n => `€${Number(n).toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+// Two numbers worth acting on: what is owed, and what is on the way.
+// Lifetime spend is deliberately left out — it is a negotiating lever, not
+// information the buyer needs.
+function purchaseSummaryHTML(sales) {
+  const live = sales.filter(s => s.status !== 'cancelled');
+  const unpaid = live.filter(s => (s.status || 'unpaid') === 'unpaid');
+  const arriving = live.filter(isArriving);
+  const owed = unpaid.reduce((s, x) => s + saleTotal(x), 0);
+  if (!unpaid.length && !arriving.length) return '';
+  const tile = (on, tone, big, small, onclick) => `
+    <button onclick="${onclick}" style="flex:1;min-width:0;text-align:left;background:${on ? tone.bgOn : 'var(--surface2, #16151a)'};
+      border:1px solid ${on ? tone.border : 'rgba(255,255,255,.07)'};border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit">
+      <div style="font-size:19px;font-weight:800;color:${tone.fg};line-height:1.15">${big}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${small}</div>
+    </button>`;
+  const red = { fg: '#ff9944', bgOn: 'rgba(255,153,68,.13)', border: 'rgba(255,153,68,.4)' };
+  const purple = { fg: '#bb88ff', bgOn: 'rgba(187,136,255,.13)', border: 'rgba(187,136,255,.4)' };
+  return `<div style="display:flex;gap:10px;flex-shrink:0">
+    ${unpaid.length ? tile(purchaseFilter === 'unpaid', red, money(owed),
+      `Outstanding · ${unpaid.length} order${unpaid.length > 1 ? 's' : ''}`, "setPurchaseFilter('unpaid')") : ''}
+    ${arriving.length ? tile(purchaseFilter === 'arriving', purple, String(arriving.length),
+      arriving.length > 1 ? 'On the way' : 'On the way', "setPurchaseFilter('arriving')") : ''}
+  </div>`;
 }
 
 function renderPurchases(sales) {
@@ -79,7 +126,12 @@ function renderPurchases(sales) {
     if (c.includes('fedex')) return `https://www.fedex.com/fedextrack/?trknbr=${number}`;
     return null;
   };
-  scroll.innerHTML = sales.map(sale => {
+  const shown = sales.filter(s =>
+    purchaseFilter === 'unpaid' ? (s.status || 'unpaid') === 'unpaid' && s.status !== 'cancelled'
+      : purchaseFilter === 'arriving' ? isArriving(s)
+        : true);
+
+  const cardHTML = sale => {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const total = items.reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
@@ -89,6 +141,8 @@ function renderPurchases(sales) {
         <div class="sale-item-body">
           <div class="sale-item-name">${esc(item.name || '—')}</div>
           ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
+          <button onclick="orderAgain('${encodeURIComponent(item.name || '')}','${encodeURIComponent(item.ref_code || '')}')"
+                  style="background:none;border:none;padding:3px 0 0;color:#7aabff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Order again</button>
         </div>
         <div class="sale-item-right">
           ${item.sell_price != null ? `<div class="sale-item-price">€${item.sell_price}</div>` : ''}
@@ -129,7 +183,87 @@ function renderPurchases(sales) {
         <span class="sale-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  // Grouped by month with a monthly total — the buyers are resellers and need
+  // the figure for their own books
+  const months = [];
+  const byMonth = {};
+  for (const sale of shown) {
+    const key = String(sale.created_at || '').substring(0, 7);
+    if (!byMonth[key]) { byMonth[key] = []; months.push(key); }
+    byMonth[key].push(sale);
+  }
+  const monthLabel = key => {
+    const [y, m] = key.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  };
+  const body = months.length
+    ? months.map(key => {
+      const list = byMonth[key];
+      const spent = list.filter(s => s.status !== 'cancelled').reduce((s, x) => s + saleTotal(x), 0);
+      // Hela månaden är ETT flex-barn. Scrollytan är en flex-kolumn, och
+      // flex-barn krymper när innehållet blir högre än skärmen — utan
+      // flex-shrink:0 pressas korten ihop till bara sin rubrik så fort
+      // listan blir längre än en skärm.
+      return `<div style="flex-shrink:0;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding-top:4px">
+            <span style="font-size:13px;font-weight:700;color:var(--text2, #8a8a92)">${monthLabel(key)}</span>
+            <span style="font-size:12px;color:var(--text3)">${money(spent)} · ${list.length} order${list.length > 1 ? 's' : ''}</span>
+          </div>
+          ${list.map(cardHTML).join('')}
+        </div>`;
+    }).join('')
+    : `<div style="padding:40px 20px;text-align:center;color:var(--text3);font-size:14px">
+        Nothing here — tap the tile above to show everything again.
+      </div>`;
+
+  scroll.innerHTML = purchaseSummaryHTML(sales) + body + statementHTML();
+}
+
+// A statement for the buyer's own bookkeeping
+function statementHTML() {
+  const years = [...new Set(allPurchases.map(s => String(s.created_at || '').substring(0, 4)))]
+    .filter(Boolean).sort().reverse();
+  if (!years.length) return '';
+  return `<div style="flex-shrink:0;padding:14px 0 8px;text-align:center">
+    <button onclick="downloadStatement()" style="background:none;border:1px solid rgba(255,255,255,.12);border-radius:10px;
+      color:var(--text2, #8a8a92);font-size:13px;padding:10px 18px;cursor:pointer;font-family:inherit">Download statement</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:7px">All your purchases as a spreadsheet</div>
+  </div>`;
+}
+
+async function downloadStatement() {
+  try {
+    const r = await fetch('/api/purchases/me/statement', { headers: { 'x-session-token': session.session_token } });
+    if (!r.ok) return;
+    const blob = await r.blob();
+    const name = 'vision-palace-statement.csv';
+    const file = new File([blob], name, { type: 'text/csv' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (e) {}
+}
+
+// Turns the history into a way to buy again instead of just an archive
+function orderAgain(name, ref) {
+  const n = decodeURIComponent(name || '');
+  const r = decodeURIComponent(ref || '');
+  switchTab('messages');
+  setTimeout(() => {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value = `Hi! I'd like to order more of ${n}${r ? ` (${r})` : ''}. How many can you do?`;
+    input.focus();
+    if (typeof autoResize === 'function') autoResize(input);
+  }, 120);
 }
 
 function buildInvoiceHTML(sale) {
