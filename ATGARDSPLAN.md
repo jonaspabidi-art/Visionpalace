@@ -384,6 +384,10 @@ fortfarande laddas.
 **Layoutdetalj:** allt utom varunamnet är `white-space:nowrap`. Utan det bryts
 datum och personnamn mitt itu, vilket är svårläst i ett underlag man stämmer av
 rad för rad.
+**Betalningssektionen är borttagen ur PDF:en** (ägarens beslut 2026-08-06):
+statuskolumnen och betaldatumet i försäljningstabellen säger redan om fakturan är
+betald. Den ligger kvar i **CSV:n**, där den bär länken till kvittobilden — det är
+bankunderlaget till redovisningen och finns ingen annanstans.
 
 ### 36. ✅ KLART (2026-08-06) — Testerna ligger i repot
 **Bakgrund:** hela testsviten låg i en temporär katalog och försvann när

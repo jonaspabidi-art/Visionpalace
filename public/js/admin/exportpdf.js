@@ -65,10 +65,6 @@ function buildBookkeepingHTML(d, logoData) {
     p.date, p.ref ? `${p.name} (${p.ref})` : p.name, p.qty,
     eurAmount(p.unit), eurAmount(p.amount), p.source, p.added_by,
   ]);
-  const paymentRows = d.payments.map(p => [
-    p.date, p.invoice, p.client, p.amount == null ? '' : eurAmount(p.amount), p.note,
-  ]);
-
   return `<div style="width:210mm;min-height:297mm;padding:18mm 16mm;background:#fff;color:#222;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-sizing:border-box">
 
@@ -109,10 +105,6 @@ function buildBookkeepingHTML(d, logoData) {
       exportTable(['Datum', 'Vara', 'Antal', 'Á-pris €', 'Summa €', 'Källa', 'Inlagt av'],
         purchaseRows, ['left', 'left', 'right', 'right', 'right', 'left', 'left'], 1)
       + (d.purchases.length ? exportTotalRow('Summa', `€ ${eurAmount(d.totals.purchases)}`) : ''))}
-
-    ${exportSection('Betalningar', 'Registrerade inbetalningar med kvitto',
-      exportTable(['Datum', 'Fakturanr', 'Kund', 'Belopp €', 'Kommentar'],
-        paymentRows, ['left', 'left', 'left', 'right', 'left'], 4))}
 
     <div style="margin-top:auto;padding-top:14px;border-top:1px solid #eee;font-size:8px;color:#bbb;text-align:center">
       Vision Palace · ${esc(exportMonthLabel(d.month))} · underlag för redovisning
