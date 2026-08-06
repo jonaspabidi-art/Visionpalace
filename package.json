@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
-    "test": "node tests/export-format.js",
+    "test": "node tests/export-format.js && node tests/inventory-delete.js",
     "test:ui": "node tests/ui-export-pdf.js /tmp"
   },
   "dependencies": {
