@@ -148,12 +148,24 @@ module.exports = (io) => {
     res.json({ items: data || [], updated: (data || []).length });
   });
 
+  // Tar man bort en vara för hand var den aldrig i lager på riktigt — en
+  // testprodukt eller en felskrivning. Då ska inköpsraden bort också, annars
+  // ligger "Test vara" kvar i bokföringsunderlaget för alltid.
+  // OBS: en SÅLD vara tas bort ur lagret av sales.js, inte via de här
+  // routerna, så en försäljning kan aldrig råka radera sitt eget inköp.
+  async function dropPurchaseLog(ids) {
+    if (!ids.length) return;
+    const { error } = await supabase.from('purchases').delete().in('inventory_id', ids);
+    if (error) console.error(`[Inventory] Kunde inte städa inköpsloggen: ${error.message}`);
+  }
+
   // Delete several pairs at once (hela högen). DELETE tar ingen kropp, därav POST.
   router.post('/inventory/delete', adminAuth, async (req, res) => {
     const { ids } = req.body;
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids krävs' });
     const { error } = await supabase.from('inventory').delete().in('id', ids);
     if (error) return res.status(500).json({ error: error.message });
+    await dropPurchaseLog(ids);
     res.json({ ok: true, deleted: ids.length });
   });
 
@@ -161,6 +173,7 @@ module.exports = (io) => {
   router.delete('/inventory/:id', adminAuth, async (req, res) => {
     const { error } = await supabase.from('inventory').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
+    await dropPurchaseLog([req.params.id]);
     res.json({ ok: true });
   });
 

@@ -398,6 +398,21 @@ en README med de fällor som kostat mest tid: mockade `.single()`-svar måste va
 objekt och inte arrayer, `html2pdf` går inte att nå från testmiljön och stubbas,
 och layoutfel syns inte i textkontroller — höjder måste mätas.
 
+### 37. ✅ KLART (2026-08-06) — Borttagna varor låg kvar i inköpsloggen
+**Bakgrund:** Ägaren såg "Test vara (123)" och "Test (1234)" i INKÖP i
+augustiunderlaget. Testprodukter som skapats och tagits bort igen.
+**Orsak:** `logPurchase()` skriver en rad när en vara skapas, men borttagning av
+varan rörde bara `inventory`. Inköpsraden blev kvar för alltid.
+**Fix:** `DELETE /inventory/:id` och `POST /inventory/delete` städar nu bort
+`purchases`-rader med matchande `inventory_id`.
+**⚠ Varför det är säkert:** en SÅLD vara tas bort ur lagret av `sales.js`, som
+anropar `supabase.from('inventory').delete()` direkt — inte via de här routerna.
+En försäljning kan alltså aldrig råka radera sitt eget inköp. Testet vaktar det
+genom att läsa källkoden.
+**Befintlig skräpdata:** kan inte städas automatiskt. `inventory_id` pekar på en
+rad som är borta även för allt som sålts, så "föräldralös" skiljer inte sålt från
+borttaget. Rensas manuellt på namn i SQL.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan
