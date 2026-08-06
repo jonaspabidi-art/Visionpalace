@@ -229,7 +229,7 @@ module.exports = (io) => {
       // must never affect the sale itself). En köpare utanför appen har ingen
       // enhet att pinga.
       if (client_id) {
-        webPushClient(client_id, 'Vision Palace', 'Ett nytt köp har registrerats på ditt konto', { url: '/client', tab: 'purchases' }).catch(() => {});
+        webPushClient(client_id, 'Vision Palace', 'A new order has been added to your account', { url: '/client', tab: 'purchases' }).catch(() => {});
       }
     } catch (e) {
       console.error(`[Sale] POST /sales avbröts efter ${Date.now() - t0}ms (${steps.join(', ')}):`, e.stack || e.message);
@@ -255,8 +255,8 @@ module.exports = (io) => {
       }
       if (!sale) return res.status(404).json({ error: 'Hittades inte' });
       if (sale.client_id) {
-        webPushClient(sale.client_id, 'Din förbeställning har kommit!',
-          'Varan är inne hos oss och skickas snart.', { url: '/client', tab: 'purchases' }).catch(() => {});
+        webPushClient(sale.client_id, 'Your pre-order has arrived',
+          'It is with us now and will be shipped shortly.', { url: '/client', tab: 'purchases' }).catch(() => {});
       }
       console.log(`[Sale] ${sale.invoice_number}: förbeställning inkommen`);
       res.json({ sale });
@@ -335,8 +335,8 @@ module.exports = (io) => {
     // Säljet kan sakna klient (köpare utanför appen) — då finns ingen att nå
     if (sale.client_id) {
       if (status === 'shipped') {
-        const trackText = tracking_number ? ` Spårning: ${tracking_number}` : '';
-        webPushClient(sale.client_id, 'Ditt paket är på väg!', `Ditt köp har skickats.${trackText}`, { url: '/client', tab: 'purchases' }).catch(() => {});
+        const trackText = tracking_number ? ` Tracking: ${tracking_number}` : '';
+        webPushClient(sale.client_id, 'Your order is on its way', `Your order has been shipped.${trackText}`, { url: '/client', tab: 'purchases' }).catch(() => {});
       }
       io.to(`client:${sale.client_id}`).emit('sale:status_updated', { sale_id: sale.id, status, shipping_carrier: sale.shipping_carrier, tracking_number: sale.tracking_number });
     }

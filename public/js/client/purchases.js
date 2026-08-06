@@ -62,6 +62,9 @@ function renderPurchases(sales) {
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M16 10a4 4 0 0 1-8 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <p>No purchases yet</p>
+      <p style="font-size:13px;color:var(--text3);margin-top:6px;line-height:1.5;max-width:260px">
+        Your orders, invoices and deliveries will show up here once you buy from us.
+      </p>
     </div>`;
     return;
   }
@@ -155,7 +158,7 @@ function renderPurchases(sales) {
     const trackingHTML = (status === 'shipped' || status === 'delivered') && sale.tracking_number
       ? `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06);font-size:13px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bb88ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          <span style="color:var(--text3)">${esc(sale.shipping_carrier || 'Frakt')}</span>
+          <span style="color:var(--text3)">${esc(sale.shipping_carrier || 'Shipping')}</span>
           ${tUrl
             ? `<a href="${tUrl}" target="_blank" style="color:#bb88ff;font-weight:600;margin-left:auto">${esc(sale.tracking_number)} →</a>`
             : `<span style="color:#bb88ff;font-weight:600;margin-left:auto">${esc(sale.tracking_number)}</span>`}
@@ -177,6 +180,12 @@ function renderPurchases(sales) {
       </div>
       <div class="sale-items">${itemsHTML}</div>
       ${preorderBlock(sale)}
+      ${status === 'unpaid' ? `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.06)">
+          <span style="font-size:13px;color:#ff9944">Awaiting payment</span>
+          <button onclick="askPaymentDetails('${esc(sale.invoice_number || '')}')"
+                  style="margin-left:auto;background:none;border:1px solid rgba(255,153,68,.35);border-radius:8px;
+                  color:#ff9944;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">How to pay</button>
+        </div>` : ''}
       ${trackingHTML}
       <div class="sale-card-footer">
         <span class="sale-total-label">Total</span>
@@ -250,6 +259,19 @@ async function downloadStatement() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   } catch (e) {}
+}
+
+// An unpaid order shows a status and nothing else — the buyer has no way to
+// act on it. Asking us is the one step that always works, whatever they pay by.
+function askPaymentDetails(invoice) {
+  switchTab('messages');
+  setTimeout(() => {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value = `Hi! Could you send me the payment details for invoice ${invoice || ''}?`.trim();
+    input.focus();
+    if (typeof autoResize === 'function') autoResize(input);
+  }, 120);
 }
 
 // Turns the history into a way to buy again instead of just an archive

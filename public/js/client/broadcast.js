@@ -26,7 +26,8 @@ async function loadBroadcasts() {
 function renderFeed() {
   const scroll = document.getElementById('feed-scroll');
   if (!broadcasts.length) {
-    scroll.innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">[ ]</div><p>No updates yet</p></div>';
+    scroll.innerHTML = '<div class="feed-empty"><div class="feed-empty-icon">[ ]</div><p>No updates yet</p>'
+      + '<p style="font-size:13px;color:var(--text3);margin-top:6px;line-height:1.5;max-width:250px">New arrivals and prices are posted here. Tap Messages to ask us about anything.</p></div>';
     return;
   }
   const sorted = [...broadcasts].sort((a,b)=>{

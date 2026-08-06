@@ -104,7 +104,12 @@ function bubbleHTML(m) {
 function renderMessages(msgs) {
   const c = document.getElementById('chat-messages');
   if (!msgs.length) {
-    c.innerHTML = '<div class="chat-empty"><div class="chat-empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><p>No messages yet</p></div>';
+    // Samma text som den statiska vyn i client.html — annars byter rutan
+    // utseende så fort chatten ritas om
+    c.innerHTML = '<div class="chat-empty">'
+      + '<div class="chat-empty-icon" style="width:64px;height:64px;border-radius:20px;font-size:28px">👋</div>'
+      + '<p style="font-size:15px;font-weight:600;color:var(--text2);margin-top:4px">Welcome</p>'
+      + '<p style="font-size:13px;color:var(--text3);text-align:center;max-width:250px;line-height:1.5">Ask us about stock, prices or an order — we usually reply the same day.</p></div>';
     return;
   }
   c.innerHTML = '';
