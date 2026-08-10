@@ -413,6 +413,25 @@ genom att läsa källkoden.
 rad som är borta även för allt som sålts, så "föräldralös" skiljer inte sålt från
 borttaget. Rensas manuellt på namn i SQL.
 
+### 38. ✅ KLART (2026-08-06) — Rabatt på försäljning
+**Bakgrund:** Ägaren: "ibland säljer jag flera par till en kund som får lite rabatt."
+**Byggt:** Fält i säljrutan med växling mellan **€** och **%**. Totalen och en
+hjälprad visar vad rabatten gör (1 800 → 1 650) medan man skriver.
+**Hur den lagras — viktigt:** rabatten läggs som en **minusrad i `sale_items`
+med `buy_price: 0`**, inte som en egen kolumn. Ingen migration behövs, och den
+flödar automatiskt till faktura, Historik, kundens vy, bokföringsexport och
+avräkning.
+**⚠ Varför `buy_price: 0` och inte null:** rader utan inköpspris räknas som
+genomgång och hoppas över i vinstberäkningen (samma formel i export.js,
+settlement.js och Historik). Med null hade rabatten sänkt omsättningen men
+**inte** vinsten — och säljarna fått 70 % provision på pengar som aldrig kom in.
+`tests/discount.js` räknar båda varianterna och visar skillnaden.
+**Skydd:** rabatten kan aldrig överstiga varornas summa och procent kapas vid
+100, så en försäljning aldrig kan bli negativ.
+**Sidoeffekt:** frakt- och rabattraderna heter nu `Shipping` och `Discount` —
+namnen syns för kunden, som läser appen på engelska. Gamla sälj med `Frakt`
+ligger kvar oförändrade.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan
