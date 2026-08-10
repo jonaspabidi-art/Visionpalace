@@ -702,7 +702,53 @@ async function openClientPurchases() {
       body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text3);font-size:14px">Inga köp ännu</div>';
       return;
     }
-    body.innerHTML = sales.map(sale => {
+    // Summan högst upp och en rubrik per månad — det går inte att följa vem som
+    // köper mest genom att bläddra igenom enskilda ordrar.
+    const revenueOf = sale => (sale.sale_items || [])
+      .reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
+    // Samma vinstformel som bokföringen och avräkningen: rader utan
+    // inköpspris är genomgång, inte marginal
+    const profitOf = sale => (sale.sale_items || []).reduce((s, i) => {
+      if (i.buy_price == null) return s;
+      return s + ((parseFloat(i.sell_price) || 0) - (parseFloat(i.buy_price) || 0)) * (i.qty || 1);
+    }, 0);
+    const eur = n => `€ ${Number(n).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const live = sales.filter(s => s.status !== 'cancelled');
+    const spent = live.reduce((s, x) => s + revenueOf(x), 0);
+    const earned = live.reduce((s, x) => s + profitOf(x), 0);
+    const unpaid = live.filter(s => (s.status || 'unpaid') === 'unpaid')
+      .reduce((s, x) => s + revenueOf(x), 0);
+    const months = [...new Set(live.map(s => String(s.created_at || '').substring(0, 7)))];
+    const perMonth = months.length ? spent / months.length : 0;
+
+    const tile = (label, value, color) => `<div style="flex:1;min-width:0">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">${label}</div>
+      <div style="font-size:16px;font-weight:800;color:${color};margin-top:2px;white-space:nowrap">${value}</div>
+    </div>`;
+
+    const summary = `<div style="display:flex;gap:14px;background:var(--surface2);border:1px solid var(--border);
+      border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      ${tile('Köpt totalt', eur(spent), 'var(--text)')}
+      ${tile('Vår vinst', eur(earned), '#66dd99')}
+      ${tile('Snitt/mån', eur(perMonth), 'var(--text2)')}
+    </div>
+    ${unpaid > 0 ? `<div style="font-size:12px;color:#ff9944;margin:-6px 0 14px">Obetalt just nu: ${eur(unpaid)}</div>` : ''}`;
+
+    // Gruppera per månad, nyast först
+    const byMonth = {};
+    const order = [];
+    for (const sale of sales) {
+      const key = String(sale.created_at || '').substring(0, 7);
+      if (!byMonth[key]) { byMonth[key] = []; order.push(key); }
+      byMonth[key].push(sale);
+    }
+    const monthName = key => {
+      const [y, m] = key.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' });
+    };
+
+    const renderSale = sale => {
       const date = new Date(sale.created_at).toLocaleDateString('sv-SE', { day: '2-digit', month: 'short', year: 'numeric' });
       const saleTotal = (sale.sale_items || []).reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (i.qty || 1), 0);
       const itemRows = (sale.sale_items || []).map(item => `
@@ -728,6 +774,23 @@ async function openClientPurchases() {
           <button onclick="deleteSale('${sale.id}', openClientPurchases)" style="background:none;border:none;color:#ff7a7a;font-size:14px;cursor:pointer;padding:0 0 0 8px;line-height:1" title="Ta bort">✕</button>
         </div>
         ${itemRows}
+      </div>`;
+    };
+
+    body.innerHTML = summary + order.map(key => {
+      const list = byMonth[key];
+      const mLive = list.filter(s => s.status !== 'cancelled');
+      const mSpent = mLive.reduce((s, x) => s + revenueOf(x), 0);
+      const mEarned = mLive.reduce((s, x) => s + profitOf(x), 0);
+      return `<div style="margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+          padding:10px 0 2px;text-transform:capitalize">
+          <span style="font-size:13px;font-weight:700;color:var(--text2)">${monthName(key)}</span>
+          <span style="font-size:11px;color:var(--text3);text-transform:none">
+            ${eur(mSpent)} · vinst <span style="color:#66dd99">${eur(mEarned)}</span> · ${mLive.length} köp
+          </span>
+        </div>
+        ${list.map(renderSale).join('')}
       </div>`;
     }).join('');
   } catch {

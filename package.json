@@ -6,7 +6,7 @@
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
     "test": "node tests/export-format.js && node tests/inventory-delete.js && node tests/discount.js",
-    "test:ui": "node tests/ui-export-pdf.js /tmp && node tests/ui-discount.js"
+    "test:ui": "node tests/ui-export-pdf.js /tmp && node tests/ui-discount.js && node tests/ui-client-history.js /tmp"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
