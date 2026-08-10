@@ -432,6 +432,18 @@ settlement.js och Historik). Med null hade rabatten sänkt omsättningen men
 namnen syns för kunden, som läser appen på engelska. Gamla sälj med `Frakt`
 ligger kvar oförändrade.
 
+### 39. ✅ KLART (2026-08-07) — Kundens köphistorik: månadssiffror
+**Bakgrund:** Ägaren ville kunna följa vem som köper mest — se per kund hur mycket
+de handlat per månad och vad vi tjänat på dem.
+**Byggt:** I Klienter → Köphistorik ligger nu tre siffror överst (**köpt totalt**,
+**vår vinst**, **snitt/mån**) plus en rad om obetalt när det finns. Listan är
+grupperad per månad med `€ 2 370,00 · vinst € 1 250,00 · 2 köp` i rubriken.
+**Samma vinstformel som bokföringen och avräkningen** — rader utan inköpspris är
+genomgång, rabattraden (`buy_price: 0`) drar ner både summa och vinst. Avbrutna
+köp syns kvar i listan men räknas aldrig in.
+**Kvar som idé:** en ranking över alla kunder på Klienter-fliken. Per-kund-vyn
+svarar på frågan en kund i taget; en lista skulle svara direkt.
+
 ### 27. ✅ KLART (2026-08-04) — Uppstädning av Lager och sidhuvud
 **Bakgrund:** Ägaren: "vid import av lager ser de lite stökigt ut mkt knappar runt."
 På telefon radbröt katalogknapparna till "Läs / in / order" och tryckte undan
