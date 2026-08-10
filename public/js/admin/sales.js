@@ -59,6 +59,9 @@ function openSaleModal(groupKey) {
   sel.value = '';
   const walkin = document.getElementById('sale-walkin-name');
   if (walkin) walkin.value = '';
+  const disc = document.getElementById('sale-discount');
+  if (disc) disc.value = '';
+  setDiscountMode('abs');
   onSaleBuyerChange();
   renderSaleCart();
   renderSaleInvList();
@@ -70,6 +73,9 @@ function closeSaleModal() {
   document.getElementById('sale-modal').classList.remove('open');
   const s = document.getElementById('sale-shipping');
   if (s) s.value = '';
+  const d = document.getElementById('sale-discount');
+  if (d) d.value = '';
+  setDiscountMode('abs');
 }
 
 function updateSaleQty(key, delta) {
@@ -95,6 +101,34 @@ function removeFromSaleCart(invId) {
   renderSaleCart();
   renderSaleInvList();
   updateSaleCartBadge();
+}
+
+// Rabatt på hela köpet. Anges i euro eller procent — procent är naturligt när
+// någon tar flera par, belopp när man rundar av.
+let saleDiscountMode = 'abs';   // 'abs' | 'pct'
+
+function setDiscountMode(mode) {
+  saleDiscountMode = mode === 'pct' ? 'pct' : 'abs';
+  document.getElementById('sale-disc-abs').classList.toggle('active', saleDiscountMode === 'abs');
+  document.getElementById('sale-disc-pct').classList.toggle('active', saleDiscountMode === 'pct');
+  document.getElementById('sale-disc-unit').textContent = saleDiscountMode === 'pct' ? '%' : '€';
+  renderSaleCart();
+}
+
+// Varornas summa före frakt och rabatt
+function saleSubtotal() {
+  return [...saleCartItems, ...lensCartItems]
+    .reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0);
+}
+
+// Rabatten i euro, oavsett hur den skrevs in. Kan aldrig bli större än varorna
+// — en försäljning med negativ summa vore fel i både faktura och bokföring.
+function saleDiscountAmount() {
+  const raw = parseFloat(document.getElementById('sale-discount')?.value) || 0;
+  if (raw <= 0) return 0;
+  const sub = saleSubtotal();
+  const amount = saleDiscountMode === 'pct' ? sub * Math.min(raw, 100) / 100 : raw;
+  return Math.min(Math.round(amount * 100) / 100, sub);
 }
 
 function renderSaleCart() {
@@ -131,8 +165,17 @@ function renderSaleCart() {
     </div>`;
   }).join('');
   const shipping = parseFloat(document.getElementById('sale-shipping')?.value) || 0;
-  const total = allItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0) + shipping;
-  document.getElementById('sale-total').textContent = `Totalt: € ${total.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const discount = saleDiscountAmount();
+  const eur = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const total = allItems.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * i.qty, 0) + shipping - discount;
+  document.getElementById('sale-total').textContent = `Totalt: € ${eur(total)}`;
+  const hint = document.getElementById('sale-disc-hint');
+  if (hint) {
+    const sub = saleSubtotal();
+    hint.textContent = discount > 0
+      ? `− € ${eur(discount)} på varorna (${eur(sub)} → ${eur(sub - discount)}). Dras av på fakturan och i vinsten.`
+      : 'Gäller hela köpet. Lämna tomt om ingen rabatt ges.';
+  }
 }
 
 function renderSaleInvList() {
@@ -204,7 +247,13 @@ async function createSale() {
       qty: i.qty
     }));
     const items = [...glassItems, ...lensItems];
-    if (shipping > 0) items.push({ name: 'Frakt', ref_code: null, sell_price: shipping, qty: 1, image: null });
+    const discount = saleDiscountAmount();
+    // Varunamnen syns för kunden, som läser appen på engelska
+    if (shipping > 0) items.push({ name: 'Shipping', ref_code: null, sell_price: shipping, qty: 1, image: null });
+    // buy_price 0, inte null: rader utan inköpspris räknas som genomgång och
+    // hoppas över i vinsten. Då hade rabatten sänkt omsättningen men inte
+    // vinsten, och ni fått provision på pengar som aldrig kom in.
+    if (discount > 0) items.push({ name: 'Discount', ref_code: null, sell_price: -discount, buy_price: 0, qty: 1, image: null });
     let r = null;
     try {
       r = await api('/api/sales', {
@@ -226,7 +275,7 @@ async function createSale() {
     if (r && !r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Fel vid skapande av försäljning', 'error'); return; }
     // The sale IS created at this point — a UI hiccup below must never
     // masquerade as a failed sale
-    try { finishSaleUI(clientId, shipping, isWalkin ? walkinName : ''); }
+    try { finishSaleUI(clientId, shipping, isWalkin ? walkinName : '', discount); }
     catch (e) {
       console.error('UI-uppdatering efter sälj misslyckades:', e);
       closeSaleModal();
@@ -258,13 +307,14 @@ async function verifySaleCreated(clientId, buyerName, sentSummary) {
 }
 
 // Success path: clear the cart, update inventory UI and show the banner
-function finishSaleUI(clientId, shipping, buyerName) {
+function finishSaleUI(clientId, shipping, buyerName, discount) {
   _lastSaleClientId = clientId;
   _lastSaleBuyerName = buyerName || '';
   _lastSaleItems = [
     ...saleCartItems,
     ...lensCartItems.map(i => ({ ...i, name: `${i.name} (${i.color})` })),
-    ...(shipping > 0 ? [{ name: 'Frakt', sell_price: shipping, qty: 1 }] : [])
+    ...(shipping > 0 ? [{ name: 'Shipping', sell_price: shipping, qty: 1 }] : []),
+    ...(discount > 0 ? [{ name: 'Discount', sell_price: -discount, qty: 1 }] : [])
   ];
   const soldInvIds = saleCartItems.flatMap(i => i.ids || []);
   const soldLenses = lensCartItems.length > 0;

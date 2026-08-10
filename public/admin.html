@@ -663,6 +663,21 @@
           <input id="sale-shipping" type="number" min="0" step="any" inputmode="decimal" placeholder="0" style="background:none;border:none;outline:none;font-size:15px;color:var(--text);font-family:inherit;width:100%" oninput="renderSaleCart()">
         </div>
       </div>
+      <!-- Rabatt på hela köpet — ofta när någon tar flera par -->
+      <div>
+        <div class="sale-sec-title">Rabatt</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;flex:1">
+            <span id="sale-disc-unit" style="font-size:14px;color:var(--text2);flex-shrink:0">€</span>
+            <input id="sale-discount" type="number" min="0" step="any" inputmode="decimal" placeholder="0" style="background:none;border:none;outline:none;font-size:15px;color:var(--text);font-family:inherit;width:100%" oninput="renderSaleCart()">
+          </div>
+          <div class="inv-type-toggle" style="margin:0;flex-shrink:0">
+            <button class="inv-type-btn active" id="sale-disc-abs" onclick="setDiscountMode('abs')">€</button>
+            <button class="inv-type-btn" id="sale-disc-pct" onclick="setDiscountMode('pct')">%</button>
+          </div>
+        </div>
+        <div id="sale-disc-hint" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.45"></div>
+      </div>
       <div>
         <div class="sale-sec-title">Lägg till glasögon</div>
         <div id="sale-inv-list"></div>
