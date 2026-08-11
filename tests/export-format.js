@@ -25,6 +25,16 @@ const mock = http.createServer((req,res)=>{
         admins:{ display_name:'Vision Palace 2' } }]));
     if (p==='/rest/v1/sale_payments') return res.end(JSON.stringify([
       { sale_id:'s1', paid_at:'2026-07-12T12:00:00Z', amount:'2415', note:'Bank', image_url:'https://x/k.jpg' }]));
+    // Lagret har en rad per fysiskt par — tre likadana ska bli EN rad med
+    // antal 3 i underlaget, annars går listan inte att stämma av mot en
+    // inventering. Ett par saknar inköpspris och får inte räknas som 0.
+    if (p==='/rest/v1/inventory') return res.end(JSON.stringify([
+      { ref_code:'CT1', name:'Cartier Première', buy_price:'1000', sell_price:'2400' },
+      { ref_code:'CT1', name:'Cartier Première', buy_price:'1000', sell_price:'2400' },
+      { ref_code:'CT1', name:'Cartier Première', buy_price:'1000', sell_price:'2400' },
+      { ref_code:'CT7', name:'Woods Grey', buy_price:'900', sell_price:'1400' },
+      { ref_code:'CT9', name:'Utan pris', buy_price:null, sell_price:null },
+    ]));
     if (p==='/rest/v1/app_settings') return res.end('null');
     res.statusCode=404; res.end('{}');
   });
@@ -69,6 +79,19 @@ mock.listen(0,'127.0.0.1',()=>{
       ['vinsten stämmer mot CSV', d.totals.profit===1302.55 && csv.includes('1302,55')],
       ['inköpssumman stämmer mot CSV', d.totals.purchases===2194.9 && csv.includes('2194,90')],
       ['ogiltig månad avvisas även för JSON', bad.status===400],
+
+      // Lagerstatus — samma siffror i CSV och JSON
+      ['säljraden bär sitt köp-id så PDF:en kan gruppera', d.sales[0].sale_id==='s1'],
+      ['lagret grupperas per modell', d.inventory.length===3],
+      ['tre likadana par blir en rad med antal 3',
+        d.inventory.some(i=>i.ref==='CT1' && i.qty===3 && i.value===3000)],
+      ['par utan inköpspris får inget lagervärde',
+        d.inventory.some(i=>i.ref==='CT9' && i.qty===1 && i.value===null)],
+      ['antalet i lager summeras', d.totals.stock_count===5],
+      ['lagervärdet räknar inte par utan pris som noll', d.totals.stock_value===3900],
+      ['lagret daterats', /^\d{4}-\d{2}-\d{2}$/.test(d.stock_as_of||'')],
+      ['CSV har lagersektionen', csv.includes('LAGERSTATUS') && csv.includes('Lagervärde (EUR)')],
+      ['CSV visar samma lagervärde', csv.includes('3900,00') || csv.includes('3 900,00')],
     ];
     let ok=true; for(const [l,p] of checks){ console.log(`${p?'PASS':'FAIL'} — ${l}`); if(!p) ok=false; }
     if(!ok) console.log(JSON.stringify(d,null,1).slice(0,900));

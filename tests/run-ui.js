@@ -7,6 +7,7 @@ const http = require('http');
 const PORT = process.env.PORT || 5959;
 const TESTS = [
   ['tests/ui-export-pdf.js', '/tmp'],
+  ['tests/ui-export-pages.js', '/tmp'],
   ['tests/ui-discount.js'],
   ['tests/ui-client-history.js', '/tmp'],
   ['tests/ui-history-cancelled.js', '/tmp'],

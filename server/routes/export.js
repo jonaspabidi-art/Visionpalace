@@ -37,8 +37,9 @@ module.exports = () => {
       // Samma underlag oavsett format. CSV går till redovisningsprogrammet,
       // PDF byggs i appen ur JSON och är den man mailar eller skriver ut.
       const asJson = String(req.query.format || '').toLowerCase() === 'json';
-      const report = { month, admin: '', sales: [], purchases: [], payments: [],
-        totals: { revenue: 0, profit: 0, purchases: 0 } };
+      const report = { month, admin: '', sales: [], purchases: [], payments: [], inventory: [],
+        stock_as_of: new Date().toISOString().substring(0, 10),
+        totals: { revenue: 0, profit: 0, purchases: 0, stock_count: 0, stock_value: 0, stock_retail: 0 } };
 
       const lines = [];
       const push = (...v) => lines.push(row(...v));
@@ -86,6 +87,9 @@ module.exports = () => {
             STATUS_SV[s.status || 'unpaid'] || s.status || '', it.name || '', it.ref_code || '',
             qty, num(sell), num(amount), hasBuy ? num(buy) : '', profit == null ? '' : num(profit));
           report.sales.push({
+            // Raderna grupperas per köp i PDF:en. Fakturanumret duger inte som
+            // nyckel — kontantköp utan faktura skulle då slås ihop.
+            sale_id: s.id,
             date: date(s.created_at), paid_at: date(s.paid_at), invoice: s.invoice_number || '',
             client, sold_by: soldBy(s), status: STATUS_SV[s.status || 'unpaid'] || s.status || '',
             name: it.name || '', ref: it.ref_code || '', qty,
@@ -162,6 +166,47 @@ module.exports = () => {
         }
       } else {
         push('Inga försäljningar denna månad');
+      }
+      lines.push('');
+
+      // ── Lagerstatus ──────────────────────────────────────────────────────
+      // Vad som står i lagret just nu, inte vid månadens slut. Lagret har en
+      // rad per fysiskt par och sparar ingen historik, så en månad bakåt går
+      // inte att rekonstruera. Datumet skrivs ut så att det inte kan misstas
+      // för en månadssiffra.
+      const { data: stock, error: stockErr } = await supabase.from('inventory')
+        .select('ref_code, name, buy_price, sell_price');
+      push('LAGERSTATUS');
+      if (stockErr) {
+        console.warn(`[Export] Lagret kunde inte läsas: ${stockErr.message}`);
+        push(`Kunde inte läsas: ${stockErr.message}`);
+      } else {
+        push('Läget per', report.stock_as_of);
+        push('Ref', 'Modell', 'Antal', 'Inköpspris (EUR)', 'Lagervärde (EUR)', 'Utpris (EUR)');
+        // Ett kort per modell — lagret har en rad per par, och en lista med
+        // samma modell 12 gånger går inte att stämma av mot en inventering
+        const groups = new Map();
+        for (const it of stock || []) {
+          const buy = it.buy_price == null ? null : parseFloat(it.buy_price) || 0;
+          const sell = it.sell_price == null ? null : parseFloat(it.sell_price) || 0;
+          const key = `${it.ref_code || ''}|${it.name || ''}|${buy ?? ''}|${sell ?? ''}`;
+          const g = groups.get(key) || { ref: it.ref_code || '', name: it.name || '', buy, sell, qty: 0 };
+          g.qty++;
+          groups.set(key, g);
+        }
+        const rows = [...groups.values()].sort((a, b) =>
+          (a.name || '').localeCompare(b.name || '', 'sv') || (a.ref || '').localeCompare(b.ref || ''));
+        for (const g of rows) {
+          const value = g.buy == null ? null : g.buy * g.qty;
+          report.totals.stock_count += g.qty;
+          if (value != null) report.totals.stock_value += value;
+          if (g.sell != null) report.totals.stock_retail += g.sell * g.qty;
+          push(g.ref, g.name, g.qty, g.buy == null ? '' : num(g.buy),
+            value == null ? '' : num(value), g.sell == null ? '' : num(g.sell));
+          report.inventory.push({ ref: g.ref, name: g.name, qty: g.qty,
+            buy: g.buy, value, sell: g.sell });
+        }
+        push('Summa', '', report.totals.stock_count, '', num(report.totals.stock_value));
       }
       lines.push('');
 
