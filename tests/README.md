@@ -10,8 +10,10 @@ npm test              # serverstester, ingen webbläsare behövs
 npm run test:ui       # webbläsartester (kräver Chromium + playwright-core)
 ```
 
-`npm run test:ui` startar appen på port 5959 mot en oåtkomlig databas — alla
-API-svar mockas i testet, så ingenting rör riktig data.
+`npm run test:ui` startar appen på port 5959 mot en oåtkomlig databas och
+stänger av den när sviten är klar — alla API-svar mockas i testet, så
+ingenting rör riktig data. Kör redan en `tests/serve.js` på porten återanvänds
+den i stället, och lämnas igång efteråt.
 
 ## Att veta
 

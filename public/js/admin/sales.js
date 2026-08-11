@@ -500,12 +500,16 @@ async function loadSalesHistory() {
     }
 
     // Group by month (YYYY-MM)
+    // Avbrutna köp ligger kvar i listan men räknas inte in i omsättning eller
+    // vinst — samma regel som avräkningen, bokföringen och kundens köphistorik.
+    // Annars visade månadsraden en vinst som aldrig kom in.
     const months = {};
     let totalRevAll = 0, totalProfAll = 0;
     for (const sale of sales) {
       const key = sale.created_at.substring(0, 7);
       if (!months[key]) months[key] = { sales: [], revenue: 0, profit: 0 };
       months[key].sales.push(sale);
+      if (sale.status === 'cancelled') continue;
       for (const item of (sale.sale_items || [])) {
         const rev = (parseFloat(item.sell_price) || 0) * (item.qty || 1);
         const cost = (parseFloat(item.buy_price) || 0) * (item.qty || 1);
@@ -619,9 +623,32 @@ function exportBookkeeping(month) {
   document.getElementById('export-menu-rows').innerHTML = [
     invMenuRow('Excel-fil (CSV)', 'För redovisningsprogrammet', `runFromExportMenu(() => exportBookkeepingCsv('${month}'))`),
     invMenuRow('PDF', 'Att maila, skriva ut eller spara', `runFromExportMenu(() => exportBookkeepingPdf('${month}'))`),
+    invMenuRow('Testa valutakursen', 'Kollar att dagskursen hämtas från Riksbanken', 'runFromExportMenu(checkFxSource)'),
   ].join('');
   document.getElementById('export-menu-title').textContent = `Bokföringsunderlag ${month}`;
   document.getElementById('export-menu-modal').classList.add('open');
+}
+
+// Går kurshämtningen sönder märks det annars bara som att kronbeloppen tyst
+// räknas med reservkursen — och ett underlag med fel kurs ser precis lika
+// rätt ut som ett med rätt. Därför ett sätt att fråga rakt ut.
+async function checkFxSource() {
+  showToast('Kollar kursen…', 'ok');
+  try {
+    const r = await api('/api/fx/check');
+    const d = await r.json().catch(() => ({}));
+    if (d.ok) {
+      const last = d.sample?.[d.sample.length - 1];
+      showToast(last
+        ? `Kursen hämtas: 1 € = ${last.rate} kr (${last.day})`
+        : 'Kursen hämtas från Riksbanken', 'success');
+    } else {
+      showToast(`Kursen hämtas INTE — underlaget räknas med reservkursen ${d.fallback_rate ?? 11}`, 'error');
+    }
+    console.log('[FX] Provhämtning:', d);
+  } catch (e) {
+    showToast('Kunde inte nå servern för kurskoll', 'error');
+  }
 }
 
 function closeExportMenu() {

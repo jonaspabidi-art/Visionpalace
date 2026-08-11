@@ -5,11 +5,15 @@
 let orderRows = [];
 let orderDocBlob = null;
 let orderDocUrl = null;
+// Kursen som fakturans belopp räknades om med. Sparas med inköpet så att
+// omräkningen går att granska i efterhand.
+let orderEurSekRate = null;
 
 function openOrderImport() {
   orderRows = [];
   orderDocBlob = null;
   orderDocUrl = null;
+  orderEurSekRate = null;
   document.getElementById('order-file').value = '';
   document.getElementById('order-status').textContent = '';
   document.getElementById('order-rows').innerHTML = '';
@@ -43,6 +47,7 @@ async function handleOrderFile(input) {
     if (!d.rows?.length) { status.textContent = 'Hittade inga artikelrader i dokumentet.'; return; }
 
     status.textContent = `Hittade ${d.rows.length} rader${d.currency ? ` i ${d.currency}` : ''}. Kontrollera innan du importerar.`;
+    orderEurSekRate = d.eur_sek_rate ?? null;
     // Look each ref up so known products come back with name, image and price
     orderRows = await Promise.all(d.rows.map(async row => {
       const match = await lookupOrderRef(row.ref_code);
@@ -190,6 +195,11 @@ async function importOrderRows() {
           name: String(row.name).trim(),
           qty: parseInt(row.qty, 10) || 1,
           buy_price: row.buy_price_eur === '' ? null : row.buy_price_eur,
+          // Fakturans eget belopp följer med till bokföringen. Utan det går
+          // inköpet inte att stämma av mot fakturan det kom ifrån.
+          buy_original: row.unit_original ?? null,
+          buy_currency: row.currency_original || null,
+          fx_rate: orderEurSekRate,
           sell_price: row.sell_price === '' ? null : row.sell_price,
           image: row.image || null,
         })),
