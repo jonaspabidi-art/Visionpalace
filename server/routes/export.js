@@ -1,5 +1,12 @@
 const { adminAuth } = require('../lib/auth');
 const supabase = require('../lib/supabase');
+const { ratesFor } = require('../lib/fx');
+
+// Kronor är bokföringsvalutan; euro står kvar som referens mot appens egna
+// siffror. Försäljningarna räknas om med Riksbankens kurs för säljdagen.
+// Inköpen gör vi INTE så: kommer fakturan i kronor är fakturans belopp det
+// rätta, och en omräkning av vårt euro-pris skulle ge ett annat tal.
+const sek = (eur, rate) => Math.round((Number(eur) || 0) * rate * 100) / 100;
 
 // Swedish Excel expects semicolons and decimal commas; the BOM is what stops it
 // from mangling åäö. Without both, the file opens as one column of mojibake.
@@ -39,7 +46,14 @@ module.exports = () => {
       const asJson = String(req.query.format || '').toLowerCase() === 'json';
       const report = { month, admin: '', sales: [], purchases: [], payments: [], inventory: [],
         stock_as_of: new Date().toISOString().substring(0, 10),
-        totals: { revenue: 0, profit: 0, purchases: 0, stock_count: 0, stock_value: 0, stock_retail: 0 } };
+        currency: 'SEK',
+        totals: { revenue: 0, profit: 0, purchases: 0, stock_count: 0, stock_value: 0, stock_retail: 0,
+          revenue_sek: 0, profit_sek: 0, purchases_sek: 0, stock_value_sek: 0 } };
+
+      // En uppslagning för hela månaden, inte en per rad
+      const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().substring(0, 10);
+      const rateAt = await ratesFor(`${month}-01`, lastDay);
+      report.fx = { source: 'Riksbanken', series: 'SEK/EUR dagskurs' };
 
       const lines = [];
       const push = (...v) => lines.push(row(...v));
@@ -69,7 +83,8 @@ module.exports = () => {
 
       push('FÖRSÄLJNINGAR — båda admin-kontonas försäljningar');
       push('Datum', 'Betaldatum', 'Fakturanr', 'Kund', 'Sålt av', 'Status', 'Vara', 'Ref',
-        'Antal', 'Á-pris (EUR)', 'Belopp (EUR)', 'Inköpspris (EUR)', 'Vinst (EUR)');
+        'Antal', 'Á-pris (EUR)', 'Belopp (EUR)', 'Inköpspris (EUR)', 'Vinst (EUR)',
+        'Belopp (SEK)', 'Vinst (SEK)', 'Kurs', 'Kursdatum');
       const soldBy = s => s.admins?.display_name || s.admins?.username || '';
       let revTotal = 0, profitTotal = 0;
       for (const s of sales || []) {
@@ -83,9 +98,17 @@ module.exports = () => {
           const profit = hasBuy ? (sell - buy) * qty : null;
           revTotal += amount;
           if (profit != null) profitTotal += profit;
+          // Kunden betalar i euro, så kronbeloppet är omräknat till kursen den
+          // dag försäljningen skedde
+          const fx = rateAt(date(s.created_at));
+          const amountSek = sek(amount, fx.rate);
+          const profitSek = profit == null ? null : sek(profit, fx.rate);
+          report.totals.revenue_sek += amountSek;
+          if (profitSek != null) report.totals.profit_sek += profitSek;
           push(date(s.created_at), date(s.paid_at), s.invoice_number || '', client, soldBy(s),
             STATUS_SV[s.status || 'unpaid'] || s.status || '', it.name || '', it.ref_code || '',
-            qty, num(sell), num(amount), hasBuy ? num(buy) : '', profit == null ? '' : num(profit));
+            qty, num(sell), num(amount), hasBuy ? num(buy) : '', profit == null ? '' : num(profit),
+            num(amountSek), profitSek == null ? '' : num(profitSek), num(fx.rate), fx.rate_day || '');
           report.sales.push({
             // Raderna grupperas per köp i PDF:en. Fakturanumret duger inte som
             // nyckel — kontantköp utan faktura skulle då slås ihop.
@@ -94,12 +117,15 @@ module.exports = () => {
             client, sold_by: soldBy(s), status: STATUS_SV[s.status || 'unpaid'] || s.status || '',
             name: it.name || '', ref: it.ref_code || '', qty,
             sell, amount, buy, profit, preorder: !!s.is_preorder,
+            amount_sek: amountSek, profit_sek: profitSek,
+            rate: fx.rate, rate_day: fx.rate_day, rate_source: fx.source,
           });
         }
       }
       report.totals.revenue = revTotal;
       report.totals.profit = profitTotal;
-      push('Summa', '', '', '', '', '', '', '', '', '', num(revTotal), '', num(profitTotal));
+      push('Summa', '', '', '', '', '', '', '', '', '', num(revTotal), '', num(profitTotal),
+        num(report.totals.revenue_sek), num(report.totals.profit_sek));
       lines.push('');
 
       // ── Inköp ────────────────────────────────────────────────────────────
@@ -124,7 +150,8 @@ module.exports = () => {
         // själva — bokföringen ska kunna stämmas av mot fakturan, inte mot
         // vår omräkning.
         push('Datum', 'Vara', 'Ref', 'Antal', 'Inköpspris (EUR)', 'Summa (EUR)',
-          'Fakturapris', 'Fakturasumma', 'Valuta', 'Kurs', 'Källa', 'Inlagt av', 'Dokument');
+          'Summa (SEK)', 'SEK enligt', 'Fakturapris', 'Fakturasumma', 'Valuta', 'Kurs',
+          'Källa', 'Inlagt av', 'Dokument');
         let buyTotal = 0;
         for (const p of purchases || []) {
           const qty = p.qty || 1;
@@ -136,7 +163,16 @@ module.exports = () => {
           const currency = p.buy_currency || null;
           const fx = p.fx_rate == null ? null : parseFloat(p.fx_rate);
           const origAmount = origUnit == null ? null : origUnit * qty;
+          // Kom fakturan i kronor ÄR fakturans belopp kostnaden. Att räkna om
+          // vårt euro-pris till dagskurs skulle ge ett annat tal än det som
+          // står på papperet, och det är papperet som ska bokföras.
+          const fromInvoice = origAmount != null && currency === 'SEK';
+          const dayFx = rateAt(date(p.purchased_at));
+          const amountSek = fromInvoice ? Math.round(origAmount * 100) / 100
+            : sek(unit * qty, dayFx.rate);
+          report.totals.purchases_sek += amountSek;
           push(date(p.purchased_at), p.name || '', p.ref_code || '', qty, num(unit), num(unit * qty),
+            num(amountSek), fromInvoice ? 'faktura' : 'dagskurs',
             origUnit == null ? '' : num(origUnit), origAmount == null ? '' : num(origAmount),
             currency || '', fx == null ? '' : num(fx),
             source, p.admins?.display_name || p.admins?.username || '', p.document_url || '');
@@ -145,12 +181,13 @@ module.exports = () => {
             qty, unit, amount: unit * qty, source,
             original_unit: origUnit, original_amount: origAmount,
             currency, fx_rate: fx,
+            amount_sek: amountSek, sek_source: fromInvoice ? 'faktura' : 'dagskurs',
             added_by: p.admins?.display_name || p.admins?.username || '',
             document: p.document_url || '',
           });
         }
         report.totals.purchases = buyTotal;
-        push('Summa', '', '', '', '', num(buyTotal));
+        push('Summa', '', '', '', '', num(buyTotal), num(report.totals.purchases_sek));
       }
       lines.push('');
 
@@ -189,13 +226,16 @@ module.exports = () => {
       // för en månadssiffra.
       const { data: stock, error: stockErr } = await supabase.from('inventory')
         .select('ref_code, name, buy_price, sell_price');
+      // Lagret värderas till kursen den dag underlaget tas ut — det är ändå
+      // dagens lager som listas, inte månadens sista
+      const stockFx = rateAt(report.stock_as_of);
       push('LAGERSTATUS');
       if (stockErr) {
         console.warn(`[Export] Lagret kunde inte läsas: ${stockErr.message}`);
         push(`Kunde inte läsas: ${stockErr.message}`);
       } else {
-        push('Läget per', report.stock_as_of);
-        push('Ref', 'Modell', 'Antal', 'Inköpspris (EUR)', 'Lagervärde (EUR)', 'Utpris (EUR)');
+        push('Läget per', report.stock_as_of, `kurs ${num(stockFx.rate)}`);
+        push('Ref', 'Modell', 'Antal', 'Inköpspris (EUR)', 'Lagervärde (EUR)', 'Lagervärde (SEK)', 'Utpris (EUR)');
         // Ett kort per modell — lagret har en rad per par, och en lista med
         // samma modell 12 gånger går inte att stämma av mot en inventering
         const groups = new Map();
@@ -214,12 +254,15 @@ module.exports = () => {
           report.totals.stock_count += g.qty;
           if (value != null) report.totals.stock_value += value;
           if (g.sell != null) report.totals.stock_retail += g.sell * g.qty;
+          const valueSek = value == null ? null : sek(value, stockFx.rate);
+          if (valueSek != null) report.totals.stock_value_sek += valueSek;
           push(g.ref, g.name, g.qty, g.buy == null ? '' : num(g.buy),
-            value == null ? '' : num(value), g.sell == null ? '' : num(g.sell));
+            value == null ? '' : num(value), valueSek == null ? '' : num(valueSek),
+            g.sell == null ? '' : num(g.sell));
           report.inventory.push({ ref: g.ref, name: g.name, qty: g.qty,
-            buy: g.buy, value, sell: g.sell });
+            buy: g.buy, value, value_sek: valueSek, sell: g.sell });
         }
-        push('Summa', '', report.totals.stock_count, '', num(report.totals.stock_value));
+        push('Summa', '', report.totals.stock_count, '', num(report.totals.stock_value), num(report.totals.stock_value_sek));
       }
       lines.push('');
 
@@ -232,7 +275,8 @@ module.exports = () => {
         row('Genererad', new Date().toISOString().substring(0, 10)),
         row('Omfattning', 'Hela bolaget — båda admin-kontonas försäljningar och de gemensamma inköpen. En fil räcker, oavsett vilket konto den laddas ner från.'),
         row('Nedladdad av', adminName),
-        row('Valuta', 'EUR där inget annat anges. Ingen moms (export utanför EU).'),
+        row('Valuta', 'Bokförs i SEK. Euro står kvar som referens mot appens egna siffror. Ingen moms (export utanför EU).'),
+        row('Kurs', 'Riksbankens dagskurs SEK/EUR för transaktionsdagen. Helger och röda dagar bär senast publicerade kurs. Inköp fakturerade i kronor tas till fakturans belopp, inte omräknade.'),
         '',
       ].join('\r\n');
 

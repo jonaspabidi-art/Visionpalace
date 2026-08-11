@@ -10,10 +10,12 @@ for (let i = 1; i <= 26; i++) {
   sales.push({ sale_id:`s${i}`, date:'2026-07-05', paid_at:'2026-07-12', invoice:inv,
     client:`Kund med ett ganska långt namn ${i}`, sold_by:'Vision Palace', status:'Betald',
     name:`Cartier Modell ${i} med lång beskrivning`, ref:`CT${i}0582S-005`,
-    qty:2, sell:1200, amount:2400, buy:900, profit:600, preorder:false });
+    qty:2, sell:1200, amount:2400, buy:900, profit:600, preorder:false,
+    amount_sek:27600, profit_sek:6900, rate:11.5, rate_day:'2026-07-03' });
   sales.push({ sale_id:`s${i}`, date:'2026-07-05', paid_at:'2026-07-12', invoice:inv,
     client:`Kund med ett ganska långt namn ${i}`, sold_by:'Vision Palace', status:'Betald',
-    name:'Shipping', ref:'', qty:1, sell:15, amount:15, buy:null, profit:null, preorder:false });
+    name:'Shipping', ref:'', qty:1, sell:15, amount:15, buy:null, profit:null, preorder:false,
+    amount_sek:172.5, profit_sek:null, rate:11.5, rate_day:'2026-07-03' });
 }
 const purchases = [];
 for (let i = 1; i <= 22; i++) {
@@ -21,16 +23,19 @@ for (let i = 1; i <= 22; i++) {
     ref:`CT${i}0582S-005`, qty:2, unit:900, amount:1800,
     // Fakturan kom i kronor — 9 900 kr per styck, 19 800 kr på raden
     original_unit:9900, original_amount:19800, currency:'SEK', fx_rate:11,
+    amount_sek:19800, sek_source:'faktura',
     source:'Förbeställning', added_by:'Vision Palace 2', document:'' });
 }
 const inventory = [];
 for (let i = 1; i <= 30; i++) {
   inventory.push({ ref:`CT${i}0582S-005`, name:`Cartier Modell ${i} med lång beskrivning`,
-    qty:(i % 4) + 1, buy:900, value:900 * ((i % 4) + 1), sell:1400 });
+    qty:(i % 4) + 1, buy:900, value:900 * ((i % 4) + 1),
+    value_sek:10350 * ((i % 4) + 1), sell:1400 });
 }
 const REPORT = { month:'2026-07', admin:'Vision Palace', stock_as_of:'2026-08-11',
   sales, purchases, payments:[], inventory,
-  totals:{ revenue:62790, profit:15600, purchases:39600, stock_count:75, stock_value:67500, stock_retail:105000 } };
+  totals:{ revenue:62790, profit:15600, purchases:39600, stock_count:75, stock_value:67500, stock_retail:105000,
+    revenue_sek:722085, profit_sek:179400, purchases_sek:435600, stock_value_sek:776250 } };
 
 (async () => {
   const token = jwt.sign({ role:'admin', adminId:'a1' }, 'test-secret-for-invoice-repro');
@@ -102,10 +107,11 @@ const REPORT = { month:'2026-07', admin:'Vision Palace', stock_as_of:'2026-08-11
     checks.push(['lagerstatus finns med', r.stockPageIdx >= 0]);
     checks.push(['lagret börjar på en egen sida', r.stockPageStartsClean]);
     checks.push(['lagret är daterat', r.text.includes('2026-08-11')]);
-    checks.push(['lagervärdet summeras', r.text.includes('75 par i lager') && r.text.includes('67 500,00')]);
+    checks.push(['lagervärdet summeras i kronor', r.text.includes('75 par i lager') && r.text.includes('776 250,00 kr')]);
     checks.push(['köpet står en gång, inte på varje varurad',
       (r.text.match(/VP07-001/g) || []).length === 1]);
-    checks.push(['summorna finns kvar', r.text.includes('62 790,00') && r.text.includes('15 600,00')]);
+    checks.push(['summorna finns kvar i kronor', r.text.includes('722 085,00 kr') && r.text.includes('179 400,00 kr')]);
+    checks.push(['euro står kvar som referens', r.text.includes('62 790,00')]);
     checks.push(['fakturans belopp står bredvid euro-priset',
       r.text.includes('Enligt faktura') && r.text.includes('19 800,00 SEK')]);
     checks.push(['inga JS-fel', errors.length===0]);

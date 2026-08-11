@@ -41,6 +41,9 @@ const mock = http.createServer((req,res)=>{
       { ref_code:'CT7', name:'Woods Grey', buy_price:'900', sell_price:'1400' },
       { ref_code:'CT9', name:'Utan pris', buy_price:null, sell_price:null },
     ]));
+    // Riksbankens dagskurs: 11,50 kr per euro i juli
+    if (p.startsWith('/swea/v1/Observations/')) return res.end(JSON.stringify([{ date:'2026-07-01', value:11.5 }]));
+    if (p==='/rest/v1/fx_rates') return res.end('[]');
     if (p==='/rest/v1/app_settings') return res.end('null');
     res.statusCode=404; res.end('{}');
   });
@@ -48,6 +51,7 @@ const mock = http.createServer((req,res)=>{
 mock.listen(0,'127.0.0.1',()=>{
   process.env.SUPABASE_URL=`http://127.0.0.1:${mock.address().port}`;
   process.env.SUPABASE_SERVICE_KEY='dummy'; process.env.JWT_SECRET='test-secret';
+  process.env.RIKSBANK_API=`http://127.0.0.1:${mock.address().port}/swea/v1`;
   const express=require(process.cwd()+'/node_modules/express');
   const jwt=require(process.cwd()+'/node_modules/jsonwebtoken');
   const app=express(); app.use(express.json());
@@ -98,6 +102,20 @@ mock.listen(0,'127.0.0.1',()=>{
       ['CSV har fakturakolumnerna',
         csv.includes('Fakturapris;Fakturasumma;Valuta;Kurs')],
       ['CSV visar fakturans summa i kronor', csv.includes('12072,00')],
+
+      // Kronor är bokföringsvalutan — euro står kvar som referens
+      ['säljet räknas om till dagskurs', d.sales[0].amount_sek===27600],
+      ['kursen redovisas på raden', d.sales[0].rate===11.5],
+      ['vinsten räknas om med samma kurs', d.sales[0].profit_sek===14979.33],
+      ['omsättningen i kronor summeras', d.totals.revenue_sek===27772.5],
+      ['SEK-fakturan tas till fakturans belopp, inte omräknad',
+        d.purchases[0].amount_sek===12072 && d.purchases[0].sek_source==='faktura'],
+      ['inköp utan faktura i kronor räknas om till dagskurs',
+        d.purchases[1].amount_sek===5750 && d.purchases[1].sek_source==='dagskurs'],
+      ['inköpen i kronor summeras', d.totals.purchases_sek===17822],
+      ['lagret värderas också i kronor', d.totals.stock_value_sek===44850],
+      ['CSV har kronkolumnerna', csv.includes('Belopp (SEK);Vinst (SEK);Kurs;Kursdatum')],
+      ['CSV säger vilken kurs som gäller', csv.includes('Riksbankens dagskurs')],
 
       // Lagerstatus — samma siffror i CSV och JSON
       ['säljraden bär sitt köp-id så PDF:en kan gruppera', d.sales[0].sale_id==='s1'],

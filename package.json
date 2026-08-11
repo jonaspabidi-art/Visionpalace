@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
-    "test": "node tests/export-format.js && node tests/inventory-delete.js && node tests/discount.js && node tests/order-currency.js",
+    "test": "node tests/export-format.js && node tests/inventory-delete.js && node tests/discount.js && node tests/order-currency.js && node tests/fx-rates.js",
     "test:ui": "node tests/run-ui.js"
   },
   "dependencies": {

@@ -41,37 +41,38 @@ function docCols(d) {
   const anyOriginal = (d.purchases || []).some(p => p.original_amount != null);
   return {
     sales: [
-      { label: 'Vara', w: 47, align: 'left', wrap: true },
-      { label: 'Antal', w: 9, align: 'right' },
-      { label: 'Á-pris €', w: 14, align: 'right' },
-      { label: 'Belopp €', w: 14, align: 'right' },
-      { label: 'Vinst €', w: 16, align: 'right' },
+      { label: 'Vara', w: 38, align: 'left', wrap: true },
+      { label: 'Antal', w: 7, align: 'right' },
+      { label: 'Á-pris €', w: 12, align: 'right' },
+      { label: 'Belopp €', w: 13, align: 'right' },
+      { label: 'Belopp kr', w: 15, align: 'right' },
+      { label: 'Vinst kr', w: 15, align: 'right' },
     ],
     purchases: anyOriginal ? [
-      { label: 'Datum', w: 12, align: 'left' },
-      { label: 'Vara', w: 24, align: 'left', wrap: true },
-      { label: 'Antal', w: 6, align: 'right' },
-      { label: 'Á-pris €', w: 11, align: 'right' },
-      { label: 'Summa €', w: 11, align: 'right' },
-      { label: 'Enligt faktura', w: 16, align: 'right' },
+      { label: 'Datum', w: 11, align: 'left' },
+      { label: 'Vara', w: 22, align: 'left', wrap: true },
+      { label: 'Antal', w: 5, align: 'right' },
+      { label: 'Summa €', w: 12, align: 'right' },
+      { label: 'Summa kr', w: 14, align: 'right' },
+      { label: 'Enligt faktura', w: 15, align: 'right' },
       { label: 'Källa', w: 11, align: 'left', wrap: true },
-      { label: 'Inlagt av', w: 9, align: 'left', wrap: true },
-    ] : [
-      { label: 'Datum', w: 13, align: 'left' },
-      { label: 'Vara', w: 32, align: 'left', wrap: true },
-      { label: 'Antal', w: 7, align: 'right' },
-      { label: 'Á-pris €', w: 13, align: 'right' },
-      { label: 'Summa €', w: 13, align: 'right' },
-      { label: 'Källa', w: 12, align: 'left', wrap: true },
       { label: 'Inlagt av', w: 10, align: 'left', wrap: true },
+    ] : [
+      { label: 'Datum', w: 12, align: 'left' },
+      { label: 'Vara', w: 28, align: 'left', wrap: true },
+      { label: 'Antal', w: 6, align: 'right' },
+      { label: 'Summa €', w: 14, align: 'right' },
+      { label: 'Summa kr', w: 16, align: 'right' },
+      { label: 'Källa', w: 13, align: 'left', wrap: true },
+      { label: 'Inlagt av', w: 11, align: 'left', wrap: true },
     ],
     stock: [
-      { label: 'Ref', w: 17, align: 'left' },
-      { label: 'Modell', w: 37, align: 'left', wrap: true },
-      { label: 'Antal', w: 8, align: 'right' },
-      { label: 'Inköpspris €', w: 13, align: 'right' },
-      { label: 'Lagervärde €', w: 13, align: 'right' },
-      { label: 'Utpris €', w: 12, align: 'right' },
+      { label: 'Ref', w: 15, align: 'left' },
+      { label: 'Modell', w: 33, align: 'left', wrap: true },
+      { label: 'Antal', w: 7, align: 'right' },
+      { label: 'Inköpspris €', w: 12, align: 'right' },
+      { label: 'Lagervärde €', w: 14, align: 'right' },
+      { label: 'Lagervärde kr', w: 19, align: 'right' },
     ],
   };
 }
@@ -134,9 +135,9 @@ function saleHeadHtml(s) {
   </div>`;
 }
 
-function saleSumHtml(amount, profit, anyProfit) {
-  const p = anyProfit ? ` · vinst € ${eurAmount(profit)}` : '';
-  return `<div style="text-align:right;font-size:9px;color:#666;padding:3px 0 2px">Summa € ${eurAmount(amount)}${p}</div>`;
+function saleSumHtml(g) {
+  const p = g.anyProfit ? ` · vinst ${eurAmount(g.profitSek)} kr` : '';
+  return `<div style="text-align:right;font-size:9px;color:#666;padding:3px 0 2px">Summa ${eurAmount(g.amountSek)} kr (€ ${eurAmount(g.amount)})${p}</div>`;
 }
 
 // ── Blocken ──
@@ -160,10 +161,11 @@ function buildBlocks(d, cols) {
       // slå ihop två olika köp till ett
       const key = s.sale_id || `${s.date}|${s.invoice}|${s.client}|${s.sold_by}`;
       let g = byKey.get(key);
-      if (!g) { g = { head: s, items: [], amount: 0, profit: 0, anyProfit: false }; byKey.set(key, g); groups.push(g); }
+      if (!g) { g = { head: s, items: [], amount: 0, amountSek: 0, profitSek: 0, anyProfit: false }; byKey.set(key, g); groups.push(g); }
       g.items.push(s);
       g.amount += Number(s.amount) || 0;
-      if (s.profit != null) { g.profit += Number(s.profit); g.anyProfit = true; }
+      g.amountSek += Number(s.amount_sek) || 0;
+      if (s.profit_sek != null) { g.profitSek += Number(s.profit_sek); g.anyProfit = true; }
     }
     out.push(blk(headRowHtml(cols.sales), { table: 'sales', isHead: true }));
     for (const g of groups) {
@@ -172,12 +174,12 @@ function buildBlocks(d, cols) {
         out.push(blk(bodyRowHtml(cols.sales, [
           it.ref ? `${it.name} (${it.ref})` : it.name,
           it.qty, eurAmount(it.sell), eurAmount(it.amount),
-          it.profit == null ? '' : eurAmount(it.profit),
+          eurAmount(it.amount_sek), it.profit_sek == null ? '' : eurAmount(it.profit_sek),
         ]), { table: 'sales' }));
       }
-      out.push(blk(saleSumHtml(g.amount, g.profit, g.anyProfit)));
+      out.push(blk(saleSumHtml(g)));
     }
-    out.push(blk(totalRowHtml('Summa', `€ ${eurAmount(d.totals.revenue)}   ·   vinst € ${eurAmount(d.totals.profit)}`)));
+    out.push(blk(totalRowHtml('Summa', `${eurAmount(d.totals.revenue_sek)} kr   ·   vinst ${eurAmount(d.totals.profit_sek)} kr   ·   € ${eurAmount(d.totals.revenue)}`)));
   }
 
   // Inköp
@@ -189,7 +191,7 @@ function buildBlocks(d, cols) {
     const withOriginal = cols.purchases.some(c => c.label === 'Enligt faktura');
     for (const p of d.purchases) {
       const base = [p.date, p.ref ? `${p.name} (${p.ref})` : p.name, p.qty,
-        eurAmount(p.unit), eurAmount(p.amount)];
+        eurAmount(p.amount), eurAmount(p.amount_sek)];
       // Beloppet som står på leverantörsfakturan, i fakturans egen valuta
       const orig = p.original_amount == null ? ''
         : `${eurAmount(p.original_amount)} ${p.currency || ''}`.trim();
@@ -197,7 +199,7 @@ function buildBlocks(d, cols) {
         withOriginal ? [...base, orig, p.source, p.added_by]
           : [...base, p.source, p.added_by]), { table: 'purchases' }));
     }
-    out.push(blk(totalRowHtml('Summa', `€ ${eurAmount(d.totals.purchases)}`)));
+    out.push(blk(totalRowHtml('Summa', `${eurAmount(d.totals.purchases_sek)} kr   ·   € ${eurAmount(d.totals.purchases)}`)));
   }
 
   // Lagerstatus — alltid på en egen sida, så den går att skriva ut och ta
@@ -215,10 +217,10 @@ function buildBlocks(d, cols) {
           s.ref, s.name, s.qty,
           s.buy == null ? '' : eurAmount(s.buy),
           s.value == null ? '' : eurAmount(s.value),
-          s.sell == null ? '' : eurAmount(s.sell),
+          s.value_sek == null ? '' : eurAmount(s.value_sek),
         ]), { table: 'stock' }));
       }
-      out.push(blk(totalRowHtml(`${t.stock_count ?? 0} par i lager`, `lagervärde € ${eurAmount(t.stock_value || 0)}`)));
+      out.push(blk(totalRowHtml(`${t.stock_count ?? 0} par i lager`, `lagervärde ${eurAmount(t.stock_value_sek || 0)} kr   ·   € ${eurAmount(t.stock_value || 0)}`)));
     }
   }
   return out;
@@ -312,15 +314,19 @@ function docHeaderHtml(d, logoData) {
 }
 
 function summaryHtml(d) {
-  const box = (label, value) => `<div><div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999">${label}</div>
-    <div style="font-size:16px;font-weight:800;color:#111;padding-top:2px">€ ${eurAmount(value)}</div></div>`;
+  // Kronor är bokföringsvalutan. Euro står kvar under, mindre, så siffrorna
+  // går att stämma av mot appens egna vyer.
+  const box = (label, sekValue, eurValue) => `<div><div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#999">${label}</div>
+    <div style="font-size:16px;font-weight:800;color:#111;padding-top:2px">${eurAmount(sekValue)} kr</div>
+    <div style="font-size:8.5px;color:#aaa;padding-top:1px">€ ${eurAmount(eurValue)}</div></div>`;
   return `<div style="background:#fafafa;border:1px solid #eee;border-radius:6px;padding:11px 13px;margin-bottom:18px;
-    display:flex;gap:26px;flex-wrap:wrap">
-    ${box('Omsättning', d.totals.revenue)}
-    ${box('Vinst', d.totals.profit)}
-    ${box('Inköp', d.totals.purchases)}
-    <div style="margin-left:auto;max-width:200px;text-align:right">
-      <div style="font-size:9px;color:#999;line-height:1.45">Belopp i euro. Ingen moms — försäljning utanför EU.</div>
+    display:flex;gap:24px;flex-wrap:wrap">
+    ${box('Omsättning', d.totals.revenue_sek, d.totals.revenue)}
+    ${box('Vinst', d.totals.profit_sek, d.totals.profit)}
+    ${box('Inköp', d.totals.purchases_sek, d.totals.purchases)}
+    <div style="margin-left:auto;max-width:215px;text-align:right">
+      <div style="font-size:8.5px;color:#999;line-height:1.45">Bokförs i kronor. Riksbankens dagskurs för
+      transaktionsdagen; inköp fakturerade i kronor tas till fakturans belopp. Ingen moms — försäljning utanför EU.</div>
     </div>
   </div>`;
 }
