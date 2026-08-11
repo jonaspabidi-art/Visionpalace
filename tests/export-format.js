@@ -12,6 +12,7 @@ const SALES = [{
     { name:'Frakt', ref_code:null, sell_price:'15', buy_price:null, qty:1 },
   ],
 }];
+let fxDown = false;   // härmar att Riksbanken inte svarar
 const mock = http.createServer((req,res)=>{
   let b=''; req.on('data',c=>b+=c);
   req.on('end',()=>{
@@ -42,7 +43,10 @@ const mock = http.createServer((req,res)=>{
       { ref_code:'CT9', name:'Utan pris', buy_price:null, sell_price:null },
     ]));
     // Riksbankens dagskurs: 11,50 kr per euro i juli
-    if (p.startsWith('/swea/v1/Observations/')) return res.end(JSON.stringify([{ date:'2026-07-01', value:11.5 }]));
+    if (p.startsWith('/swea/v1/Observations/')) {
+      if (fxDown) { res.statusCode = 503; return res.end('{}'); }
+      return res.end(JSON.stringify([{ date:'2026-07-01', value:11.5 }]));
+    }
     if (p==='/rest/v1/fx_rates') return res.end('[]');
     if (p==='/rest/v1/app_settings') return res.end('null');
     res.statusCode=404; res.end('{}');
@@ -65,6 +69,12 @@ mock.listen(0,'127.0.0.1',()=>{
     const jsonRes=await fetch(`http://127.0.0.1:${P}/api/export/bookkeeping?month=2026-07&format=json`,{headers:H});
     const d=await jsonRes.json();
     const bad=await fetch(`http://127.0.0.1:${P}/api/export/bookkeeping?month=juli&format=json`,{headers:H});
+    // En månad där kurskällan inte har något att ge (mocken svarar tomt för
+    // 2026-05) — då blir allt reservkursen och det måste synas
+    fxDown = true;
+    const noFx=await (await fetch(`http://127.0.0.1:${P}/api/export/bookkeeping?month=2026-05&format=json`,{headers:H})).json();
+    const noFxCsv=await (await fetch(`http://127.0.0.1:${P}/api/export/bookkeeping?month=2026-05`,{headers:H})).text();
+    fxDown = false;
 
     const checks=[
       // CSV som förut
@@ -116,6 +126,10 @@ mock.listen(0,'127.0.0.1',()=>{
       ['lagret värderas också i kronor', d.totals.stock_value_sek===44850],
       ['CSV har kronkolumnerna', csv.includes('Belopp (SEK);Vinst (SEK);Kurs;Kursdatum')],
       ['CSV säger vilken kurs som gäller', csv.includes('Riksbankens dagskurs')],
+      ['hämtad kurs flaggas som godkänd', d.fx.ok===true],
+      ['utan kurs flaggas underlaget som ej bokföringsdugligt', noFx.fx.ok===false],
+      ['och reservkursen namnges', noFx.fx.fallback_rate===11],
+      ['CSV varnar högst upp', /VARNING;.*reservkursen 11/.test(noFxCsv)],
 
       // Lagerstatus — samma siffror i CSV och JSON
       ['säljraden bär sitt köp-id så PDF:en kan gruppera', d.sales[0].sale_id==='s1'],

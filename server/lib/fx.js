@@ -116,4 +116,33 @@ async function ratesFor(from, to) {
   return at;
 }
 
-module.exports = { ratesFor, FALLBACK_RATE, _internals: { densify, daysBetween, shiftDays } };
+// Provhämtning mot källan, utan att röra databasen. Finns för att det ska gå
+// att se svart på vitt om kursen hämtas på riktigt i produktion — annars
+// märks ett trasigt anrop bara som att kursen tyst blir reservkursen.
+async function probe(days = 10) {
+  const to = iso(new Date());
+  const from = shiftDays(to, -days);
+  const url = `${BASE}/Observations/${SERIES}/${from}/${to}`;
+  const t0 = Date.now();
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch { /* svaret var inte json */ }
+    const rows = Array.isArray(parsed)
+      ? parsed.map(o => ({ day: String(o.date || '').substring(0, 10), rate: Number(o.value) }))
+        .filter(o => /^\d{4}-\d{2}-\d{2}$/.test(o.day) && Number.isFinite(o.rate) && o.rate > 0)
+      : [];
+    return {
+      ok: res.ok && rows.length > 0,
+      status: res.status, url, ms: Date.now() - t0,
+      count: rows.length, sample: rows.slice(-3),
+      // Bara med när något gick fel — annars är det brus
+      body: rows.length ? undefined : String(text).slice(0, 300),
+    };
+  } catch (e) {
+    return { ok: false, url, ms: Date.now() - t0, error: e.message };
+  }
+}
+
+module.exports = { ratesFor, probe, FALLBACK_RATE, _internals: { densify, daysBetween, shiftDays } };

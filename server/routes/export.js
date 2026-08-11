@@ -1,6 +1,6 @@
 const { adminAuth } = require('../lib/auth');
 const supabase = require('../lib/supabase');
-const { ratesFor } = require('../lib/fx');
+const { ratesFor, probe, FALLBACK_RATE } = require('../lib/fx');
 
 // Kronor är bokföringsvalutan; euro står kvar som referens mot appens egna
 // siffror. Försäljningarna räknas om med Riksbankens kurs för säljdagen.
@@ -34,6 +34,15 @@ const STATUS_SV = {
 module.exports = () => {
   const router = require('express').Router();
 
+  // Provhämtning mot Riksbanken. Utan den märks ett trasigt anrop bara som
+  // att kurserna tyst blir reservkursen — och ett underlag med fel kurs ser
+  // precis lika rätt ut som ett med rätt.
+  router.get('/fx/check', adminAuth, async (req, res) => {
+    const p = await probe();
+    console.log(`[FX] Provhämtning: ${p.ok ? 'OK' : 'MISSLYCKADES'} (${p.status || p.error}) på ${p.ms}ms`);
+    res.json({ ...p, fallback_rate: FALLBACK_RATE });
+  });
+
   router.get('/export/bookkeeping', adminAuth, async (req, res) => {
     try {
       const month = String(req.query.month || '');
@@ -52,8 +61,11 @@ module.exports = () => {
 
       // En uppslagning för hela månaden, inte en per rad
       const lastDay = new Date(Date.UTC(y, m, 0)).toISOString().substring(0, 10);
-      const rateAt = await ratesFor(`${month}-01`, lastDay);
-      report.fx = { source: 'Riksbanken', series: 'SEK/EUR dagskurs' };
+      const lookup = await ratesFor(`${month}-01`, lastDay);
+      // Vilka kurser som faktiskt användes. Gick hämtningen inte fram blir
+      // allt reservkursen, och det får inte gå att missa i underlaget.
+      const usedSources = new Set();
+      const rateAt = day => { const r = lookup(day); usedSources.add(r.source); return r; };
 
       const lines = [];
       const push = (...v) => lines.push(row(...v));
@@ -275,10 +287,19 @@ module.exports = () => {
         row('Genererad', new Date().toISOString().substring(0, 10)),
         row('Omfattning', 'Hela bolaget — båda admin-kontonas försäljningar och de gemensamma inköpen. En fil räcker, oavsett vilket konto den laddas ner från.'),
         row('Nedladdad av', adminName),
+        ...(usedSources.has('fallback') ? [row('VARNING',
+          `Kursen kunde inte hämtas från Riksbanken. Beloppen i kronor är räknade med reservkursen ${FALLBACK_RATE} och är INTE bokföringsdugliga. Gör om exporten när kurshämtningen fungerar.`)] : []),
         row('Valuta', 'Bokförs i SEK. Euro står kvar som referens mot appens egna siffror. Ingen moms (export utanför EU).'),
         row('Kurs', 'Riksbankens dagskurs SEK/EUR för transaktionsdagen. Helger och röda dagar bär senast publicerade kurs. Inköp fakturerade i kronor tas till fakturans belopp, inte omräknade.'),
         '',
       ].join('\r\n');
+
+      report.fx = {
+        source: 'Riksbanken', series: 'SEK/EUR dagskurs',
+        ok: !usedSources.has('fallback'),
+        used: [...usedSources],
+        fallback_rate: FALLBACK_RATE,
+      };
 
       if (asJson) {
         console.log(`[Export] ${month} som JSON: ${report.sales.length} rader`);

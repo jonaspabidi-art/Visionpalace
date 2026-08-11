@@ -313,6 +313,21 @@ function docHeaderHtml(d, logoData) {
   </div>`;
 }
 
+// Gick kursen inte att hämta räknas allt med reservkursen, och underlaget ser
+// ut precis som ett riktigt. Därför en varning som inte går att missa — och
+// den mäts in i sidan som vilket block som helst, så inget trängs undan.
+function fxWarningHtml(d) {
+  if (!d.fx || d.fx.ok !== false) return '';
+  return `<div style="border:1.5px solid #c0392b;background:#fdf3f2;border-radius:6px;
+    padding:9px 12px;margin-bottom:14px">
+    <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#c0392b;font-weight:700">Kursen kunde inte hämtas</div>
+    <div style="font-size:9.5px;color:#7d2b22;padding-top:3px;line-height:1.45">
+      Kronbeloppen är räknade med reservkursen ${esc(String(d.fx.fallback_rate ?? ''))} och är inte
+      bokföringsdugliga. Gör om exporten när kurshämtningen fungerar.
+    </div>
+  </div>`;
+}
+
 function summaryHtml(d) {
   // Kronor är bokföringsvalutan. Euro står kvar under, mindre, så siffrorna
   // går att stämma av mot appens egna vyer.
@@ -344,7 +359,7 @@ function buildBookkeepingHTML(d, logoData) {
     const blocks = buildBlocks(d, cols);
     measureBlocks(ruler, blocks, cols);
     // Sida 1 bär brevhuvudet och sammanfattningsrutan
-    ruler.innerHTML = `<div>${docHeaderHtml(d, logoData)}${summaryHtml(d)}</div>`;
+    ruler.innerHTML = `<div>${docHeaderHtml(d, logoData)}${fxWarningHtml(d)}${summaryHtml(d)}</div>`;
     const topHeight = ruler.firstElementChild.offsetHeight;
     ruler.innerHTML = '';
     pages = packPages(blocks, topHeight);
@@ -356,7 +371,7 @@ function buildBookkeepingHTML(d, logoData) {
   const body = pages.map((items, i) => `<div class="pdf-page" style="width:${PAGE_W}mm;height:${PAGE_H}mm;
     padding:${PAD_TOP}mm ${PAD_SIDE}mm ${PAD_BOTTOM}mm;box-sizing:border-box;background:#fff;color:#222;
     font-family:${DOC_FONT};position:relative;overflow:hidden">
-    ${i === 0 ? docHeaderHtml(d, logoData) + summaryHtml(d) : ''}
+    ${i === 0 ? docHeaderHtml(d, logoData) + fxWarningHtml(d) + summaryHtml(d) : ''}
     ${renderPageBody(items, cols)}
     <div style="position:absolute;left:${PAD_SIDE}mm;right:${PAD_SIDE}mm;bottom:${PAD_BOTTOM - 5}mm;
       border-top:1px solid #eee;padding-top:4px;font-size:8px;color:#bbb;display:flex;justify-content:space-between">

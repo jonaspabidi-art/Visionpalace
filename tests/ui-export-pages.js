@@ -98,6 +98,24 @@ const REPORT = { month:'2026-07', admin:'Vision Palace', stock_as_of:'2026-08-11
       };
     }, REPORT);
 
+    // Samma underlag men med en kurs som inte gick att hämta — varningen ska
+    // synas och räknas in i sidan, inte tränga ut innehåll utanför kanten
+    const w = await page.evaluate(rep => {
+      const bad = { ...rep, fx: { ok:false, fallback_rate:11, source:'Riksbanken' } };
+      const h = document.createElement('div');
+      h.style.cssText = 'position:fixed;left:-10000px;top:0';
+      h.innerHTML = buildBookkeepingHTML(bad, null);
+      document.body.appendChild(h);
+      const pages = [...h.querySelectorAll('.pdf-page')];
+      const out = {
+        warned: pages[0].textContent.includes('Kursen kunde inte hämtas'),
+        reserv: pages[0].textContent.includes('reservkursen 11'),
+        overflowing: pages.filter(x => x.scrollHeight > x.clientHeight + 1).length,
+      };
+      h.remove();
+      return out;
+    }, REPORT);
+
     checks.push(['underlaget blir flera sidor', r.count > 3]);
     checks.push(['ingen sida svämmar över', r.overflowing === 0]);
     checks.push(['varje sida är exakt A4', r.heights.every(h => Math.abs(h - r.a4) <= 1)]);
@@ -114,6 +132,9 @@ const REPORT = { month:'2026-07', admin:'Vision Palace', stock_as_of:'2026-08-11
     checks.push(['euro står kvar som referens', r.text.includes('62 790,00')]);
     checks.push(['fakturans belopp står bredvid euro-priset',
       r.text.includes('Enligt faktura') && r.text.includes('19 800,00 SEK')]);
+    checks.push(['misslyckad kurshämtning varnas det om', w.warned]);
+    checks.push(['varningen säger vilken kurs som användes', w.reserv]);
+    checks.push(['varningen tränger inte ut innehåll', w.overflowing === 0]);
     checks.push(['inga JS-fel', errors.length===0]);
 
     console.log(`   (${r.count} sidor, höjder ${[...new Set(r.heights)].join('/')} px, A4 = ${r.a4} px)`);
