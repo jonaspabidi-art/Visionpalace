@@ -19,6 +19,8 @@ const purchases = [];
 for (let i = 1; i <= 22; i++) {
   purchases.push({ date:'2026-07-03', name:`Cartier Modell ${i} med lång beskrivning`,
     ref:`CT${i}0582S-005`, qty:2, unit:900, amount:1800,
+    // Fakturan kom i kronor — 9 900 kr per styck, 19 800 kr på raden
+    original_unit:9900, original_amount:19800, currency:'SEK', fx_rate:11,
     source:'Förbeställning', added_by:'Vision Palace 2', document:'' });
 }
 const inventory = [];
@@ -104,6 +106,8 @@ const REPORT = { month:'2026-07', admin:'Vision Palace', stock_as_of:'2026-08-11
     checks.push(['köpet står en gång, inte på varje varurad',
       (r.text.match(/VP07-001/g) || []).length === 1]);
     checks.push(['summorna finns kvar', r.text.includes('62 790,00') && r.text.includes('15 600,00')]);
+    checks.push(['fakturans belopp står bredvid euro-priset',
+      r.text.includes('Enligt faktura') && r.text.includes('19 800,00 SEK')]);
     checks.push(['inga JS-fel', errors.length===0]);
 
     console.log(`   (${r.count} sidor, höjder ${[...new Set(r.heights)].join('/')} px, A4 = ${r.a4} px)`);

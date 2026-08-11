@@ -34,32 +34,47 @@ function eurAmount(n) {
 // Kolumnerna låses i procent och tabellen får table-layout:fixed. Annars
 // räknar webbläsaren om bredderna efter innehållet på just den sidan, och
 // kolumnerna hoppar i sidled mellan sida 1 och 2.
-const COLS = {
-  sales: [
-    { label: 'Vara', w: 47, align: 'left', wrap: true },
-    { label: 'Antal', w: 9, align: 'right' },
-    { label: 'Á-pris €', w: 14, align: 'right' },
-    { label: 'Belopp €', w: 14, align: 'right' },
-    { label: 'Vinst €', w: 16, align: 'right' },
-  ],
-  purchases: [
-    { label: 'Datum', w: 13, align: 'left' },
-    { label: 'Vara', w: 32, align: 'left', wrap: true },
-    { label: 'Antal', w: 7, align: 'right' },
-    { label: 'Á-pris €', w: 13, align: 'right' },
-    { label: 'Summa €', w: 13, align: 'right' },
-    { label: 'Källa', w: 12, align: 'left' },
-    { label: 'Inlagt av', w: 10, align: 'left' },
-  ],
-  stock: [
-    { label: 'Ref', w: 17, align: 'left' },
-    { label: 'Modell', w: 37, align: 'left', wrap: true },
-    { label: 'Antal', w: 8, align: 'right' },
-    { label: 'Inköpspris €', w: 13, align: 'right' },
-    { label: 'Lagervärde €', w: 13, align: 'right' },
-    { label: 'Utpris €', w: 12, align: 'right' },
-  ],
-};
+// Kolumnerna sätts per dokument: fakturabeloppet tas bara med när det finns
+// något att visa, så månader som lades in innan valutan sparades inte får en
+// tom kolumn genom hela underlaget.
+function docCols(d) {
+  const anyOriginal = (d.purchases || []).some(p => p.original_amount != null);
+  return {
+    sales: [
+      { label: 'Vara', w: 47, align: 'left', wrap: true },
+      { label: 'Antal', w: 9, align: 'right' },
+      { label: 'Á-pris €', w: 14, align: 'right' },
+      { label: 'Belopp €', w: 14, align: 'right' },
+      { label: 'Vinst €', w: 16, align: 'right' },
+    ],
+    purchases: anyOriginal ? [
+      { label: 'Datum', w: 12, align: 'left' },
+      { label: 'Vara', w: 24, align: 'left', wrap: true },
+      { label: 'Antal', w: 6, align: 'right' },
+      { label: 'Á-pris €', w: 11, align: 'right' },
+      { label: 'Summa €', w: 11, align: 'right' },
+      { label: 'Enligt faktura', w: 16, align: 'right' },
+      { label: 'Källa', w: 11, align: 'left', wrap: true },
+      { label: 'Inlagt av', w: 9, align: 'left', wrap: true },
+    ] : [
+      { label: 'Datum', w: 13, align: 'left' },
+      { label: 'Vara', w: 32, align: 'left', wrap: true },
+      { label: 'Antal', w: 7, align: 'right' },
+      { label: 'Á-pris €', w: 13, align: 'right' },
+      { label: 'Summa €', w: 13, align: 'right' },
+      { label: 'Källa', w: 12, align: 'left', wrap: true },
+      { label: 'Inlagt av', w: 10, align: 'left', wrap: true },
+    ],
+    stock: [
+      { label: 'Ref', w: 17, align: 'left' },
+      { label: 'Modell', w: 37, align: 'left', wrap: true },
+      { label: 'Antal', w: 8, align: 'right' },
+      { label: 'Inköpspris €', w: 13, align: 'right' },
+      { label: 'Lagervärde €', w: 13, align: 'right' },
+      { label: 'Utpris €', w: 12, align: 'right' },
+    ],
+  };
+}
 
 const TABLE_CSS = 'width:100%;border-collapse:collapse;table-layout:fixed';
 const colgroupHtml = cols => `<colgroup>${cols.map(c => `<col style="width:${c.w}%">`).join('')}</colgroup>`;
@@ -75,8 +90,8 @@ function bodyRowHtml(cols, cells) {
   return `<tr>${cols.map((c, i) => {
     const v = cells[i];
     const shown = v === '' || v == null ? '<span style="color:#ccc">—</span>' : esc(String(v));
-    // Bara varunamnet får radbrytas. Ett belopp som bryts mitt i talet är
-    // oläsbart, och det var så priserna såg fel ut.
+    // Textkolumner får radbryta, belopp aldrig. Ett tal som bryts mitt i är
+    // oläsbart — det var så priserna såg fel ut.
     const wrap = c.wrap ? 'white-space:normal;word-break:break-word' : 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
     return `<td style="font-size:9.5px;color:#222;text-align:${c.align};${wrap};
       padding:4px ${i === cols.length - 1 ? 0 : 7}px 4px ${i === 0 ? 0 : 7}px;
@@ -130,7 +145,7 @@ function saleSumHtml(amount, profit, anyProfit) {
 // att klippa det på mitten.
 const blk = (html, opts = {}) => ({ html, table: null, keep: 0, ...opts });
 
-function buildBlocks(d) {
+function buildBlocks(d, cols) {
   const out = [];
 
   // Försäljningar, grupperade per köp
@@ -150,11 +165,11 @@ function buildBlocks(d) {
       g.amount += Number(s.amount) || 0;
       if (s.profit != null) { g.profit += Number(s.profit); g.anyProfit = true; }
     }
-    out.push(blk(headRowHtml(COLS.sales), { table: 'sales', isHead: true }));
+    out.push(blk(headRowHtml(cols.sales), { table: 'sales', isHead: true }));
     for (const g of groups) {
       out.push(blk(saleHeadHtml(g.head), { keep: 2 }));
       for (const it of g.items) {
-        out.push(blk(bodyRowHtml(COLS.sales, [
+        out.push(blk(bodyRowHtml(cols.sales, [
           it.ref ? `${it.name} (${it.ref})` : it.name,
           it.qty, eurAmount(it.sell), eurAmount(it.amount),
           it.profit == null ? '' : eurAmount(it.profit),
@@ -170,12 +185,17 @@ function buildBlocks(d) {
   if (!d.purchases?.length) {
     out.push(blk(emptyNoteHtml('Inga inköp den här månaden.')));
   } else {
-    out.push(blk(headRowHtml(COLS.purchases), { table: 'purchases', isHead: true }));
+    out.push(blk(headRowHtml(cols.purchases), { table: 'purchases', isHead: true }));
+    const withOriginal = cols.purchases.some(c => c.label === 'Enligt faktura');
     for (const p of d.purchases) {
-      out.push(blk(bodyRowHtml(COLS.purchases, [
-        p.date, p.ref ? `${p.name} (${p.ref})` : p.name, p.qty,
-        eurAmount(p.unit), eurAmount(p.amount), p.source, p.added_by,
-      ]), { table: 'purchases' }));
+      const base = [p.date, p.ref ? `${p.name} (${p.ref})` : p.name, p.qty,
+        eurAmount(p.unit), eurAmount(p.amount)];
+      // Beloppet som står på leverantörsfakturan, i fakturans egen valuta
+      const orig = p.original_amount == null ? ''
+        : `${eurAmount(p.original_amount)} ${p.currency || ''}`.trim();
+      out.push(blk(bodyRowHtml(cols.purchases,
+        withOriginal ? [...base, orig, p.source, p.added_by]
+          : [...base, p.source, p.added_by]), { table: 'purchases' }));
     }
     out.push(blk(totalRowHtml('Summa', `€ ${eurAmount(d.totals.purchases)}`)));
   }
@@ -189,9 +209,9 @@ function buildBlocks(d) {
     if (!d.inventory.length) {
       out.push(blk(emptyNoteHtml('Lagret är tomt.')));
     } else {
-      out.push(blk(headRowHtml(COLS.stock), { table: 'stock', isHead: true }));
+      out.push(blk(headRowHtml(cols.stock), { table: 'stock', isHead: true }));
       for (const s of d.inventory) {
-        out.push(blk(bodyRowHtml(COLS.stock, [
+        out.push(blk(bodyRowHtml(cols.stock, [
           s.ref, s.name, s.qty,
           s.buy == null ? '' : eurAmount(s.buy),
           s.value == null ? '' : eurAmount(s.value),
@@ -206,15 +226,15 @@ function buildBlocks(d) {
 
 // Mäter varje block i verklig bredd. Tabellrader måste mätas inuti en tabell
 // med samma colgroup, annars stämmer inte höjden.
-function measureBlocks(ruler, blocks) {
+function measureBlocks(ruler, blocks, cols) {
   const plain = blocks.filter(b => !b.table);
   ruler.innerHTML = plain.map(b => `<div>${b.html}</div>`).join('');
   plain.forEach((b, i) => { b.h = ruler.children[i]?.offsetHeight || 16; });
 
-  for (const key of Object.keys(COLS)) {
+  for (const key of Object.keys(cols)) {
     const rows = blocks.filter(b => b.table === key);
     if (!rows.length) continue;
-    ruler.innerHTML = `<table style="${TABLE_CSS}">${colgroupHtml(COLS[key])}<tbody>${rows.map(r => r.html).join('')}</tbody></table>`;
+    ruler.innerHTML = `<table style="${TABLE_CSS}">${colgroupHtml(cols[key])}<tbody>${rows.map(r => r.html).join('')}</tbody></table>`;
     const trs = ruler.querySelectorAll('tr');
     rows.forEach((b, i) => { b.h = trs[i]?.offsetHeight || 18; });
   }
@@ -260,13 +280,13 @@ function packPages(blocks, firstPageUsed) {
 
 // Sätter ihop en sidas block till HTML. Rader som ligger efter varandra i
 // samma tabell samlas i ett <table>, så ramarna hänger ihop.
-function renderPageBody(items) {
+function renderPageBody(items, cols) {
   let html = '', open = null;
   for (const b of items) {
     if (b.table !== open) {
       if (open) html += '</tbody></table>';
       open = b.table;
-      if (open) html += `<table data-table="${open}" style="${TABLE_CSS}">${colgroupHtml(COLS[open])}<tbody>`;
+      if (open) html += `<table data-table="${open}" style="${TABLE_CSS}">${colgroupHtml(cols[open])}<tbody>`;
     }
     html += b.html;
   }
@@ -313,9 +333,10 @@ function buildBookkeepingHTML(d, logoData) {
   document.body.appendChild(ruler);
 
   let pages;
+  const cols = docCols(d);
   try {
-    const blocks = buildBlocks(d);
-    measureBlocks(ruler, blocks);
+    const blocks = buildBlocks(d, cols);
+    measureBlocks(ruler, blocks, cols);
     // Sida 1 bär brevhuvudet och sammanfattningsrutan
     ruler.innerHTML = `<div>${docHeaderHtml(d, logoData)}${summaryHtml(d)}</div>`;
     const topHeight = ruler.firstElementChild.offsetHeight;
@@ -330,7 +351,7 @@ function buildBookkeepingHTML(d, logoData) {
     padding:${PAD_TOP}mm ${PAD_SIDE}mm ${PAD_BOTTOM}mm;box-sizing:border-box;background:#fff;color:#222;
     font-family:${DOC_FONT};position:relative;overflow:hidden">
     ${i === 0 ? docHeaderHtml(d, logoData) + summaryHtml(d) : ''}
-    ${renderPageBody(items)}
+    ${renderPageBody(items, cols)}
     <div style="position:absolute;left:${PAD_SIDE}mm;right:${PAD_SIDE}mm;bottom:${PAD_BOTTOM - 5}mm;
       border-top:1px solid #eee;padding-top:4px;font-size:8px;color:#bbb;display:flex;justify-content:space-between">
       <span>Vision Palace · ${month} · underlag för redovisning</span>

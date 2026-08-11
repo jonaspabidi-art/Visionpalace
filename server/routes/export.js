@@ -119,7 +119,12 @@ module.exports = () => {
       if (pErr) {
         push(`Kunde inte läsas: ${pErr.message}`);
       } else {
-        push('Datum', 'Vara', 'Ref', 'Antal', 'Inköpspris (EUR)', 'Summa (EUR)', 'Källa', 'Inlagt av', 'Dokument');
+        // Fakturans egna belopp står bredvid euro-priset. Leverantörsfakturorna
+        // kommer i kronor och euro-priset är omräknat med en kurs vi valt
+        // själva — bokföringen ska kunna stämmas av mot fakturan, inte mot
+        // vår omräkning.
+        push('Datum', 'Vara', 'Ref', 'Antal', 'Inköpspris (EUR)', 'Summa (EUR)',
+          'Fakturapris', 'Fakturasumma', 'Valuta', 'Kurs', 'Källa', 'Inlagt av', 'Dokument');
         let buyTotal = 0;
         for (const p of purchases || []) {
           const qty = p.qty || 1;
@@ -127,11 +132,19 @@ module.exports = () => {
           buyTotal += unit * qty;
           const source = p.source === 'order_import' ? 'Fakturaimport'
             : p.source === 'preorder' ? 'Förbeställning' : 'Manuell';
+          const origUnit = p.buy_price_original == null ? null : parseFloat(p.buy_price_original);
+          const currency = p.buy_currency || null;
+          const fx = p.fx_rate == null ? null : parseFloat(p.fx_rate);
+          const origAmount = origUnit == null ? null : origUnit * qty;
           push(date(p.purchased_at), p.name || '', p.ref_code || '', qty, num(unit), num(unit * qty),
+            origUnit == null ? '' : num(origUnit), origAmount == null ? '' : num(origAmount),
+            currency || '', fx == null ? '' : num(fx),
             source, p.admins?.display_name || p.admins?.username || '', p.document_url || '');
           report.purchases.push({
             date: date(p.purchased_at), name: p.name || '', ref: p.ref_code || '',
             qty, unit, amount: unit * qty, source,
+            original_unit: origUnit, original_amount: origAmount,
+            currency, fx_rate: fx,
             added_by: p.admins?.display_name || p.admins?.username || '',
             document: p.document_url || '',
           });

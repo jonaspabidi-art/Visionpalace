@@ -171,20 +171,39 @@ module.exports = () => {
             added_at: now,
           });
         }
-        purchaseRows.push({
+        // Vad fakturan faktiskt sa. Euro-priset är omräknat med en kurs vi
+        // valt själva och kan därför inte stämmas av mot en SEK-faktura —
+        // originalet är det bokföringen behöver.
+        const row = {
           admin_id: req.adminId, inventory_id: null,
           name, ref_code: it.ref_code || null,
           buy_price: buy, qty,
           source: 'order_import', document_url: document_url || null,
           purchased_at: now,
-        });
+        };
+        const orig = it.buy_original == null || it.buy_original === '' ? null : Number(it.buy_original);
+        const cur = String(it.buy_currency || '').trim().toUpperCase();
+        if (orig != null && Number.isFinite(orig) && cur) {
+          row.buy_price_original = orig;
+          row.buy_currency = cur;
+          const fx = Number(it.fx_rate);
+          if (Number.isFinite(fx) && fx > 0) row.fx_rate = fx;
+        }
+        purchaseRows.push(row);
       }
 
       const { data: created, error } = await supabase.from('inventory').insert(invRows).select();
       if (error) return res.status(500).json({ error: `Kunde inte skapa lagerrader: ${error.message}` });
 
       // Bookkeeping must never undo stock that was just created
-      const { error: pErr } = await supabase.from('purchases').insert(purchaseRows);
+      let { error: pErr } = await supabase.from('purchases').insert(purchaseRows);
+      // Har 012 inte körts än finns inte valutakolumnerna. Hellre en inköpsrad
+      // utan originalbelopp än ingen inköpsrad alls — lagret är redan skapat.
+      if (pErr && /buy_price_original|buy_currency|fx_rate/.test(pErr.message || '')) {
+        console.warn('[Order] Valutakolumnerna saknas (kör 012) — loggar inköpen utan originalbelopp');
+        const stripped = purchaseRows.map(({ buy_price_original, buy_currency, fx_rate, ...rest }) => rest);
+        ({ error: pErr } = await supabase.from('purchases').insert(stripped));
+      }
       if (pErr) console.error(`[Order] Lagret skapades men inköpsloggen misslyckades: ${pErr.message}`);
 
       console.log(`[Order] Importerade ${invRows.length} lagerrader från ${purchaseRows.length} fakturarader`);

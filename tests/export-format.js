@@ -20,9 +20,15 @@ const mock = http.createServer((req,res)=>{
     if (p==='/rest/v1/sales') return res.end(JSON.stringify(SALES));
     if (p==='/rest/v1/admins') return res.end(JSON.stringify({ display_name:'Vision Palace' }));
     if (p==='/rest/v1/purchases') return res.end(JSON.stringify([
+      // Fakturan kom i kronor: 12 072 kr för 2 par, omräknat med kursen 11
       { purchased_at:'2026-07-03T09:00:00Z', name:'Cartier Première', ref_code:'CT0582S-005',
         qty:2, buy_price:'1097.45', source:'preorder', document_url:'https://x/cartier.pdf',
-        admins:{ display_name:'Vision Palace 2' } }]));
+        buy_price_original:'6036', buy_currency:'SEK', fx_rate:'11',
+        admins:{ display_name:'Vision Palace 2' } },
+      // Inlagt innan valutan började sparas — får inte visa ett påhittat original
+      { purchased_at:'2026-07-04T09:00:00Z', name:'Gammal vara', ref_code:'CT9',
+        qty:1, buy_price:'500', source:'manual', document_url:null,
+        admins:{ display_name:'Vision Palace' } }]));
     if (p==='/rest/v1/sale_payments') return res.end(JSON.stringify([
       { sale_id:'s1', paid_at:'2026-07-12T12:00:00Z', amount:'2415', note:'Bank', image_url:'https://x/k.jpg' }]));
     // Lagret har en rad per fysiskt par — tre likadana ska bli EN rad med
@@ -71,14 +77,27 @@ mock.listen(0,'127.0.0.1',()=>{
       ['belopp och vinst som tal, inte text', typeof d.sales[0].amount==='number' && d.sales[0].profit===1302.55],
       ['frakt utan inköpspris har ingen vinst', d.sales[1].profit===null],
       ['betaldatum följer med', d.sales[0].paid_at==='2026-07-12'],
-      ['inköpen följer med', d.purchases.length===1 && d.purchases[0].qty===2],
+      ['inköpen följer med', d.purchases.length===2 && d.purchases[0].qty===2],
       ['förbeställning märks som källa', d.purchases[0].source==='Förbeställning'],
       ['betalningarna följer med', d.payments.length===1 && d.payments[0].amount===2415],
       // Samma siffror i båda formaten
       ['omsättningen stämmer mot CSV', d.totals.revenue===2415 && csv.includes('2415,00')],
       ['vinsten stämmer mot CSV', d.totals.profit===1302.55 && csv.includes('1302,55')],
-      ['inköpssumman stämmer mot CSV', d.totals.purchases===2194.9 && csv.includes('2194,90')],
+      ['inköpssumman stämmer mot CSV', d.totals.purchases===2694.9 && csv.includes('2194,90')],
       ['ogiltig månad avvisas även för JSON', bad.status===400],
+
+      // Fakturans egen valuta — euro-priset är omräknat med en kurs vi valt
+      // själva och går aldrig att stämma av mot en SEK-faktura
+      ['fakturans belopp per styck följer med', d.purchases[0].original_unit===6036],
+      ['fakturans radsumma räknas ut', d.purchases[0].original_amount===12072],
+      ['valutan följer med', d.purchases[0].currency==='SEK'],
+      ['kursen som användes sparas', d.purchases[0].fx_rate===11],
+      ['euro-priset lämnas orört', d.purchases[0].unit===1097.45],
+      ['inköp utan original hittar inte på ett',
+        d.purchases[1].original_amount===null && d.purchases[1].currency===null],
+      ['CSV har fakturakolumnerna',
+        csv.includes('Fakturapris;Fakturasumma;Valuta;Kurs')],
+      ['CSV visar fakturans summa i kronor', csv.includes('12072,00')],
 
       // Lagerstatus — samma siffror i CSV och JSON
       ['säljraden bär sitt köp-id så PDF:en kan gruppera', d.sales[0].sale_id==='s1'],
