@@ -500,12 +500,16 @@ async function loadSalesHistory() {
     }
 
     // Group by month (YYYY-MM)
+    // Avbrutna köp ligger kvar i listan men räknas inte in i omsättning eller
+    // vinst — samma regel som avräkningen, bokföringen och kundens köphistorik.
+    // Annars visade månadsraden en vinst som aldrig kom in.
     const months = {};
     let totalRevAll = 0, totalProfAll = 0;
     for (const sale of sales) {
       const key = sale.created_at.substring(0, 7);
       if (!months[key]) months[key] = { sales: [], revenue: 0, profit: 0 };
       months[key].sales.push(sale);
+      if (sale.status === 'cancelled') continue;
       for (const item of (sale.sale_items || [])) {
         const rev = (parseFloat(item.sell_price) || 0) * (item.qty || 1);
         const cost = (parseFloat(item.buy_price) || 0) * (item.qty || 1);

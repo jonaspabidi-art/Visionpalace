@@ -9,6 +9,7 @@ const TESTS = [
   ['tests/ui-export-pdf.js', '/tmp'],
   ['tests/ui-discount.js'],
   ['tests/ui-client-history.js', '/tmp'],
+  ['tests/ui-history-cancelled.js', '/tmp'],
 ];
 
 const ping = () => new Promise(res => {
