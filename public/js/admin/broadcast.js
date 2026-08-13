@@ -86,7 +86,11 @@ function bcBubbleHTML(b) {
   const pending = !!b._pending;
   const failed = !!b._failed;
 
-  const imgSrc = m => m.storage_url || '';
+  // Miniatyren i feeden, originalet i lightboxen. Ett inlägg med fyra
+  // mobilbilder laddade förut originalen — det är det som fått feeden att
+  // hacka. Under uppladdning är thumbnail_url en lokal blob, så den duger
+  // som förhandsvisning också.
+  const imgSrc = m => m.thumbnail_url || m.storage_url || '';
   const imgAttrs = m => (pending || failed)
     ? ''
     : `data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)"`;
@@ -97,13 +101,13 @@ function bcBubbleHTML(b) {
     mediaHTML = m.storage_url
       ? (m.type === 'video'
         ? `<video src="${m.storage_url}" ${pending ? '' : 'controls'} style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px"></video>`
-        : `<img src="${imgSrc(m)}" ${imgAttrs(m)} style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:${pending ? 'default' : 'pointer'}" loading="lazy">`)
+        : `<img src="${imgSrc(m)}" ${imgAttrs(m)} style="max-width:220px;border-radius:10px;display:block;margin-bottom:6px;cursor:${pending ? 'default' : 'pointer'}" loading="lazy" decoding="async">`)
       : '';
   } else if (media.length > 1) {
     const items = media.map(m => m.storage_url
       ? (m.type === 'video'
           ? `<video src="${m.storage_url}" ${pending ? '' : 'controls'} playsinline></video>`
-          : `<img src="${imgSrc(m)}" ${imgAttrs(m)} loading="lazy">`)
+          : `<img src="${imgSrc(m)}" ${imgAttrs(m)} loading="lazy" decoding="async">`)
       : ''
     ).join('');
     mediaHTML = `<div class="bc-media-strip-admin">${items}</div>`;

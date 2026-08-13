@@ -11,6 +11,7 @@ const TESTS = [
   ['tests/ui-discount.js'],
   ['tests/ui-client-history.js', '/tmp'],
   ['tests/ui-history-cancelled.js', '/tmp'],
+  ['tests/ui-feed-media.js', '/tmp'],
 ];
 
 const ping = () => new Promise(res => {

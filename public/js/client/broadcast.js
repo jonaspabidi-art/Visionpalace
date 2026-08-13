@@ -49,6 +49,15 @@ function renderFeed() {
   observeAllRows();
 }
 
+// Feeden visade originalfilerna — en obeskuren mobilbild per bild, flera per
+// inlägg, alla avkodade samtidigt. Miniatyrerna har funnits hela tiden (de
+// skapas vid uppladdning) men användes bara i chatten. Originalet hänger kvar
+// i data-full, så lightboxen fortfarande visar full kvalitet.
+function bcImgHTML(m) {
+  return `<img src="${m.thumbnail_url || m.storage_url}" data-full="${m.storage_url}"
+    onclick="openLightbox(this.dataset.full)" loading="lazy" decoding="async">`;
+}
+
 function bcBubbleHTML(b) {
   const time = new Date(b.created_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   const media = b.broadcast_media || [];
@@ -72,7 +81,7 @@ function bcBubbleHTML(b) {
       m.storage_url
         ? (m.type==='video'
             ? `<video src="${m.storage_url}" controls playsinline preload="metadata"></video>`
-            : `<img src="${m.storage_url}" data-full="${m.storage_url}" onclick="openLightbox(this.dataset.full)">`)
+            : bcImgHTML(m))
         : `<div style="flex-shrink:0;width:82%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--surface2);font-size:12px;color:var(--text3)">Unavailable</div>`
     ).join('');
     return `<div class="bc-row" data-bc-id="${b.id}">
@@ -88,7 +97,7 @@ function bcBubbleHTML(b) {
     ? `<div class="bc-media">${media[0].storage_url
         ? (media[0].type==='video'
             ? `<video src="${media[0].storage_url}" controls playsinline preload="metadata"></video>`
-            : `<img src="${media[0].storage_url}" data-full="${media[0].storage_url}" onclick="openLightbox(this.dataset.full)">`)
+            : bcImgHTML(media[0]))
         : `<div class="media-expired">Media no longer available</div>`
       }</div>` : '';
 
