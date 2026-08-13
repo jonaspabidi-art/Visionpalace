@@ -63,6 +63,7 @@ function renderFeed(scrollToBottom = false) {
     html += bcBubbleHTML(b);
   }
   feed.innerHTML = html;
+  setupStrips();
   if (scrollToBottom || prevScrollBottom < 60) pinFeedToBottom();
 }
 
@@ -73,8 +74,57 @@ function appendBroadcast(b) {
   if (empty) empty.remove();
   const div = document.createElement('div');
   div.innerHTML = bcBubbleHTML(b);
-  feed.appendChild(div.firstElementChild);
+  const row = div.firstElementChild;
+  feed.appendChild(row);
+  setupStrips(row);
   requestAnimationFrame(pinFeedToBottom);
+}
+
+// ── Bildremsan ──
+// Samma grepp som i kundappen: remsan scrollar nativt, pilarna knuffar den ett
+// steg och räknaren följer med. Steget räknas ur första bildens bredd så det
+// stämmer även när fönstret är smalt.
+function stripStep(strip) {
+  const first = strip.querySelector('img, video');
+  if (!first) return strip.clientWidth;
+  const gap = parseFloat(getComputedStyle(strip).gap) || 0;
+  return first.getBoundingClientRect().width + gap;
+}
+
+function stripNav(btn, dir) {
+  const strip = btn.closest('.bc-strip-wrap')?.querySelector('.bc-media-strip-admin');
+  if (!strip) return;
+  strip.scrollBy({ left: dir * stripStep(strip), behavior: 'smooth' });
+}
+
+function syncStrip(wrap) {
+  const strip = wrap.querySelector('.bc-media-strip-admin');
+  if (!strip) return;
+  const step = stripStep(strip);
+  const total = strip.querySelectorAll('img, video').length;
+  const i = step ? Math.round(strip.scrollLeft / step) : 0;
+  const count = wrap.querySelector('.strip-count');
+  if (count) count.textContent = `${Math.min(total, i + 1)}/${total}`;
+  wrap.querySelector('.strip-nav.prev')?.toggleAttribute('hidden', strip.scrollLeft < 4);
+  wrap.querySelector('.strip-nav.next')?.toggleAttribute('hidden',
+    strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
+}
+
+// Feeden byggs om med innerHTML, så lyssnarna måste sättas om efter varje
+// rendering.
+function setupStrips(root = document) {
+  root.querySelectorAll('.bc-strip-wrap').forEach(wrap => {
+    const strip = wrap.querySelector('.bc-media-strip-admin');
+    if (!strip || strip.dataset.navReady) return;
+    strip.dataset.navReady = '1';
+    let queued = false;
+    strip.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; syncStrip(wrap); });
+    }, { passive: true });
+    syncStrip(wrap);
+  });
 }
 
 function bcBubbleHTML(b) {
@@ -110,7 +160,12 @@ function bcBubbleHTML(b) {
           : `<img src="${imgSrc(m)}" ${imgAttrs(m)} loading="lazy" decoding="async">`)
       : ''
     ).join('');
-    mediaHTML = `<div class="bc-media-strip-admin">${items}</div>`;
+    mediaHTML = `<div class="bc-strip-wrap">
+      <div class="bc-media-strip-admin">${items}</div>
+      <button class="strip-nav prev" hidden aria-label="Föregående bild" onclick="stripNav(this,-1)">‹</button>
+      <button class="strip-nav next" aria-label="Nästa bild" onclick="stripNav(this,1)">›</button>
+      <div class="strip-count">1/${media.length}</div>
+    </div>`;
   }
 
   let footerHTML;

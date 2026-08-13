@@ -308,11 +308,32 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .bc-bubble-media video {
   max-width: 220px; width: 100%; border-radius: 10px; display: block;
 }
+/* Remsan går utanför bubblan. Den negativa marginalen sitter på omslaget så
+   att pilarna hamnar vid bildens kant och inte vid bubblans. */
+.bc-strip-wrap { position: relative; margin: -10px -13px 10px; }
 .bc-media-strip-admin {
   display: flex; overflow-x: auto; overflow-y: hidden;
   scroll-snap-type: x mandatory; scrollbar-width: none; gap: 3px;
   -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
-  margin: -10px -13px 10px; border-radius: 18px 18px 0 0;
+  border-radius: 18px 18px 0 0;
+}
+.strip-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.22);
+  color: #fff; font-size: 19px; line-height: 1; padding: 0 0 3px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 3; font-family: inherit; transition: opacity .18s;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.strip-nav.prev { left: 8px; }
+.strip-nav.next { right: 8px; }
+.strip-nav[hidden] { display: flex; opacity: 0; pointer-events: none; }
+.strip-count {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  background: rgba(0,0,0,.55); color: #fff; border-radius: 20px;
+  padding: 3px 9px; font-size: 11px; font-weight: 600; letter-spacing: .3px;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .bc-media-strip-admin::-webkit-scrollbar { display: none; }
 .bc-media-strip-admin img {

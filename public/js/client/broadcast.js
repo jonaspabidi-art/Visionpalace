@@ -47,6 +47,7 @@ function renderFeed() {
   }
   scroll.innerHTML = html;
   observeAllRows();
+  setupStrips();
 }
 
 // Feeden visade originalfilerna — en obeskuren mobilbild per bild, flera per
@@ -87,7 +88,12 @@ function bcBubbleHTML(b) {
     return `<div class="bc-row" data-bc-id="${b.id}">
       ${mark}
       <div class="bc-wrap">
-        <div class="bc-media-strip">${stripItems}</div>
+        <div class="bc-strip-wrap">
+          <div class="bc-media-strip">${stripItems}</div>
+          <button class="strip-nav prev" hidden aria-label="Previous image" onclick="stripNav(this,-1)">‹</button>
+          <button class="strip-nav next" aria-label="Next image" onclick="stripNav(this,1)">›</button>
+          <div class="strip-count">1/${media.length}</div>
+        </div>
         <div class="bc-bubble${b.is_pinned?' pinned':''}">${bubbleInner}</div>
       </div>
     </div>`;
@@ -108,6 +114,56 @@ function bcBubbleHTML(b) {
       ${bubbleInner}
     </div>
   </div>`;
+}
+
+// ── Bildremsan ──
+// Remsan scrollar nativt med snap; pilarna knuffar den ett steg. Att räkna ut
+// steget ur första bildens bredd i stället för att gissa gör att det stämmer
+// även när bubblan är smalare, t.ex. i liggande läge.
+function stripStep(strip) {
+  const first = strip.querySelector('img, video');
+  if (!first) return strip.clientWidth;
+  const gap = parseFloat(getComputedStyle(strip).gap) || 0;
+  return first.getBoundingClientRect().width + gap;
+}
+
+function stripNav(btn, dir) {
+  const strip = btn.closest('.bc-strip-wrap')?.querySelector('.bc-media-strip');
+  if (!strip) return;
+  strip.scrollBy({ left: dir * stripStep(strip), behavior: 'smooth' });
+}
+
+// Räknaren och pilarna följer scrollen. Uppdateringen sker i en rAF så att en
+// snabb svepning inte kostar ett layoutanrop per scrollhändelse.
+function syncStrip(wrap) {
+  const strip = wrap.querySelector('.bc-media-strip');
+  if (!strip) return;
+  const step = stripStep(strip);
+  const total = strip.querySelectorAll('img, video').length;
+  const i = step ? Math.round(strip.scrollLeft / step) : 0;
+  const atStart = strip.scrollLeft < 4;
+  const atEnd = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4;
+  const count = wrap.querySelector('.strip-count');
+  if (count) count.textContent = `${Math.min(total, i + 1)}/${total}`;
+  wrap.querySelector('.strip-nav.prev')?.toggleAttribute('hidden', atStart);
+  wrap.querySelector('.strip-nav.next')?.toggleAttribute('hidden', atEnd);
+}
+
+// Feeden byggs om med innerHTML, så lyssnarna måste sättas om efter varje
+// rendering — precis som seen-observatören.
+function setupStrips(root = document) {
+  root.querySelectorAll('.bc-strip-wrap').forEach(wrap => {
+    const strip = wrap.querySelector('.bc-media-strip');
+    if (!strip || strip.dataset.navReady) return;
+    strip.dataset.navReady = '1';
+    let queued = false;
+    strip.addEventListener('scroll', () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; syncStrip(wrap); });
+    }, { passive: true });
+    syncStrip(wrap);
+  });
 }
 
 // Pin the feed to the newest broadcast and keep it there while media loads.
@@ -162,6 +218,7 @@ function appendBroadcast(b) {
     const el = div.firstElementChild;
     s.appendChild(el);
     _observeRow(el);
+    setupStrips(el);
   }
   if (atBottom) scrollFeedBottom();
 }

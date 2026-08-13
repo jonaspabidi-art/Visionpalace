@@ -13,6 +13,7 @@ const TESTS = [
   ['tests/ui-history-cancelled.js', '/tmp'],
   ['tests/ui-feed-media.js', '/tmp'],
   ['tests/ui-client-login.js'],
+  ['tests/ui-feed-arrows.js', '/tmp'],
 ];
 
 const ping = () => new Promise(res => {
