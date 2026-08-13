@@ -2,15 +2,37 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault(); deferredPWA = e;
-  if (!localStorage.getItem('vp_pwa_dismissed')) document.getElementById('pwa-banner').classList.add('show');
+  if (!vpStore.getItem('vp_pwa_dismissed')) document.getElementById('pwa-banner').classList.add('show');
 });
 document.getElementById('pwa-install').onclick = async () => {
   if (deferredPWA) { deferredPWA.prompt(); await deferredPWA.userChoice; deferredPWA = null; }
   document.getElementById('pwa-banner').classList.remove('show');
 };
 document.getElementById('pwa-dismiss').onclick = () => {
-  localStorage.setItem('vp_pwa_dismissed','1');
+  vpStore.setItem('vp_pwa_dismissed','1');
   document.getElementById('pwa-banner').classList.remove('show');
+};
+
+// Facebook, Instagram och liknande öppnar länkar i en egen webbläsare. Där går
+// appen inte att installera, notiser fungerar inte, och lagringen är ofta
+// begränsad så inloggningen inte överlever en omladdning. Att peka ut vägen
+// ut ur den är den enda riktiga lösningen — den går inte att koda bort.
+function isInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  // FBAN/FBAV = Facebook, Instagram = Instagram, Line/MicroMessenger = vanliga i Asien
+  if (/FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Twitter/i.test(ua)) return true;
+  // iOS-webbvyer saknar standalone-flaggan som Safari har
+  const iOS = /iPhone|iPad|iPod/.test(ua);
+  if (iOS && !/Safari/.test(ua) && !window.navigator.standalone) return true;
+  return false;
+}
+
+if (isInAppBrowser() && !vpStore.getItem('vp_inapp_dismissed')) {
+  document.getElementById('inapp-banner').classList.add('show');
+}
+document.getElementById('inapp-dismiss').onclick = () => {
+  vpStore.setItem('vp_inapp_dismissed', '1');
+  document.getElementById('inapp-banner').classList.remove('show');
 };
 
 function switchTab(tab) {

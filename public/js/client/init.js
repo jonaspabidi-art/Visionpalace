@@ -42,7 +42,7 @@ if (session?.session_token) {
   fetch('/api/messages/me/thread', { headers:{'x-session-token':session.session_token} })
     .then(r => {
       if (r.ok) hideSplash(initApp);
-      else { session = null; localStorage.removeItem('vp_session'); hideSplash(showLogin); }
+      else { session = null; vpStore.removeItem('vp_session'); hideSplash(showLogin); }
     })
     .catch(() => hideSplash(showLogin));
 } else {
