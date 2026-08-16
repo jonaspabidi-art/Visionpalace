@@ -25,6 +25,18 @@ function showLbImage() {
   img.style.transform = 'scale(1)';
   lbScale = 1;
   document.getElementById('lb-counter').textContent = lbImages.length > 1 ? `${lbIndex + 1} / ${lbImages.length}` : '';
+  // Svep har alltid fungerat här, men ingenting visade att det gick. Pilarna
+  // gömms vid ändarna i stället för att sitta kvar och inte göra något.
+  const many = lbImages.length > 1;
+  document.getElementById('lb-prev')?.toggleAttribute('hidden', !many || lbIndex === 0);
+  document.getElementById('lb-next')?.toggleAttribute('hidden', !many || lbIndex === lbImages.length - 1);
+}
+
+function lbStep(dir) {
+  const next = lbIndex + dir;
+  if (next < 0 || next >= lbImages.length) return;
+  lbIndex = next;
+  showLbImage();
 }
 function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
 
@@ -34,7 +46,14 @@ _lb.addEventListener('click', e => { if (e.target === _lb || e.target.id === 'lb
 document.getElementById('lb-save').addEventListener('click', () => {
   if (lbImages[lbIndex]) saveMedia(lbImages[lbIndex]);
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+document.getElementById('lb-prev').addEventListener('click', e => { e.stopPropagation(); lbStep(-1); });
+document.getElementById('lb-next').addEventListener('click', e => { e.stopPropagation(); lbStep(1); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') return closeLightbox();
+  if (!_lb.classList.contains('open')) return;
+  if (e.key === 'ArrowLeft') lbStep(-1);
+  else if (e.key === 'ArrowRight') lbStep(1);
+});
 _lb.addEventListener('touchstart', e => {
   if (e.touches.length === 1) lbTouchStartX = e.touches[0].clientX;
   else if (e.touches.length === 2)

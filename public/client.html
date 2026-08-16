@@ -258,11 +258,22 @@
   <button id="pwa-dismiss">×</button>
 </div>
 
+<!-- Öppnad inifrån Facebook, Instagram eller liknande. Där går appen inte att
+     installera, notiser fungerar inte, och lagringen är ofta begränsad. -->
+<div id="inapp-banner">
+  <p><strong>Open in your browser</strong><br>
+  You're viewing this inside another app. Tap <span class="inapp-dots">•••</span> above and choose
+  <em>Open in browser</em> to sign in, install the app and get notifications.</p>
+  <button id="inapp-dismiss">×</button>
+</div>
+
 <!-- Lightbox -->
 <div id="lightbox">
   <button id="lb-close">×</button>
   <button id="lb-save" title="Save image">↓</button>
   <div id="lb-counter"></div>
+  <button class="lb-nav prev" id="lb-prev" aria-label="Previous image">‹</button>
+  <button class="lb-nav next" id="lb-next" aria-label="Next image">›</button>
   <img id="lb-img" src="" alt="">
 </div>
 

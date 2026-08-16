@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+
+# Internt arbetsunderlag — hör inte hemma i ett publikt repo
+ATGARDSPLAN.md

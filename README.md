@@ -1,144 +1,191 @@
-# Vision Palace – Setup Guide
+# Vision Palace
 
-## 1. Supabase – Kör SQL-schemat
+A wholesale platform for a luxury eyewear distributor — inventory, sales, invoicing,
+customer relationships and Swedish bookkeeping, in one installable web app.
 
-1. Gå till [supabase.com](https://supabase.com) → ditt projekt → **SQL Editor**
-2. Kör hela innehållet i `supabase/schema.sql`
-3. Kör `supabase/cleanup-function.sql` (kräver att `pg_cron`-tillägget är aktiverat under **Database → Extensions**)
+Two apps share one codebase and one realtime backend:
 
-### Supabase Storage
-Schemat skapar automatiskt `media`-bucketen med publika läsrättigheter.  
-Verifiera under **Storage → Buckets** att `media`-bucketen är skapad och markerad som **Public**.
+| | Who | Language |
+|---|---|---|
+| **`/admin`** | The two owners | Swedish |
+| **`/client`** | Wholesale buyers | English |
 
----
+Buyers install it from an invite link, browse what just landed, message the owners
+and see their own purchase history. The owners run the whole business from the
+other side — stock, sales, invoices, payments and the monthly file their
+accountant needs.
 
-## 2. OneSignal – Konfigurera push-notiser
-
-1. Gå till [onesignal.com](https://onesignal.com) → skapa en ny app
-2. Välj **Web Push**
-3. Ange din Railway-URL (ex. `https://vision-palace.up.railway.app`)
-4. Kopiera **App ID** och **REST API Key** till `.env`
-5. Under **Settings → Keys & IDs**, se till att Web Push är aktiverat
+Built as a PWA so it installs on a phone home screen with push notifications,
+without an app store.
 
 ---
 
-## 3. Railway – Driftsätt
+## What it does
 
-### Alternativ A: Direkt från GitHub
+### For the buyer
 
-1. Pusha koden till ett GitHub-repo
-2. Gå till [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo**
-3. Välj repot och låt Railway auto-detektera Node.js
+- **Feed of new arrivals** — photos, prices, pinned posts, one-tap "interested"
+- **Direct chat** with the owners, images included, read receipts and typing indicators
+- **Purchases** — every order with monthly totals, outstanding balance, downloadable
+  statement, and re-order in one tap
+- **Pre-orders** show a live estimate of how long is left before the pair arrives
+- **Push notifications** when an order ships or a message comes in
 
-### Alternativ B: Railway CLI
+### For the owners
+
+- **Inventory** — one row per physical pair, grouped by model in the UI, so four
+  identical frames read as *one card, quantity 4* instead of four duplicates
+- **AI invoice import** — photograph a supplier invoice and Claude reads the article
+  numbers, quantities and line totals into a reviewable list. Nothing is imported
+  without confirmation; a misread reference code would poison the product catalogue
+  for years
+- **Sales** — multiple pairs per sale, shipping, discounts, walk-in customers who
+  aren't in the app, and pre-orders sold before the stock exists
+- **Invoicing** — branded PDF invoices generated in the browser
+- **Bookkeeping export** — see below
+- **Partner settlement** — a derived ledger splitting profit between the two owners
+
+---
+
+## The bookkeeping export
+
+The part with the most rules in it, and the reason for most of the architecture.
+
+Sales are priced in **euro**. Supplier invoices arrive in **kronor**. The books are
+kept in **kronor**. Getting that wrong by a few percent every month is invisible
+until an audit, so the export follows two separate rules:
+
+- **Sales** are converted at **Riksbanken's official daily rate** for the day the
+  sale happened. Weekends and public holidays carry the last published rate forward,
+  which is also the accounting convention.
+- **Purchases invoiced in kronor are taken at the invoice amount, never converted.**
+  Re-deriving them from our euro price would produce a number that doesn't match the
+  paper the accountant is holding.
+
+Rates are cached per calendar day, so re-exporting a month produces exactly the
+figures already booked, and a month with forty sales costs one API call rather than
+forty. If the rate source is unreachable the export still works — but every figure is
+flagged and the document says in plain language that it is *not fit for bookkeeping*.
+A wrong rate looks exactly like a right one, so silence was the dangerous option.
+
+Two formats from the same data:
+
+- **CSV** for the accounting software — semicolons, decimal commas, UTF-8 BOM, the
+  three things Swedish Excel needs to not mangle the file
+- **PDF** for humans — paginated properly, with repeated column headers, page numbers
+  and a closing stock inventory on its own page
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Clients
+    A["/admin<br/>PWA"]
+    C["/client<br/>PWA"]
+  end
+  A <-->|"REST + WebSocket"| S["Express<br/>+ Socket.io"]
+  C <-->|"REST + WebSocket"| S
+  S --> DB[("Supabase<br/>Postgres")]
+  S --> ST[("Supabase<br/>Storage")]
+  S --> P["Web Push<br/>VAPID"]
+  S --> AI["Claude<br/>invoice OCR"]
+  S --> FX["Riksbanken<br/>FX rates"]
+```
+
+**No build step.** Plain ES modules-free JavaScript, served as-is. `git push` is the
+entire deployment pipeline. For a two-person business that has to stay running while
+being changed, a toolchain that can break independently of the code was a liability,
+not an asset.
+
+**Service worker versioning.** `public/sw.js` carries a `CACHE` constant bumped on
+every frontend release. Without it, phones keep serving yesterday's JavaScript against
+today's API.
+
+**Media is stored twice.** Every upload is resized to a thumbnail at write time.
+Feeds and chat load thumbnails; only the lightbox fetches the original. A post with
+four phone photos is ~600 kB instead of ~16 MB.
+
+---
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Server | Node.js, Express, Socket.io |
+| Database | Supabase (PostgreSQL) |
+| Files | Supabase Storage + `sharp` for thumbnails |
+| Auth | JWT for owners, session tokens for buyers, `scrypt` password hashing |
+| Push | Web Push (VAPID) |
+| Frontend | Vanilla JavaScript, no framework, no bundler |
+| PDF | `html2pdf` in the browser |
+| AI | Anthropic Claude with structured JSON output |
+| Hosting | Railway |
+
+---
+
+## Testing
 
 ```bash
-npm install -g @railway/cli
-railway login
-railway new
-railway up
+npm test         # server tests, no browser needed
+npm run test:ui  # browser tests — starts the app itself, then shuts it down
 ```
 
-### Miljövariabler i Railway
+Two suites, both running against real code rather than mocks of our own logic:
 
-Gå till din tjänst → **Variables** och lägg till:
+**Server tests** run the real Express routes and the real Supabase client against a
+mock PostgREST server. Export arithmetic, currency handling, inventory cleanup and
+discount maths are checked end to end.
 
-```
-SUPABASE_URL=https://kjmewtltinaqpfkwgnpb.supabase.co
-SUPABASE_ANON_KEY=<din nyckel>
-SUPABASE_SERVICE_KEY=<din nyckel>
-JWT_SECRET=VisionPalace2024xK9mPqR7nLwZ3bN8
-ADMIN_PASSWORD=<välj ditt lösenord>
-ONESIGNAL_APP_ID=90d6532e-6887-42ce-8646-4354e6aa77fe
-ONESIGNAL_API_KEY=<din nyckel>
-PORT=3000
-```
+**Browser tests** drive real Chromium against a real server instance. They assert
+things text alone cannot: that PDF pages are exactly A4 and nothing overflows the
+paper, that the feed downloads thumbnails rather than originals, that a login screen
+survives a browser with storage disabled.
 
-> **Viktig säkerhetsnotering:** Ändra `ADMIN_PASSWORD` till ett starkt lösenord innan driftsättning!
+Every test in this repository has been verified to **fail when the bug it covers is
+reintroduced**. A test that cannot fail is worse than no test, because it reports
+confidence it hasn't earned.
 
 ---
 
-## 4. Ikoner (PWA)
+## Running it yourself
 
-Placera `icon-192.png` och `icon-512.png` i `public/icons/`.  
-Använd en enkel design med "VP" på mörk bakgrund (#1a1a1a).
+**Requirements:** Node 18+, a Supabase project.
 
----
+```bash
+npm install
+cp .env.example .env      # then fill it in
+npm run dev
+```
 
-## 5. Användning
+Run the migrations in `supabase/migrations/` in numerical order, in the Supabase SQL
+editor. Every one is idempotent and safe to re-run.
 
-### Admin
-- Gå till `https://din-app.up.railway.app/admin`
-- Logga in med `ADMIN_PASSWORD`
-- Skapa inbjudningslänkar via **"Bjud in klienter"**
-- Publicera lageruppdateringar med text, pris och media
-
-### Klienter
-- Dela inbjudningslänken: `https://din-app.up.railway.app/join/<token>`
-- Klienten väljer ett visningsnamn och loggas in permanent
-- Kan se sändningar och chatta med admin privat
+Environment variables are documented in [`.env.example`](.env.example). Never commit
+the filled-in file — `SUPABASE_SERVICE_KEY` bypasses row-level security entirely.
 
 ---
 
-## 6. Filstruktur
+## Project structure
 
 ```
-vision-palace/
-├── server/
-│   └── index.js          ← Express + Socket.io backend
-├── public/
-│   ├── admin.html        ← Admin-gränssnitt
-│   ├── client.html       ← Klientgränssnitt (PWA)
-│   ├── manifest.json     ← PWA manifest
-│   ├── sw.js             ← Service worker
-│   └── icons/            ← PWA-ikoner (lägg till manuellt)
-├── supabase/
-│   ├── schema.sql        ← Databasschema
-│   └── cleanup-function.sql ← Schemalagd mediaborttagning
-├── .env                  ← Lokala miljövariabler (delas ej)
-├── package.json
-└── README.md
+server/
+  index.js            Express + Socket.io bootstrap
+  routes/             one file per domain: sales, inventory, export, orders…
+  lib/                auth, uploads, FX rates, Supabase client
+public/
+  admin.html          owner app
+  client.html         buyer app (PWA)
+  js/admin/           owner app modules
+  js/client/          buyer app modules
+  sw.js               service worker — bump CACHE on every release
+supabase/migrations/  numbered, idempotent SQL
+tests/                server and browser suites
 ```
 
 ---
 
-## 7. API-dokumentation (snabbreferens)
+## License
 
-| Metod | Endpoint | Auth | Beskrivning |
-|-------|----------|------|-------------|
-| POST | `/api/auth/admin` | — | Admin-inloggning |
-| POST | `/api/invite` | Admin JWT | Skapa inbjudningslänkar |
-| POST | `/api/join/:token` | — | Klient går med |
-| GET | `/api/broadcasts` | Båda | Hämta alla sändningar |
-| POST | `/api/broadcasts` | Admin | Publicera sändning |
-| PATCH | `/api/broadcasts/:id/pin` | Admin | Fäst/lossa sändning |
-| POST | `/api/reactions/:broadcastId` | Klient | Reagera på sändning |
-| GET | `/api/clients` | Admin | Lista alla klienter |
-| GET | `/api/messages/:clientId` | Admin | Hämta tråd |
-| POST | `/api/messages/:clientId` | Admin | Skicka meddelande |
-| POST | `/api/messages/me/send` | Klient | Skicka meddelande |
-| POST | `/api/upload` | Båda | Ladda upp media |
-
----
-
-## 8. WebSocket-händelser
-
-| Händelse | Riktning | Beskrivning |
-|----------|----------|-------------|
-| `admin:new_broadcast` | Server → alla | Ny sändning publicerad |
-| `admin:new_message` | Server → klient | Admin skickade meddelande |
-| `client:new_message` | Server → admins | Klient skickade meddelande |
-| `client:read_receipt` | Server → admins | Klient läste meddelande |
-| `broadcast:new_reaction` | Server → admins | Ny reaktion |
-| `client:last_seen` | Server → admins | Klientaktivitet uppdaterad |
-| `client:typing` | Klient → server | Klient skriver |
-| `admin:typing` | Admin → server | Admin skriver |
-
----
-
-## Mediaborttagning (var 6:e timme)
-
-`cleanup-function.sql` registrerar en `pg_cron`-jobbeschema som:
-- Tar bort alla filer i `broadcast_media` och `message_media` äldre än 48 timmar
-- Raderna i databasen tas bort men sändningarnas text behålls
-- Frontend visar "Bild/video ej längre tillgänglig" för borttagna filer
+Proprietary. All rights reserved.

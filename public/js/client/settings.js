@@ -49,7 +49,7 @@ async function saveProfile() {
     if (d.full_name !== undefined) session.full_name = d.full_name;
     if (d.address !== undefined) session.address = d.address;
     if (d.phone !== undefined) session.phone = d.phone;
-    localStorage.setItem('vp_session', JSON.stringify(session));
+    vpStore.setItem('vp_session', JSON.stringify(session));
     ok.textContent = 'Saved!';
     setTimeout(closeSettings, 1200);
   } catch { err.textContent = 'Connection error.'; }

@@ -189,7 +189,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
   flex-shrink: 0; width: 82%; aspect-ratio: 1; object-fit: cover;
   scroll-snap-align: start; display: block; background: #000;
 }
+/* Bildremsan med fler än en bild. Remsan i sig är oförändrad — pilarna och
+   räknaren ligger ovanpå och kostar inga extra bilder. */
+.bc-strip-wrap { position: relative; }
+.strip-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.22);
+  color: #fff; font-size: 20px; line-height: 1; padding: 0 0 3px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; z-index: 3; font-family: inherit;
+  opacity: 1; transition: opacity .18s;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.strip-nav.prev { left: 8px; }
+.strip-nav.next { right: 8px; }
+/* Dold i stället för borttagen — layouten ska inte hoppa vid ändarna */
+.strip-nav[hidden] { display: flex; opacity: 0; pointer-events: none; }
+.strip-count {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  background: rgba(0,0,0,.55); color: #fff; border-radius: 20px;
+  padding: 3px 9px; font-size: 11px; font-weight: 600; letter-spacing: .3px;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
 .media-expired { font-size: 12px; color: var(--text3); padding: 16px; font-style: italic; text-align: center; }
+
+/* Pilar i lightboxen. Svep fungerade redan men syns inte — man måste veta
+   om det. */
+.lb-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(255,255,255,.12); border: none; color: #fff;
+  font-size: 28px; line-height: 1; padding: 0 0 4px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; z-index: 5;
+  font-family: inherit;
+}
+.lb-nav.prev { left: 12px; }
+.lb-nav.next { right: 12px; }
+.lb-nav[hidden] { display: none; }
 
 .bc-body { padding: 12px 14px 8px; }
 .bc-price { font-size: 22px; font-weight: 800; color: var(--blue); letter-spacing: -0.8px; margin-bottom: 6px; }
@@ -458,6 +495,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI'
 #pwa-banner p { flex: 1; font-size: 13px; color: #a8c8f0; line-height: 1.45; }
 #pwa-install { background: var(--blue); border: none; border-radius: 10px; color: #fff; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
 #pwa-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; }
+
+/* Öppnad inifrån en annan app. Ligger överst, inte nederst som PWA-bannern —
+   den syftar på "•••"-menyn i toppen av den inbyggda webbläsaren. */
+#inapp-banner {
+  display: none; position: fixed; top: calc(var(--safe-top) + 10px); left: 12px; right: 12px;
+  background: #3a2c0c; border: 1px solid rgba(214,178,102,.45); border-radius: 16px;
+  padding: 13px 15px; z-index: 200; align-items: flex-start; gap: 10px;
+}
+#inapp-banner.show { display: flex; }
+#inapp-banner p { flex: 1; font-size: 13px; color: #e8d6ae; line-height: 1.5; }
+#inapp-banner strong { color: #fff; font-size: 14px; }
+#inapp-banner em { font-style: normal; font-weight: 700; color: #fff; }
+.inapp-dots { letter-spacing: 1px; color: #fff; font-weight: 700; }
+#inapp-dismiss { background: none; border: none; color: var(--text3); font-size: 22px; cursor: pointer; line-height: 1; flex-shrink: 0; }
 
 /* ── Purchases view ── */
 .purchases-scroll { flex: 1; overflow-y: auto; padding: 12px 16px 24px; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 12px; }

@@ -27,9 +27,11 @@ async function register() {
   if (password.length < 4) { err.textContent = 'Password must be at least 4 characters.'; return; }
   const btn = document.getElementById('reg-btn');
   btn.textContent = 'Creating account…'; btn.disabled = true;
+  let created = false;
   try {
     const r = await fetch(`/api/join/${inviteToken}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000),
       body: JSON.stringify({
         username,
         full_name: document.getElementById('reg-name').value.trim() || null,
@@ -39,7 +41,8 @@ async function register() {
       })
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Something went wrong.'; btn.textContent = 'Create account'; btn.disabled = false; return; }
+    if (!r.ok) { err.textContent = d.error || 'Something went wrong.'; return; }
+    created = true;
     history.replaceState(null, '', '/client');
     document.getElementById('register-screen').style.display = 'none';
     document.getElementById('success-screen').style.display = 'flex';
@@ -48,7 +51,19 @@ async function register() {
       const ab = document.getElementById('dl-android-btn');
       ab.innerHTML = ab.innerHTML.replace('Download for Android', 'Install on Android');
     }
-  } catch { err.textContent = 'Connection error.'; btn.textContent = 'Create account'; btn.disabled = false; }
+  } catch (e) {
+    // Kontot kan redan vara skapat när felet kommer efter svaret — då är
+    // inbjudan förbrukad och "försök igen" ger "already been used". Säg det
+    // rakt ut i stället för att låta honom fastna.
+    err.textContent = created
+      ? 'Your account was created, but something went wrong here. Try signing in.'
+      : e?.name === 'TimeoutError'
+        ? 'The server did not respond. Check your connection and try again.'
+        : 'Could not create the account. Please try again.';
+    console.error('[VP] Registrering misslyckades:', e);
+  } finally {
+    if (!created) { btn.textContent = 'Create account'; btn.disabled = false; }
+  }
 }
 
 function toggleDLGuide(platform) {
@@ -85,15 +100,29 @@ async function loginClient() {
   if (!password) { err.textContent = 'Please enter your password.'; return; }
   const btn = document.getElementById('action-btn');
   btn.textContent = 'Signing in…'; btn.disabled = true;
+  let signedIn = false;
   try {
+    // Utan tidsgräns kan knappen fastna på "Signing in…" för alltid om svaret
+    // aldrig kommer — och eftersom knappen är avstängd går det inte ens att
+    // försöka igen utan att ladda om sidan.
     const r = await fetch('/api/auth/client', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display_name: name, password })
+      body: JSON.stringify({ display_name: name, password }),
+      signal: AbortSignal.timeout(20000),
     });
     const d = await r.json();
-    if (!r.ok) { err.textContent = d.error || 'Incorrect username or password.'; btn.textContent = 'Sign in'; btn.disabled = false; return; }
+    if (!r.ok) { err.textContent = d.error || 'Incorrect username or password.'; return; }
     session = d;
-    localStorage.setItem('vp_session', JSON.stringify(d));
+    vpStore.setItem('vp_session', JSON.stringify(d));
+    signedIn = true;
     initApp();
-  } catch { err.textContent = 'Connection error.'; btn.textContent = 'Sign in'; btn.disabled = false; }
+  } catch (e) {
+    err.textContent = e?.name === 'TimeoutError'
+      ? 'The server did not respond. Check your connection and try again.'
+      : 'Could not sign in. Please try again.';
+    console.error('[VP] Inloggning misslyckades:', e);
+  } finally {
+    // Knappen ska alltid gå att trycka på igen, vad som än gick fel
+    if (!signedIn) { btn.textContent = 'Sign in'; btn.disabled = false; }
+  }
 }
