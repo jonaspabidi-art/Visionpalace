@@ -381,13 +381,16 @@ function generateInvoice() {
 }
 
 // html2canvas ritar av hela dokumentet i dubbel upplösning och låser huvud-
-// tråden medan det pågår. På en telefon tar det några sekunder — och utan
-// någon återkoppling ser det ut som att appen hängt sig, så man trycker igen
-// och startar om jobbet. Knappen låses och säger vad som händer i stället.
-// Dokumentet är 794 px brett. I dubbel skala blir avritningen 1588 px, alltså
-// nära 2,7 miljoner pixlar som en telefon ska rita och komprimera i ett svep —
-// det är den som tar sekunderna. 1,5 ger ~144 dpi på A4, fullt tillräckligt
-// för en faktura, och drygt hälften så mycket att rita.
+// tråden medan det pågår. På en telefon tar det några sekunder.
+//
+// Renderingen skedde förut på det synliga dokumentet: nedskalningen togs bort
+// så att det ritades i full storlek, vilket syntes — fakturan hoppade upp till
+// 794 px mitt på skärmen och blev stående så, eftersom tråden samtidigt var
+// låst. Det såg ut som att appen frös i inzoomat läge, för det var precis vad
+// som hände.
+//
+// Nu ritas en kopia av utanför skärmen. Förhandsvisningen rörs aldrig, så den
+// kan varken hoppa eller lämnas i ett trasigt läge om något går fel.
 function pdfRenderScale() {
   const narrow = Math.min(window.innerWidth, window.innerHeight) < 700;
   return narrow ? 1.5 : 2;
@@ -401,20 +404,14 @@ async function saveInvPDF() {
 
   const btn = document.querySelector('.inv-save-btn');
   const btnText = btn ? btn.textContent : '';
-  // Måste ligga utanför try — finally återställer dem, och då får de inte
-  // vara block-scopade till try:t.
-  const outer = document.getElementById('inv-scale-outer');
-  const savedTransform = inner.style.transform;
-  const savedOuterHeight = outer ? outer.style.height : '';
-
   _invPdfBusy = true;
   if (btn) { btn.textContent = 'Skapar PDF…'; btn.disabled = true; }
   showToast('Skapar PDF…', 'ok');
-  // Renderingen låser huvudtråden. Utan att lämna över till webbläsaren först
-  // hinner den aldrig rita om knappen — texten ovan sattes men syntes aldrig,
-  // och det såg fortfarande ut som att ingenting hände.
+  // Låt webbläsaren måla om knappen innan tråden låses, annars sattes texten
+  // men syntes aldrig
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
+  let holder = null;
   try {
     if (!window.html2pdf) {
       await new Promise((res, rej) => {
@@ -427,11 +424,15 @@ async function saveInvPDF() {
     if (!window.html2pdf) { showToast('Kunde inte ladda PDF-biblioteket', 'error'); return; }
 
     const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
-    // Dokumentet måste ritas av oskalat, annars hamnar förhandsvisningens
-    // nedskalning i PDF:en
-    inner.style.transform = '';
-    inner.style.minHeight = '0';
-    if (outer) outer.style.height = '';
+
+    // Kopian ritas i full storlek, utanför synfältet
+    const clone = inner.cloneNode(true);
+    clone.style.transform = '';
+    clone.style.minHeight = '0';
+    holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1';
+    holder.appendChild(clone);
+    document.body.appendChild(holder);
 
     await html2pdf().set({
       margin: 0,
@@ -439,19 +440,15 @@ async function saveInvPDF() {
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    }).from(inner).save();
+    }).from(clone).save();
   } catch (e) {
     console.error('[Faktura] PDF misslyckades:', e);
     showToast('Kunde inte skapa PDF:en', 'error');
   } finally {
-    // Förhandsvisningen tillbaka till skalat läge vad som än hände — annars
-    // ligger dokumentet kvar i full storlek och sticker utanför skärmen
-    inner.style.transform = savedTransform;
-    inner.style.minHeight = '';
-    if (outer) outer.style.height = savedOuterHeight;
-    scaleInvDoc();
+    if (holder) holder.remove();
     if (btn) { btn.textContent = btnText; btn.disabled = false; }
     _invPdfBusy = false;
   }
 }
+
 
