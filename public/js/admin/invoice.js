@@ -86,15 +86,48 @@ function switchInvTab(tab) {
   }
 }
 
+// Dokumentet är 794 px brett och måste krympas för att rymmas på en telefon.
+// Mätningen skedde förut vid ett enda tillfälle, två bildrutor efter att
+// förhandsvisningen visats. Det räcker inte på iOS: trycker man "Generera"
+// medan tangentbordet är på väg ner mäts bredden mitt i en pågående omritning,
+// och blir mätningen fel står dokumentet kvar i full storlek — rubriken
+// hamnar utanför skärmen och resten av gränssnittet ser normalt ut.
+//
+// Nu bevakas bredden i stället för att mätas en gång. En ResizeObserver
+// räknar om så fort ytan ändrar sig, oavsett vad som orsakade det.
+let _invScaleObserver = null;
+
 function scaleInvDoc() {
   const outer = document.getElementById('inv-scale-outer');
   const inner = document.getElementById('inv-doc-inner');
   if (!outer || !inner) return;
+  watchInvScale(outer);
   const available = outer.offsetWidth;
-  if (!available) return; // not laid out yet — a later resize/rAF call will retry
+  if (!available) return;   // ligger dolt just nu — observern hör av sig igen
   const scale = Math.min(1, available / 794);
   inner.style.transform = scale < 1 ? `scale(${scale})` : '';
   outer.style.height = scale < 1 ? Math.ceil(1123 * scale) + 'px' : '';
+}
+
+function watchInvScale(outer) {
+  if (_invScaleObserver || typeof ResizeObserver === 'undefined') return;
+  let queued = false;
+  _invScaleObserver = new ResizeObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      const o = document.getElementById('inv-scale-outer');
+      const i = document.getElementById('inv-doc-inner');
+      if (!o || !i) return;
+      const available = o.offsetWidth;
+      if (!available) return;
+      const scale = Math.min(1, available / 794);
+      i.style.transform = scale < 1 ? `scale(${scale})` : '';
+      o.style.height = scale < 1 ? Math.ceil(1123 * scale) + 'px' : '';
+    });
+  });
+  _invScaleObserver.observe(outer);
 }
 
 // Re-fit the preview if the viewport changes size (orientation change, or iOS
@@ -326,7 +359,13 @@ function generateInvoice() {
   if (!outer) {
     const docEl = document.getElementById('inv-doc');
     docEl.removeAttribute('class');
-    docEl.style.cssText = 'overflow:hidden;background:none';
+    // overflow:hidden här var det som gjorde en misslyckad nedskalning
+    // förödande: dokumentet är 794 px brett, och kunde det inte krympas blev
+    // det tyst avklippt vid skärmkanten — rubriken halv, ingen väg att se
+    // resten. Med overflow-x:auto går det i stället att dra i sidled, vilket
+    // är fult men användbart. Lodrätt hålls kvar dolt; höjden styrs av
+    // scaleInvDoc och ska inte ge en andra rullningslist.
+    docEl.style.cssText = 'overflow-x:auto;overflow-y:hidden;background:none;max-width:100%';
     outer = document.createElement('div');
     outer.id = 'inv-scale-outer';
     outer.style.cssText = 'overflow:hidden;width:100%';

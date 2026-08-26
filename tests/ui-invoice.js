@@ -185,6 +185,40 @@ const form = page => page.click('#inv-tab-form');
     const after = await page.evaluate(() => document.getElementById('inv-doc-inner').style.transform);
     checks.push(['nedskalningen återställs efter ett lyckat försök', after === beforeSave.transform]);
 
+    // ── Nedskalningen får inte kunna fastna i full storlek ──
+    // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man
+    // trycker Generera) stod dokumentet kvar oskalat och rubriken hamnade
+    // utanför skärmen. Här härmas det genom att ytan görs obefintlig i det
+    // ögonblick mätningen sker, och sedan återställs.
+    await form(page); await page.evaluate(() => generateInvoice());
+    await page.waitForTimeout(500);
+    const good = await page.evaluate(() => document.getElementById('inv-doc-inner').style.transform);
+    checks.push(['normalfallet är nedskalat', /scale\(/.test(good)]);
+
+    const recovered = await page.evaluate(async () => {
+      const wrap = document.getElementById('inv-doc');
+      const inner = document.getElementById('inv-doc-inner');
+      // Bredden försvinner och mätningen görs mitt i — precis det fall som
+      // förut lämnade dokumentet i full storlek
+      wrap.style.width = '0px';
+      scaleInvDoc();
+      const brokenState = inner.style.transform;
+      wrap.style.width = '';
+      // Observern ska räkna om av sig själv, utan att något anropar den
+      await new Promise(r => setTimeout(r, 600));
+      return { brokenState, after: inner.style.transform };
+    });
+    checks.push(['nedskalningen återhämtar sig av sig själv', /scale\(/.test(recovered.after)]);
+
+    // Skyddsnätet: även ett oskalat dokument får inte huggas av
+    const netting = await page.evaluate(() => {
+      const wrap = document.getElementById('inv-doc');
+      const cs = getComputedStyle(wrap);
+      return { maxWidth: cs.maxWidth, overflowX: cs.overflowX };
+    });
+    checks.push(['förhandsvisningen kan scrollas i sidled om allt annat felar',
+      netting.overflowX === 'auto']);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
     await page.screenshot({ path:(process.argv[2]||'/tmp')+'/faktura.png' });
