@@ -192,6 +192,20 @@ const form = page => page.click('#inv-tab-form');
     checks.push(['knappen släpps när PDF:en är klar',
       render.btn === 'Spara PDF' && render.btnOff === false]);
 
+    // Vakthunden: hänger ett steg ska knappen ändå släppas och felet säga
+    // vilket steg det var. Utan den står den kvar för evigt — precis det som
+    // rapporterades fyra gånger i rad.
+    const hung = await page.evaluate(async () => {
+      window.html2pdf = () => ({ set(){ return this; }, from(){ return this; },
+        outputPdf(){ return new Promise(() => {}); } });   // blir aldrig klar
+      const btn = document.querySelector('.inv-save-btn');
+      btn.click();
+      await new Promise(r => setTimeout(r, 1500));
+      const mid = { label: btn.textContent.trim(), disabled: btn.disabled };
+      return mid;
+    });
+    checks.push(['ett hängande steg syns i knappen', /ritar av|skapar fil/.test(hung.label)]);
+
     // ── Nedskalningen får inte kunna fastna i full storlek ──
     // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man
     // trycker Generera) stod dokumentet kvar oskalat och rubriken hamnade
