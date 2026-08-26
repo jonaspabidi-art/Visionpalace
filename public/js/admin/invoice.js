@@ -45,6 +45,26 @@ function setInvCustType(type) {
   document.getElementById('inv-biz-fields').style.display = type === 'private' ? 'none' : '';
 }
 
+// Valutan styr symbol och vilka bankuppgifter som gäller. Betalar kunden i
+// kronor är clearing och kontonummer det som används; kommer pengarna från
+// utlandet behövs IBAN och BIC. Förut hängde det på språkvalet, vilket stämde
+// bara så länge svenska alltid betydde kronor.
+const INV_CURRENCIES = {
+  EUR: { label: 'Euro',   format: (fmt, n) => `€ ${fmt(n)}`,      short: '€',  intl: true },
+  SEK: { label: 'Kronor', format: (fmt, n) => `${fmt(n)} kr`,     short: 'kr', intl: false },
+  USD: { label: 'Dollar', format: (fmt, n) => `$ ${fmt(n)}`,      short: '$',  intl: true },
+};
+
+function invCur() { return INV_CURRENCIES[invCurrency] || INV_CURRENCIES.EUR; }
+
+function setInvCurrency(cur) {
+  invCurrency = INV_CURRENCIES[cur] ? cur : 'EUR';
+  for (const key of Object.keys(INV_CURRENCIES)) {
+    document.getElementById('inv-btn-cur-' + key)?.classList.toggle('active', key === invCurrency);
+  }
+  renderInvLines();   // prisetiketten på raderna följer valutan
+}
+
 function setInvLang(lang) {
   invLang = lang;
   document.getElementById('inv-btn-lang-en').classList.toggle('active', lang === 'en');
@@ -119,7 +139,7 @@ function renderInvLines() {
           <input class="inv-input" type="number" min="0" step="any" inputmode="decimal" data-field="qty">
         </div>
         <div class="inv-field">
-          <label>Pris (${invLang === 'sv' ? 'kr' : '€'})</label>
+          <label>Pris (${invCur().short})</label>
           <input class="inv-input" type="number" min="0" step="0.01" placeholder="0.00" inputmode="decimal" data-field="price">
         </div>
       </div>
@@ -155,10 +175,9 @@ const INV_TEXT = {
     colDesc: 'Description', colQty: 'Quantity', colVat: 'VAT', colPrice: 'Unit Price', colAmount: 'Amount',
     net: 'Netto', vatLabel: 'VAT', total: 'TOTAL',
     bankDetails: 'Bank details', bankName: 'Bank Name', bankAddress: 'Bank Address',
-    paymentTerms: 'Payment terms',
+    paymentTerms: 'Payment terms', notes: 'Notes',
     paymentText: days => `Payment is required within ${days} business days of invoice date.<br>Thank you for your business.`,
     vatFieldLabel: v => `VAT: ${v}`, regFieldLabel: r => `Reg: ${r}`,
-    currency: (fmt, n) => `€ ${fmt(n)}`,
     address: () => INV_COMPANY.address,
   },
   sv: {
@@ -166,10 +185,9 @@ const INV_TEXT = {
     colDesc: 'Beskrivning', colQty: 'Antal', colVat: 'Moms', colPrice: 'Á-pris', colAmount: 'Belopp',
     net: 'Netto', vatLabel: 'Moms', total: 'TOTALT',
     bankDetails: 'Bankuppgifter', bankName: 'Bank', bankAddress: 'Bankadress',
-    paymentTerms: 'Betalningsvillkor',
+    paymentTerms: 'Betalningsvillkor', notes: 'Anteckningar',
     paymentText: days => `Betalning ska ske inom ${days} bankdagar från fakturadatum.<br>Tack för ditt köp.`,
     vatFieldLabel: v => `Moms-/Org.nr: ${v}`, regFieldLabel: r => `Reg.nr: ${r}`,
-    currency: (fmt, n) => `${fmt(n)} kr`,
     address: () => INV_COMPANY.addressSv,
   },
 };
@@ -188,6 +206,7 @@ function generateInvoice() {
   const custAddr = document.getElementById('inv-cust-addr').value.trim().replace(/\n/g, '<br>') || '';
   const custVat = document.getElementById('inv-cust-vat').value.trim();
   const custReg = document.getElementById('inv-cust-reg').value.trim();
+  const notes = (document.getElementById('inv-notes')?.value || '').trim();
   const dateFormatted = invDate ? new Date(invDate + 'T12:00:00').toLocaleDateString('sv-SE') : '—';
 
   const vatGroups = {};
@@ -205,7 +224,7 @@ function generateInvoice() {
   const total = subtotal + totalVat;
 
   function fmt(n) { return n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  const money = n => T.currency(fmt, n);
+  const money = n => invCur().format(fmt, n);
 
   const rowsHtml = invLineItems.map(item => {
     const qty = parseFloat(item.qty) || 0;
@@ -232,7 +251,7 @@ function generateInvoice() {
     custReg ? T.regFieldLabel(esc(custReg)) : '',
   ].filter(Boolean).join('<br>');
 
-  const bankRowsHtml = invLang === 'sv' ? `
+  const bankRowsHtml = !invCur().intl ? `
         <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">${T.bankName}</span><span style="font-weight:500">${esc(INV_COMPANY.bankName)}</span></div>
         <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Clearingnummer</span><span style="font-weight:500">${esc(INV_COMPANY.clearing)}</span></div>
         <div style="display:flex;gap:8px;font-size:11px;margin-bottom:4px"><span style="color:#999;min-width:90px">Kontonummer</span><span style="font-weight:500">${esc(INV_COMPANY.accountNumber)}</span></div>
@@ -285,6 +304,10 @@ function generateInvoice() {
         <span style="min-width:80px;text-align:right">${money(total)}</span>
       </div>
     </div>
+    ${notes ? `<div style="margin-top:28px;padding:14px 16px;background:#fafafa;border:1px solid #eee;border-radius:6px">
+      <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:8px;font-weight:600">${T.notes}</div>
+      <div style="font-size:11px;color:#333;line-height:1.7;white-space:pre-wrap">${esc(notes)}</div>
+    </div>` : ''}
     <div style="margin-top:auto;padding-top:40px;border-top:1px solid #ddd;display:grid;grid-template-columns:1fr 1fr;gap:40px">
       <div>
         <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px;font-weight:600">${T.bankDetails}</div>${bankRowsHtml}

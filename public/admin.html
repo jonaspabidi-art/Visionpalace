@@ -223,6 +223,14 @@
             <label>Betalningsvillkor (dagar)</label>
             <input class="inv-input" id="inv-days" type="number" value="14" min="1">
           </div>
+          <div class="inv-field">
+            <label>Valuta</label>
+            <div class="inv-type-toggle">
+              <button class="inv-type-btn active" id="inv-btn-cur-EUR" onclick="setInvCurrency('EUR')">Euro</button>
+              <button class="inv-type-btn" id="inv-btn-cur-SEK" onclick="setInvCurrency('SEK')">Kronor</button>
+              <button class="inv-type-btn" id="inv-btn-cur-USD" onclick="setInvCurrency('USD')">Dollar</button>
+            </div>
+          </div>
         </div>
 
         <div>
@@ -261,6 +269,15 @@
           <div class="inv-section-title">Produktrader</div>
           <div id="inv-line-items"></div>
           <button class="inv-add-row" onclick="addInvLine()">+ Lägg till rad</button>
+        </div>
+
+        <div>
+          <div class="inv-section-title">Anteckningar</div>
+          <div class="inv-field">
+            <label>Syns längst ner på fakturan. Lämna tomt om inget behövs.</label>
+            <textarea class="inv-input" id="inv-notes" rows="3"
+              placeholder="ex. Levereras vecka 34. Halva beloppet betalt kontant."></textarea>
+          </div>
         </div>
 
         <button class="inv-gen-btn" onclick="generateInvoice()">Generera faktura</button>
