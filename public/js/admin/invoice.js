@@ -403,7 +403,7 @@ let _invPdfBusy = false;
 // pågår, så det går att säga var det stannar i stället för att gissa igen.
 // Vakthunden ser till att knappen alltid släpps: en knapp som hänger för
 // evigt är värre än ett felmeddelande.
-const PDF_STEPS = ['laddar bibliotek', 'förbereder', 'ritar av', 'skapar fil', 'delar'];
+const PDF_STEPS = ['laddar bibliotek', 'förbereder', 'ritar av', 'packar bild', 'bygger fil', 'delar'];
 
 async function saveInvPDF() {
   if (_invPdfBusy) return;
@@ -461,19 +461,45 @@ async function saveInvPDF() {
       holder.appendChild(clone);
       document.body.appendChild(holder);
 
+      // html2canvas mäter mot fönstret om man inte säger emot. På en telefon
+      // betyder det att ett 794 px brett dokument ritas av mot en 390 px bred
+      // vy, vilket kan sluta i en avritning som aldrig blir klar.
       setStep(2);
       const worker = html2pdf().set({
         margin: 0,
         filename: name,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
+        html2canvas: {
+          scale: pdfRenderScale(), useCORS: true, logging: false,
+          width: 794, windowWidth: 794, backgroundColor: '#ffffff',
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       }).from(clone);
 
+      const canvas = await worker.toCanvas().get('canvas');
+      if (!canvas || !canvas.width) throw new Error('avritningen gav ingen bild');
+
+      // Filen byggs här i stället för att låta html2pdf göra det. Dess egen
+      // väg räknar dessutom ut sidbrytningar, och det var där den fastnade.
       setStep(3);
-      const blob = await worker.outputPdf('blob');
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
 
       setStep(4);
+      const JsPDF = window.jspdf?.jsPDF || window.jsPDF;
+      let blob;
+      if (JsPDF) {
+        const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const pw = pdf.internal.pageSize.getWidth();
+        const ph = pdf.internal.pageSize.getHeight();
+        // Behåll proportionerna; ryms inte höjden på en sida krymps den till
+        const h = Math.min(canvas.height * pw / canvas.width, ph);
+        pdf.addImage(imgData, 'JPEG', 0, 0, pw, h);
+        blob = pdf.output('blob');
+      } else {
+        blob = await worker.outputPdf('blob');   // reserv om jsPDF inte nås
+      }
+
+      setStep(5);
       await deliverExport(blob, name, 'application/pdf');
     })()]);
   } catch (e) {

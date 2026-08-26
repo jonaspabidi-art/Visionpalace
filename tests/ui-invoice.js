@@ -149,15 +149,24 @@ const form = page => page.click('#inv-tab-form');
         set(o){ window.__saved = o; return this; },
         from(el){ window.__renderedId = el.id; window.__renderedOffscreen =
           el.getBoundingClientRect().right < 0; return this; },
-        outputPdf(kind){
-          window.__outputKind = kind;
+        toCanvas(){ return this; },
+        get(what){
+          window.__outputKind = what;
           const i = document.getElementById('inv-doc-inner');
           window.__duringRender = { transform: i.style.transform,
             right: Math.round(i.getBoundingClientRect().right), vw: window.innerWidth };
-          return new Promise(r => setTimeout(() => r(new Blob(['%PDF-1.4 stub'],
-            { type: 'application/pdf' })), 500));
+          const c = document.createElement('canvas');
+          c.width = 1191; c.height = 1685;
+          return new Promise(r => setTimeout(() => r(c), 400));
         },
+        outputPdf(){ window.__usedOutputPdf = true; return new Promise(() => {}); },
         save(){ window.__usedSave = true; return new Promise(() => {}); } });
+      // jsPDF finns i html2pdf-paketet; här räcker en attrapp
+      window.jspdf = { jsPDF: class {
+        constructor(){ this.internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } }; }
+        addImage(){ window.__addedImage = true; }
+        output(){ return new Blob(['%PDF-1.4 stub'], { type: 'application/pdf' }); }
+      } };
     });
     await page.evaluate(() => { window.__shared = null;
       navigator.share = f => { window.__shared = f; return Promise.resolve(); };
@@ -170,6 +179,8 @@ const form = page => page.click('#inv-tab-form');
       after: document.getElementById('inv-doc-inner').style.transform,
       holders: document.querySelectorAll('body > div[style*="-10000px"]').length,
       outputKind: window.__outputKind, usedSave: window.__usedSave === true,
+      addedImage: window.__addedImage === true,
+      renderWidth: window.__saved?.html2canvas?.width,
       btn: document.querySelector('.inv-save-btn').textContent.trim(),
       btnOff: document.querySelector('.inv-save-btn').disabled,
     }));
@@ -183,12 +194,17 @@ const form = page => page.click('#inv-tab-form');
     checks.push(['A4 stående begärs',
       render.opt?.jsPDF?.format === 'a4' && render.opt?.jsPDF?.orientation === 'portrait']);
     checks.push(['telefonen renderar i lägre skala', render.opt?.html2canvas?.scale === 1.5]);
+    // Utan fast bredd mäter html2canvas mot telefonens 390 px i stället för
+    // dokumentets 794
+    checks.push(['avritningen mäts mot dokumentets bredd, inte telefonens',
+      render.opt?.html2canvas?.width === 794 && render.opt?.html2canvas?.windowWidth === 794]);
     checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(render.opt?.filename || '')]);
     // .save() lämnar över till webbläsarens nedladdning, som blockeras i en
     // installerad iOS-PWA och aldrig blir klar. Filen ska hämtas ut som blob
     // och gå genom delningsmenyn, precis som bokföringsexporten.
-    checks.push(['filen hämtas ut som blob, inte via webbläsarens nedladdning',
-      render.outputKind === 'blob' && render.usedSave === false]);
+    checks.push(['bilden hämtas ut som canvas', render.outputKind === 'canvas']);
+    checks.push(['filen byggs här, inte av html2pdf', render.addedImage === true]);
+    checks.push(['webbläsarens nedladdning används aldrig', render.usedSave === false]);
     checks.push(['knappen släpps när PDF:en är klar',
       render.btn === 'Spara PDF' && render.btnOff === false]);
 
@@ -197,14 +213,14 @@ const form = page => page.click('#inv-tab-form');
     // rapporterades fyra gånger i rad.
     const hung = await page.evaluate(async () => {
       window.html2pdf = () => ({ set(){ return this; }, from(){ return this; },
-        outputPdf(){ return new Promise(() => {}); } });   // blir aldrig klar
+        toCanvas(){ return this; }, get(){ return new Promise(() => {}); } });   // blir aldrig klar
       const btn = document.querySelector('.inv-save-btn');
       btn.click();
       await new Promise(r => setTimeout(r, 1500));
       const mid = { label: btn.textContent.trim(), disabled: btn.disabled };
       return mid;
     });
-    checks.push(['ett hängande steg syns i knappen', /ritar av|skapar fil/.test(hung.label)]);
+    checks.push(['ett hängande steg syns i knappen', /ritar av|packar bild|bygger fil/.test(hung.label)]);
 
     // ── Nedskalningen får inte kunna fastna i full storlek ──
     // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man
