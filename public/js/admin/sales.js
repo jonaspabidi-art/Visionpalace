@@ -368,6 +368,14 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
       const numEl = document.getElementById('inv-number');
       if (numEl) numEl.value = invoiceNumber;
     }
+    // Försäljningarna är prissatta i euro. Stod valutan kvar på kronor från en
+    // tidigare faktura skulle samma siffror gå ut märkta "kr" — en faktura på
+    // fel belopp, utan att något ser trasigt ut.
+    setInvCurrency('EUR');
+    // Anteckningarna hör till den faktura de skrevs för. Utan den här raden
+    // följer förra kundens text med till nästa.
+    const notesEl = document.getElementById('inv-notes');
+    if (notesEl) notesEl.value = '';
     invLineItems = [];
     invLineNextId = 0;
     items.forEach(item => addInvLine(
