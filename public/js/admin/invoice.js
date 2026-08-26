@@ -341,34 +341,65 @@ function generateInvoice() {
   switchInvTab('preview');
 }
 
+// html2canvas ritar av hela dokumentet i dubbel upplösning och låser huvud-
+// tråden medan det pågår. På en telefon tar det några sekunder — och utan
+// någon återkoppling ser det ut som att appen hängt sig, så man trycker igen
+// och startar om jobbet. Knappen låses och säger vad som händer i stället.
+let _invPdfBusy = false;
 async function saveInvPDF() {
+  if (_invPdfBusy) return;
   const inner = document.getElementById('inv-doc-inner');
   if (!inner) { alert('Generera fakturan först'); return; }
-  if (!window.html2pdf) {
-    await new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    }).catch(() => { alert('Kunde inte ladda PDF-biblioteket'); });
-  }
-  if (!window.html2pdf) return;
-  const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
+
+  const btn = document.querySelector('.inv-save-btn');
+  const btnText = btn ? btn.textContent : '';
+  // Måste ligga utanför try — finally återställer dem, och då får de inte
+  // vara block-scopade till try:t.
   const outer = document.getElementById('inv-scale-outer');
   const savedTransform = inner.style.transform;
   const savedOuterHeight = outer ? outer.style.height : '';
-  inner.style.transform = '';
-  inner.style.minHeight = '0';
-  if (outer) outer.style.height = '';
-  await html2pdf().set({
-    margin: 0,
-    filename: `invoice-${invNumber}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-  }).from(inner).save();
-  inner.style.transform = savedTransform;
-  inner.style.minHeight = '';
-  if (outer) outer.style.height = savedOuterHeight;
-  scaleInvDoc();
+
+  _invPdfBusy = true;
+  if (btn) { btn.textContent = 'Skapar PDF…'; btn.disabled = true; }
+  showToast('Skapar PDF…', 'ok');
+
+  try {
+    if (!window.html2pdf) {
+      await new Promise((res, rej) => {
+        const el = document.createElement('script');
+        el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+        el.onload = res; el.onerror = rej;
+        document.head.appendChild(el);
+      }).catch(() => {});
+    }
+    if (!window.html2pdf) { showToast('Kunde inte ladda PDF-biblioteket', 'error'); return; }
+
+    const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
+    // Dokumentet måste ritas av oskalat, annars hamnar förhandsvisningens
+    // nedskalning i PDF:en
+    inner.style.transform = '';
+    inner.style.minHeight = '0';
+    if (outer) outer.style.height = '';
+
+    await html2pdf().set({
+      margin: 0,
+      filename: `invoice-${invNumber}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).from(inner).save();
+  } catch (e) {
+    console.error('[Faktura] PDF misslyckades:', e);
+    showToast('Kunde inte skapa PDF:en', 'error');
+  } finally {
+    // Förhandsvisningen tillbaka till skalat läge vad som än hände — annars
+    // ligger dokumentet kvar i full storlek och sticker utanför skärmen
+    inner.style.transform = savedTransform;
+    inner.style.minHeight = '';
+    if (outer) outer.style.height = savedOuterHeight;
+    scaleInvDoc();
+    if (btn) { btn.textContent = btnText; btn.disabled = false; }
+    _invPdfBusy = false;
+  }
 }
+

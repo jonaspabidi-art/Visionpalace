@@ -126,6 +126,58 @@ const form = page => page.click('#inv-tab-form');
     checks.push(['anteckningsfältet är tömt',
       (await form(page), await page.inputValue('#inv-notes')) === '']);
 
+    // ── Spara PDF ──
+    // html2pdf hämtas från cdnjs, som inte går att nå härifrån. Det som testas
+    // är vår egen kedja: låst knapp under tiden, och att förhandsvisningen
+    // återställs även när det går fel.
+    await form(page); await page.click('#inv-btn-cur-EUR');
+    await page.evaluate(() => generateInvoice());
+    await page.waitForTimeout(400);
+    const beforeSave = await page.evaluate(() => ({
+      transform: document.getElementById('inv-doc-inner').style.transform,
+      outerHeight: document.getElementById('inv-scale-outer').style.height,
+    }));
+    checks.push(['förhandsvisningen är nedskalad', /scale\(/.test(beforeSave.transform)]);
+
+    // Biblioteket som kraschar mitt i renderingen
+    await page.evaluate(() => {
+      window.html2pdf = () => ({ set(){ return this; }, from(){ return this; },
+        save(){ return Promise.reject(new Error('avbrutet')); } });
+    });
+    await page.click('.inv-save-btn');
+    await page.waitForTimeout(1200);
+    const afterFail = await page.evaluate(() => ({
+      transform: document.getElementById('inv-doc-inner').style.transform,
+      outerHeight: document.getElementById('inv-scale-outer').style.height,
+      label: document.querySelector('.inv-save-btn').textContent.trim(),
+      disabled: document.querySelector('.inv-save-btn').disabled,
+    }));
+    checks.push(['nedskalningen återställs efter ett misslyckat försök',
+      afterFail.transform === beforeSave.transform && afterFail.outerHeight === beforeSave.outerHeight]);
+    checks.push(['knappen går att trycka på igen', afterFail.disabled === false]);
+    checks.push(['knappens text återställs', afterFail.label === 'Spara PDF']);
+
+    // Lyckad rendering: knappen ska vara låst medan det pågår
+    await page.evaluate(() => {
+      window.__saved = null;
+      window.html2pdf = () => ({ set(o){ window.__saved = o; return this; }, from(){ return this; },
+        save(){ return new Promise(r => setTimeout(r, 900)); } });
+    });
+    await page.click('.inv-save-btn');
+    await page.waitForTimeout(300);
+    const during = await page.evaluate(() => ({
+      label: document.querySelector('.inv-save-btn').textContent.trim(),
+      disabled: document.querySelector('.inv-save-btn').disabled,
+    }));
+    checks.push(['knappen låses medan PDF:en skapas', during.disabled === true]);
+    checks.push(['och säger vad som händer', during.label === 'Skapar PDF…']);
+    await page.waitForTimeout(1200);
+    const opt = await page.evaluate(() => window.__saved);
+    checks.push(['A4 stående begärs', opt?.jsPDF?.format === 'a4' && opt?.jsPDF?.orientation === 'portrait']);
+    checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(opt?.filename || '')]);
+    const after = await page.evaluate(() => document.getElementById('inv-doc-inner').style.transform);
+    checks.push(['nedskalningen återställs efter ett lyckat försök', after === beforeSave.transform]);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
     await page.screenshot({ path:(process.argv[2]||'/tmp')+'/faktura.png' });
