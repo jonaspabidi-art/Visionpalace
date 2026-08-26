@@ -397,6 +397,14 @@ function pdfRenderScale() {
 }
 
 let _invPdfBusy = false;
+
+// Fyra försök att laga "fastnar på Skapar PDF" har var för sig hittat en
+// verklig bugg utan att lösa symptomet. Därför visas nu vilket steg som
+// pågår, så det går att säga var det stannar i stället för att gissa igen.
+// Vakthunden ser till att knappen alltid släpps: en knapp som hänger för
+// evigt är värre än ett felmeddelande.
+const PDF_STEPS = ['laddar bibliotek', 'förbereder', 'ritar av', 'skapar fil', 'delar'];
+
 async function saveInvPDF() {
   if (_invPdfBusy) return;
   const inner = document.getElementById('inv-doc-inner');
@@ -404,62 +412,80 @@ async function saveInvPDF() {
 
   const btn = document.querySelector('.inv-save-btn');
   const btnText = btn ? btn.textContent : '';
+  let step = 0;
+  const setStep = n => {
+    step = n;
+    const label = `Skapar PDF… (${n + 1}/${PDF_STEPS.length}) ${PDF_STEPS[n]}`;
+    if (btn) btn.textContent = label;
+    console.log('[Faktura] steg ' + (n + 1) + ': ' + PDF_STEPS[n]);
+  };
+
   _invPdfBusy = true;
-  if (btn) { btn.textContent = 'Skapar PDF…'; btn.disabled = true; }
-  showToast('Skapar PDF…', 'ok');
+  if (btn) btn.disabled = true;
+  setStep(0);
   // Låt webbläsaren måla om knappen innan tråden låses, annars sattes texten
   // men syntes aldrig
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   let holder = null;
+  let watchdog = null;
   try {
-    if (!window.html2pdf) {
-      // Utan tidsgräns kan hämtningen hänga tyst på ett dåligt nät, och då
-      // står knappen kvar på "Skapar PDF…" för alltid
-      await new Promise(res => {
-        const el = document.createElement('script');
-        const done = () => { clearTimeout(t); res(); };
-        const t = setTimeout(done, 15000);
-        el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        el.onload = done; el.onerror = done;
-        document.head.appendChild(el);
-      });
-    }
-    if (!window.html2pdf) { showToast('Kunde inte ladda PDF-biblioteket', 'error'); return; }
+    // Blir något steg hängande ska knappen ändå släppas, och texten tala om
+    // hur långt den kom
+    const timeout = new Promise((_, rej) => {
+      watchdog = setTimeout(() => rej(new Error(`fastnade på steg ${step + 1}: ${PDF_STEPS[step]}`)), 45000);
+    });
 
-    const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
+    await Promise.race([timeout, (async () => {
+      if (!window.html2pdf) {
+        await new Promise(res => {
+          const el = document.createElement('script');
+          const done = () => { clearTimeout(t); res(); };
+          const t = setTimeout(done, 15000);
+          el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          el.onload = done; el.onerror = done;
+          document.head.appendChild(el);
+        });
+      }
+      if (!window.html2pdf) throw new Error('PDF-biblioteket kunde inte hämtas');
 
-    // Kopian ritas i full storlek, utanför synfältet
-    const clone = inner.cloneNode(true);
-    clone.style.transform = '';
-    clone.style.minHeight = '0';
-    holder = document.createElement('div');
-    holder.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1';
-    holder.appendChild(clone);
-    document.body.appendChild(holder);
+      setStep(1);
+      const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
+      const name = `invoice-${invNumber}.pdf`;
+      // Kopian ritas i full storlek, utanför synfältet — förhandsvisningen rörs aldrig
+      const clone = inner.cloneNode(true);
+      clone.style.transform = '';
+      clone.style.minHeight = '0';
+      holder = document.createElement('div');
+      holder.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1';
+      holder.appendChild(clone);
+      document.body.appendChild(holder);
 
-    // .save() lämnar över till webbläsarens egen nedladdning. I en installerad
-    // iOS-PWA blockeras den, och löftet blir aldrig klart — knappen stod kvar
-    // på "Skapar PDF…" i all evighet. Bokföringsexporten löste redan detta:
-    // hämta ut en blob och skicka den genom delningsmenyn i stället.
-    const name = `invoice-${invNumber}.pdf`;
-    const blob = await html2pdf().set({
-      margin: 0,
-      filename: name,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    }).from(clone).outputPdf('blob');
+      setStep(2);
+      const worker = html2pdf().set({
+        margin: 0,
+        filename: name,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).from(clone);
 
-    await deliverExport(blob, name, 'application/pdf');
+      setStep(3);
+      const blob = await worker.outputPdf('blob');
+
+      setStep(4);
+      await deliverExport(blob, name, 'application/pdf');
+    })()]);
   } catch (e) {
     console.error('[Faktura] PDF misslyckades:', e);
-    showToast('Kunde inte skapa PDF:en', 'error');
+    showToast(`Kunde inte skapa PDF:en — ${e.message || 'okänt fel'}`, 'error');
   } finally {
+    if (watchdog) clearTimeout(watchdog);
     if (holder) holder.remove();
     if (btn) { btn.textContent = btnText; btn.disabled = false; }
     _invPdfBusy = false;
   }
 }
+
 
 
