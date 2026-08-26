@@ -139,51 +139,42 @@ const form = page => page.click('#inv-tab-form');
     }));
     checks.push(['förhandsvisningen är nedskalad', /scale\(/.test(beforeSave.transform)]);
 
-    // Biblioteket som kraschar mitt i renderingen
+    // Förhandsvisningen får aldrig röras. Förut togs nedskalningen bort så
+    // att dokumentet ritades i full storlek — det syntes på skärmen, och
+    // eftersom tråden samtidigt låstes såg det ut som att appen frös
+    // inzoomad.
     await page.evaluate(() => {
-      window.html2pdf = () => ({ set(){ return this; }, from(){ return this; },
-        save(){ return Promise.reject(new Error('avbrutet')); } });
-    });
-    await page.click('.inv-save-btn');
-    await page.waitForTimeout(1200);
-    const afterFail = await page.evaluate(() => ({
-      transform: document.getElementById('inv-doc-inner').style.transform,
-      outerHeight: document.getElementById('inv-scale-outer').style.height,
-      label: document.querySelector('.inv-save-btn').textContent.trim(),
-      disabled: document.querySelector('.inv-save-btn').disabled,
-    }));
-    checks.push(['nedskalningen återställs efter ett misslyckat försök',
-      afterFail.transform === beforeSave.transform && afterFail.outerHeight === beforeSave.outerHeight]);
-    checks.push(['knappen går att trycka på igen', afterFail.disabled === false]);
-    checks.push(['knappens text återställs', afterFail.label === 'Spara PDF']);
-
-    // Lyckad rendering: knappen ska vara låst medan det pågår
-    await page.evaluate(() => {
-      window.__saved = null;
+      window.__duringRender = null;
       window.html2pdf = () => ({
         set(o){ window.__saved = o; return this; },
-        from(){ return this; },
-        save(){ return new Promise(r => setTimeout(r, 900)); } });
+        from(el){ window.__renderedId = el.id; window.__renderedOffscreen =
+          el.getBoundingClientRect().right < 0; return this; },
+        save(){
+          const i = document.getElementById('inv-doc-inner');
+          window.__duringRender = { transform: i.style.transform,
+            right: Math.round(i.getBoundingClientRect().right), vw: window.innerWidth };
+          return new Promise(r => setTimeout(r, 500));
+        } });
     });
     await page.click('.inv-save-btn');
-    await page.waitForTimeout(300);
-    const during = await page.evaluate(() => ({
-      label: document.querySelector('.inv-save-btn').textContent.trim(),
-      disabled: document.querySelector('.inv-save-btn').disabled,
+    await page.waitForTimeout(1400);
+    const render = await page.evaluate(() => ({
+      during: window.__duringRender, offscreen: window.__renderedOffscreen,
+      opt: window.__saved,
+      after: document.getElementById('inv-doc-inner').style.transform,
+      holders: document.querySelectorAll('body > div[style*="-10000px"]').length,
     }));
-    checks.push(['knappen låses medan PDF:en skapas', during.disabled === true]);
-    checks.push(['och säger vad som händer', during.label === 'Skapar PDF…']);
-    // Att knapptexten hinner målas innan renderingen låser tråden går inte att
-    // pröva här: renderingen är stubbad och blockerar ingenting, så kontrollen
-    // skulle passera även utan överlämningen. Den är därför utelämnad hellre
-    // än falsk trygghet — överlämningen i saveInvPDF står kvar ändå.
-    await page.waitForTimeout(1200);
-    const opt = await page.evaluate(() => window.__saved);
-    checks.push(['A4 stående begärs', opt?.jsPDF?.format === 'a4' && opt?.jsPDF?.orientation === 'portrait']);
-    checks.push(['telefonen renderar i lägre skala', opt?.html2canvas?.scale === 1.5]);
-    checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(opt?.filename || '')]);
-    const after = await page.evaluate(() => document.getElementById('inv-doc-inner').style.transform);
-    checks.push(['nedskalningen återställs efter ett lyckat försök', after === beforeSave.transform]);
+    checks.push(['förhandsvisningen är fortfarande nedskalad under renderingen',
+      /scale\(/.test(render.during?.transform || '')]);
+    checks.push(['den hoppar aldrig utanför skärmen',
+      render.during && render.during.right <= render.during.vw]);
+    checks.push(['det som ritas av ligger utanför synfältet', render.offscreen === true]);
+    checks.push(['nedskalningen är orörd efteråt', /scale\(/.test(render.after)]);
+    checks.push(['kopian städas bort', render.holders === 0]);
+    checks.push(['A4 stående begärs',
+      render.opt?.jsPDF?.format === 'a4' && render.opt?.jsPDF?.orientation === 'portrait']);
+    checks.push(['telefonen renderar i lägre skala', render.opt?.html2canvas?.scale === 1.5]);
+    checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(render.opt?.filename || '')]);
 
     // ── Nedskalningen får inte kunna fastna i full storlek ──
     // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man
