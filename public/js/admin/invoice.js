@@ -380,138 +380,237 @@ function generateInvoice() {
   switchInvTab('preview');
 }
 
-// html2canvas ritar av hela dokumentet i dubbel upplösning och låser huvud-
-// tråden medan det pågår. På en telefon tar det några sekunder.
+
+// ── Fakturan som riktig text-PDF ──
+// html2canvas ritade av dokumentet som en bild. För att göra det klonar den
+// HELA sidan in i en iframe först — hela adminappen med lager, historik och
+// chatt. På en telefon frös den mitt i, och knappen fastnade på "ritar av".
 //
-// Renderingen skedde förut på det synliga dokumentet: nedskalningen togs bort
-// så att det ritades i full storlek, vilket syntes — fakturan hoppade upp till
-// 794 px mitt på skärmen och blev stående så, eftersom tråden samtidigt var
-// låst. Det såg ut som att appen frös i inzoomat läge, för det var precis vad
-// som hände.
-//
-// Nu ritas en kopia av utanför skärmen. Förhandsvisningen rörs aldrig, så den
-// kan varken hoppa eller lämnas i ett trasigt läge om något går fel.
-function pdfRenderScale() {
-  const narrow = Math.min(window.innerWidth, window.innerHeight) < 700;
-  return narrow ? 1.5 : 2;
+// Fakturan är text och linjer. Den ritas nu direkt i PDF:en i stället: går på
+// bråkdelen av tiden, filen blir en tiondel så stor, texten går att markera
+// och söka i, och ingenting kan frysa eftersom ingen bild skapas.
+
+function invSamlaData() {
+  const T = INV_TEXT[invLang] || INV_TEXT.en;
+  const num = v => parseFloat(v) || 0;
+  const vatGroups = {};
+  let subtotal = 0;
+  const rows = invLineItems.map(item => {
+    const qty = num(item.qty), price = num(item.price), vat = num(item.vat);
+    const net = qty * price;
+    subtotal += net;
+    vatGroups[vat] = (vatGroups[vat] || 0) + net * (vat / 100);
+    return { desc: item.desc || '—', qty, price, vat, amount: net };
+  });
+  const totalVat = Object.values(vatGroups).reduce((a, b) => a + b, 0);
+  const invDate = document.getElementById('inv-date').value;
+  return {
+    T, rows, vatGroups, subtotal, totalVat, total: subtotal + totalVat,
+    number: document.getElementById('inv-number').value.trim() || '—',
+    date: invDate ? new Date(invDate + 'T12:00:00').toLocaleDateString('sv-SE') : '—',
+    days: document.getElementById('inv-days').value || '14',
+    custName: document.getElementById('inv-cust-name').value.trim() || '—',
+    custAddr: document.getElementById('inv-cust-addr').value.trim(),
+    custVat: document.getElementById('inv-cust-vat').value.trim(),
+    custReg: document.getElementById('inv-cust-reg').value.trim(),
+    notes: (document.getElementById('inv-notes')?.value || '').trim(),
+    isPrivate: invCustType === 'private',
+  };
+}
+
+function buildInvoicePdf(JsPDF, d) {
+  const money = n => invCur().format(
+    x => x.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n);
+  const doc = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const M = 16, W = 210, right = W - M;
+  const grey = () => doc.setTextColor(150);
+  const dark = () => doc.setTextColor(17);
+  const label = (text, x, y, align) => {
+    doc.setFont('helvetica', 'bold').setFontSize(6.5); grey();
+    doc.setCharSpace(1.2);
+    doc.text(String(text).toUpperCase(), x, y, align ? { align } : undefined);
+    doc.setCharSpace(0);
+  };
+  let y = M + 8;
+
+  // Rubrik och nummer
+  doc.setFont('helvetica', 'bold').setFontSize(26); dark();
+  doc.setCharSpace(3.2);
+  doc.text(d.T.title, M, y);
+  doc.setCharSpace(0);
+  doc.setFontSize(15).text('# ' + d.number, right, y - 1, { align: 'right' });
+  doc.setFont('helvetica', 'normal').setFontSize(8.5); grey();
+  doc.text(d.date, right, y + 4.5, { align: 'right' });
+
+  // Parterna
+  y += 16;
+  const colR = M + 92;
+  label(d.T.payTo, M, y);
+  label(d.isPrivate ? d.T.custPrivate : d.T.custCompany, colR, y);
+  y += 6;
+  doc.setFont('helvetica', 'bold').setFontSize(10); dark();
+  doc.text(INV_COMPANY.name, M, y);
+  doc.text(d.custName, colR, y, { maxWidth: right - colR });
+  y += 5;
+  doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(70);
+  const leftLines = [INV_COMPANY.vat, d.T.address()];
+  const rightLines = [
+    ...d.custAddr.split('\n').filter(Boolean),
+    ...(d.isPrivate ? [] : [
+      d.custVat ? d.T.vatFieldLabel(d.custVat) : '',
+      d.custReg ? d.T.regFieldLabel(d.custReg) : '',
+    ].filter(Boolean)),
+  ];
+  leftLines.forEach((t, i) => doc.text(t, M, y + i * 4.2));
+  rightLines.forEach((t, i) => doc.text(t, colR, y + i * 4.2, { maxWidth: right - colR }));
+  y += Math.max(leftLines.length, rightLines.length) * 4.2 + 6;
+
+  doc.setDrawColor(17).setLineWidth(0.5).line(M, y, right, y);
+  y += 7;
+
+  // Tabellhuvud — kolumnerna är högerkanter för de högerställda fälten
+  const cQty = M + 100, cVat = M + 118, cPrice = M + 150, cAmt = right;
+  label(d.T.colDesc, M, y);
+  label(d.T.colQty, cQty, y, 'right');
+  label(d.T.colVat, cVat, y, 'right');
+  label(d.T.colPrice, cPrice, y, 'right');
+  label(d.T.colAmount, cAmt, y, 'right');
+  y += 2.5;
+  doc.setDrawColor(17).setLineWidth(0.3).line(M, y, right, y);
+  y += 5.5;
+
+  doc.setFontSize(8.5);
+  for (const r of d.rows) {
+    doc.setFont('helvetica', 'bold'); dark();
+    const descLines = doc.splitTextToSize(r.desc, 96);
+    doc.text(descLines, M, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(r.qty % 1 === 0 ? r.qty : r.qty.toFixed(2)), cQty, y, { align: 'right' });
+    doc.text(r.vat + '%', cVat, y, { align: 'right' });
+    doc.text(money(r.price), cPrice, y, { align: 'right' });
+    doc.text(money(r.amount), cAmt, y, { align: 'right' });
+    y += Math.max(descLines.length, 1) * 4.2 + 3;
+    doc.setDrawColor(235).setLineWidth(0.2).line(M, y - 2, right, y - 2);
+  }
+
+  // Summering
+  y += 3;
+  doc.setDrawColor(17).setLineWidth(0.5).line(M, y, right, y);
+  y += 6;
+  const sumRow = (text, value, bold) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(bold ? 12 : 8.5);
+    bold ? dark() : doc.setTextColor(90);
+    doc.text(text, cPrice, y, { align: 'right' });
+    doc.text(value, cAmt, y, { align: 'right' });
+    y += bold ? 8 : 5;
+  };
+  sumRow(d.T.net, money(d.subtotal));
+  for (const [rate, amount] of Object.entries(d.vatGroups)) {
+    sumRow(`${d.T.vatLabel} ${rate}%`, money(amount));
+  }
+  y += 1;
+  doc.setDrawColor(17).setLineWidth(0.4).line(cPrice - 32, y - 3, right, y - 3);
+  sumRow(d.T.total, money(d.total), true);
+
+  // Anteckningar
+  if (d.notes) {
+    y += 4;
+    const noteLines = doc.splitTextToSize(d.notes, right - M - 8);
+    const boxH = noteLines.length * 4.2 + 12;
+    doc.setDrawColor(230).setFillColor(250).setLineWidth(0.2);
+    doc.roundedRect(M, y, right - M, boxH, 1.5, 1.5, 'FD');
+    label(d.T.notes, M + 4, y + 6);
+    doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(50);
+    doc.text(noteLines, M + 4, y + 11);
+    y += boxH;
+  }
+
+  // Foten sitter alltid nederst, oavsett hur många rader fakturan har
+  const footY = 297 - M - 34;
+  doc.setDrawColor(225).setLineWidth(0.2).line(M, footY, right, footY);
+  let fy = footY + 6;
+  label(d.T.bankDetails, M, fy);
+  label(d.T.paymentTerms, colR, fy);
+  fy += 5;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  const bank = invCur().intl
+    ? [[d.T.bankName, INV_COMPANY.bankName], ['IBAN', INV_COMPANY.iban],
+       [d.T.bankAddress, INV_COMPANY.bankAddress], ['BIC / Swift', INV_COMPANY.bic]]
+    : [[d.T.bankName, INV_COMPANY.bankName], ['Clearingnummer', INV_COMPANY.clearing],
+       ['Kontonummer', INV_COMPANY.accountNumber], [d.T.bankAddress, INV_COMPANY.bankAddress]];
+  bank.forEach(([k, v], i) => {
+    doc.setTextColor(150).text(k, M, fy + i * 4);
+    doc.setTextColor(17).text(String(v), M + 26, fy + i * 4);
+  });
+  doc.setTextColor(130);
+  const terms = String(d.T.paymentText(d.days)).replace(/<br>/g, '\n');
+  doc.text(doc.splitTextToSize(terms, right - colR), colR, fy);
+
+  return doc.output('blob');
 }
 
 let _invPdfBusy = false;
 
-// Fyra försök att laga "fastnar på Skapar PDF" har var för sig hittat en
-// verklig bugg utan att lösa symptomet. Därför visas nu vilket steg som
-// pågår, så det går att säga var det stannar i stället för att gissa igen.
-// Vakthunden ser till att knappen alltid släpps: en knapp som hänger för
-// evigt är värre än ett felmeddelande.
-const PDF_STEPS = ['laddar bibliotek', 'förbereder', 'ritar av', 'packar bild', 'bygger fil', 'delar'];
+// Bara två steg kvar. Avritningen och bildpackningen finns inte längre —
+// fakturan skrivs rakt in i PDF:en.
+const PDF_STEPS = ['laddar bibliotek', 'bygger fil', 'delar'];
 
 async function saveInvPDF() {
   if (_invPdfBusy) return;
-  const inner = document.getElementById('inv-doc-inner');
-  if (!inner) { alert('Generera fakturan först'); return; }
+  if (!invLineItems.length) { alert('Lägg till minst en rad först'); return; }
 
   const btn = document.querySelector('.inv-save-btn');
   const btnText = btn ? btn.textContent : '';
   let step = 0;
   const setStep = n => {
     step = n;
-    const label = `Skapar PDF… (${n + 1}/${PDF_STEPS.length}) ${PDF_STEPS[n]}`;
-    if (btn) btn.textContent = label;
+    if (btn) btn.textContent = `Skapar PDF… (${n + 1}/${PDF_STEPS.length}) ${PDF_STEPS[n]}`;
     console.log('[Faktura] steg ' + (n + 1) + ': ' + PDF_STEPS[n]);
   };
 
   _invPdfBusy = true;
   if (btn) btn.disabled = true;
   setStep(0);
-  // Låt webbläsaren måla om knappen innan tråden låses, annars sattes texten
-  // men syntes aldrig
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  let holder = null;
   let watchdog = null;
   try {
-    // Blir något steg hängande ska knappen ändå släppas, och texten tala om
-    // hur långt den kom
     const timeout = new Promise((_, rej) => {
       watchdog = setTimeout(() => rej(new Error(`fastnade på steg ${step + 1}: ${PDF_STEPS[step]}`)), 45000);
     });
 
     await Promise.race([timeout, (async () => {
-      if (!window.html2pdf) {
+      const JsPDFof = () => window.jspdf?.jsPDF || window.jsPDF;
+      if (!JsPDFof()) {
         await new Promise(res => {
           const el = document.createElement('script');
           const done = () => { clearTimeout(t); res(); };
           const t = setTimeout(done, 15000);
-          el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+          el.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
           el.onload = done; el.onerror = done;
           document.head.appendChild(el);
         });
       }
-      if (!window.html2pdf) throw new Error('PDF-biblioteket kunde inte hämtas');
+      const JsPDF = JsPDFof();
+      if (!JsPDF) throw new Error('PDF-biblioteket kunde inte hämtas');
 
       setStep(1);
-      const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
-      const name = `invoice-${invNumber}.pdf`;
-      // Kopian ritas i full storlek, utanför synfältet — förhandsvisningen rörs aldrig
-      const clone = inner.cloneNode(true);
-      clone.style.transform = '';
-      clone.style.minHeight = '0';
-      holder = document.createElement('div');
-      holder.style.cssText = 'position:fixed;left:-10000px;top:0;z-index:-1';
-      holder.appendChild(clone);
-      document.body.appendChild(holder);
+      const blob = buildInvoicePdf(JsPDF, invSamlaData());
 
-      // html2canvas mäter mot fönstret om man inte säger emot. På en telefon
-      // betyder det att ett 794 px brett dokument ritas av mot en 390 px bred
-      // vy, vilket kan sluta i en avritning som aldrig blir klar.
       setStep(2);
-      const worker = html2pdf().set({
-        margin: 0,
-        filename: name,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: pdfRenderScale(), useCORS: true, logging: false,
-          width: 794, windowWidth: 794, backgroundColor: '#ffffff',
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      }).from(clone);
-
-      const canvas = await worker.toCanvas().get('canvas');
-      if (!canvas || !canvas.width) throw new Error('avritningen gav ingen bild');
-
-      // Filen byggs här i stället för att låta html2pdf göra det. Dess egen
-      // väg räknar dessutom ut sidbrytningar, och det var där den fastnade.
-      setStep(3);
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-
-      setStep(4);
-      const JsPDF = window.jspdf?.jsPDF || window.jsPDF;
-      let blob;
-      if (JsPDF) {
-        const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const pw = pdf.internal.pageSize.getWidth();
-        const ph = pdf.internal.pageSize.getHeight();
-        // Behåll proportionerna; ryms inte höjden på en sida krymps den till
-        const h = Math.min(canvas.height * pw / canvas.width, ph);
-        pdf.addImage(imgData, 'JPEG', 0, 0, pw, h);
-        blob = pdf.output('blob');
-      } else {
-        blob = await worker.outputPdf('blob');   // reserv om jsPDF inte nås
-      }
-
-      setStep(5);
-      await deliverExport(blob, name, 'application/pdf');
+      const invNumber = document.getElementById('inv-number').value.trim() || 'invoice';
+      await deliverExport(blob, `invoice-${invNumber}.pdf`, 'application/pdf');
     })()]);
   } catch (e) {
     console.error('[Faktura] PDF misslyckades:', e);
     showToast(`Kunde inte skapa PDF:en — ${e.message || 'okänt fel'}`, 'error');
   } finally {
     if (watchdog) clearTimeout(watchdog);
-    if (holder) holder.remove();
     if (btn) { btn.textContent = btnText; btn.disabled = false; }
     _invPdfBusy = false;
   }
 }
+
 
 
 

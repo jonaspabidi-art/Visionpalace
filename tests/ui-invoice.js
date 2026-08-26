@@ -127,9 +127,9 @@ const form = page => page.click('#inv-tab-form');
       (await form(page), await page.inputValue('#inv-notes')) === '']);
 
     // ── Spara PDF ──
-    // html2pdf hämtas från cdnjs, som inte går att nå härifrån. Det som testas
-    // är vår egen kedja: låst knapp under tiden, och att förhandsvisningen
-    // återställs även när det går fel.
+    // Fakturan ritas inte längre av som bild. Den skrivs rakt in i PDF:en, så
+    // det som testas är att rätt data hamnar där, att förhandsvisningen aldrig
+    // rörs, och att knappen alltid släpps.
     await form(page); await page.click('#inv-btn-cur-EUR');
     await page.evaluate(() => generateInvoice());
     await page.waitForTimeout(400);
@@ -139,88 +139,80 @@ const form = page => page.click('#inv-tab-form');
     }));
     checks.push(['förhandsvisningen är nedskalad', /scale\(/.test(beforeSave.transform)]);
 
-    // Förhandsvisningen får aldrig röras. Förut togs nedskalningen bort så
-    // att dokumentet ritades i full storlek — det syntes på skärmen, och
-    // eftersom tråden samtidigt låstes såg det ut som att appen frös
-    // inzoomad.
+    // Attrapp för jsPDF som antecknar allt som skrivs, så innehållet går att
+    // kontrollera utan att tolka en riktig PDF
     await page.evaluate(() => {
-      window.__duringRender = null;
-      window.html2pdf = () => ({
-        set(o){ window.__saved = o; return this; },
-        from(el){ window.__renderedId = el.id; window.__renderedOffscreen =
-          el.getBoundingClientRect().right < 0; return this; },
-        toCanvas(){ return this; },
-        get(what){
-          window.__outputKind = what;
-          const i = document.getElementById('inv-doc-inner');
-          window.__duringRender = { transform: i.style.transform,
-            right: Math.round(i.getBoundingClientRect().right), vw: window.innerWidth };
-          const c = document.createElement('canvas');
-          c.width = 1191; c.height = 1685;
-          return new Promise(r => setTimeout(() => r(c), 400));
-        },
-        outputPdf(){ window.__usedOutputPdf = true; return new Promise(() => {}); },
-        save(){ window.__usedSave = true; return new Promise(() => {}); } });
-      // jsPDF finns i html2pdf-paketet; här räcker en attrapp
+      window.__pdf = null;
+      window.__shared = null;
+      navigator.share = f => { window.__shared = f;
+        return new Promise(r => setTimeout(r, 800)); };
+      navigator.canShare = () => true;
       window.jspdf = { jsPDF: class {
-        constructor(){ this.internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } }; }
-        addImage(){ window.__addedImage = true; }
+        constructor(o){ window.__pdf = { opts: o, text: [], images: 0 };
+          this.internal = { pageSize: { getWidth: () => 210, getHeight: () => 297 } }; }
+        setFont(){ return this; } setFontSize(){ return this; } setTextColor(){ return this; }
+        setCharSpace(){ return this; } setDrawColor(){ return this; } setFillColor(){ return this; }
+        setLineWidth(){ return this; } line(){ return this; } roundedRect(){ return this; }
+        splitTextToSize(t){ return String(t).split('\n'); }
+        addImage(){ window.__pdf.images++; }
+        text(t){ window.__pdf.text.push(...[].concat(t).map(String)); }
         output(){ return new Blob(['%PDF-1.4 stub'], { type: 'application/pdf' }); }
       } };
     });
-    await page.evaluate(() => { window.__shared = null;
-      navigator.share = f => { window.__shared = f; return Promise.resolve(); };
-      navigator.canShare = () => true; });
-    await page.click('.inv-save-btn');
-    await page.waitForTimeout(1800);
-    const render = await page.evaluate(() => ({
-      during: window.__duringRender, offscreen: window.__renderedOffscreen,
-      opt: window.__saved,
-      after: document.getElementById('inv-doc-inner').style.transform,
-      holders: document.querySelectorAll('body > div[style*="-10000px"]').length,
-      outputKind: window.__outputKind, usedSave: window.__usedSave === true,
-      addedImage: window.__addedImage === true,
-      renderWidth: window.__saved?.html2canvas?.width,
-      btn: document.querySelector('.inv-save-btn').textContent.trim(),
-      btnOff: document.querySelector('.inv-save-btn').disabled,
-    }));
-    checks.push(['förhandsvisningen är fortfarande nedskalad under renderingen',
-      /scale\(/.test(render.during?.transform || '')]);
-    checks.push(['den hoppar aldrig utanför skärmen',
-      render.during && render.during.right <= render.during.vw]);
-    checks.push(['det som ritas av ligger utanför synfältet', render.offscreen === true]);
-    checks.push(['nedskalningen är orörd efteråt', /scale\(/.test(render.after)]);
-    checks.push(['kopian städas bort', render.holders === 0]);
-    checks.push(['A4 stående begärs',
-      render.opt?.jsPDF?.format === 'a4' && render.opt?.jsPDF?.orientation === 'portrait']);
-    checks.push(['telefonen renderar i lägre skala', render.opt?.html2canvas?.scale === 1.5]);
-    // Utan fast bredd mäter html2canvas mot telefonens 390 px i stället för
-    // dokumentets 794
-    checks.push(['avritningen mäts mot dokumentets bredd, inte telefonens',
-      render.opt?.html2canvas?.width === 794 && render.opt?.html2canvas?.windowWidth === 794]);
-    checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(render.opt?.filename || '')]);
-    // .save() lämnar över till webbläsarens nedladdning, som blockeras i en
-    // installerad iOS-PWA och aldrig blir klar. Filen ska hämtas ut som blob
-    // och gå genom delningsmenyn, precis som bokföringsexporten.
-    checks.push(['bilden hämtas ut som canvas', render.outputKind === 'canvas']);
-    checks.push(['filen byggs här, inte av html2pdf', render.addedImage === true]);
-    checks.push(['webbläsarens nedladdning används aldrig', render.usedSave === false]);
-    checks.push(['knappen släpps när PDF:en är klar',
-      render.btn === 'Spara PDF' && render.btnOff === false]);
 
-    // Vakthunden: hänger ett steg ska knappen ändå släppas och felet säga
-    // vilket steg det var. Utan den står den kvar för evigt — precis det som
-    // rapporterades fyra gånger i rad.
-    const hung = await page.evaluate(async () => {
-      window.html2pdf = () => ({ set(){ return this; }, from(){ return this; },
-        toCanvas(){ return this; }, get(){ return new Promise(() => {}); } });   // blir aldrig klar
+    const during = await page.evaluate(async () => {
       const btn = document.querySelector('.inv-save-btn');
       btn.click();
-      await new Promise(r => setTimeout(r, 1500));
-      const mid = { label: btn.textContent.trim(), disabled: btn.disabled };
-      return mid;
+      await new Promise(r => setTimeout(r, 250));
+      return { label: btn.textContent.trim(), disabled: btn.disabled,
+        transform: document.getElementById('inv-doc-inner').style.transform };
     });
-    checks.push(['ett hängande steg syns i knappen', /ritar av|packar bild|bygger fil/.test(hung.label)]);
+    checks.push(['knappen låses medan PDF:en skapas', during.disabled === true]);
+    checks.push(['och säger vilket steg den är på', /^Skapar PDF… \(\d\/\d\)/.test(during.label)]);
+    checks.push(['förhandsvisningen rörs inte under tiden',
+      during.transform === beforeSave.transform]);
+
+    await page.waitForTimeout(1600);
+    const made = await page.evaluate(() => ({
+      pdf: window.__pdf, shared: !!window.__shared,
+      sharedName: window.__shared?.files?.[0]?.name,
+      btn: document.querySelector('.inv-save-btn').textContent.trim(),
+      btnOff: document.querySelector('.inv-save-btn').disabled,
+      after: document.getElementById('inv-doc-inner').style.transform,
+      holders: document.querySelectorAll('body > div[style*="-10000px"]').length,
+    }));
+    const txt = (made.pdf?.text || []).join(' | ');
+
+    checks.push(['A4 stående begärs',
+      made.pdf?.opts?.format === 'a4' && made.pdf?.opts?.orientation === 'portrait']);
+    checks.push(['ingen bild ritas in — fakturan är text', made.pdf?.images === 0]);
+    checks.push(['rubriken skrivs', txt.includes('INVOICE')]);
+    const invNo = await page.evaluate(() => document.getElementById('inv-number').value.trim());
+    checks.push(['fakturanumret skrivs', txt.includes('# ' + invNo)]);
+    checks.push(['säljaren skrivs', txt.includes('C.lunettes AB')]);
+    checks.push(['varuraden skrivs', /Cartier Première/.test(txt)]);
+    // Raderna kommer från säljet: 1 × 2 400
+    checks.push(['beloppet skrivs', /€ 2\u00a0400,00|€ 2 400,00/.test(txt)]);
+    checks.push(['bankuppgifter skrivs', txt.includes('IBAN')]);
+    checks.push(['filen delas i stället för att laddas ner', made.shared === true]);
+    checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(made.sharedName || '')]);
+    checks.push(['inget ritas av utanför skärmen längre', made.holders === 0]);
+    checks.push(['förhandsvisningen är orörd efteråt', made.after === beforeSave.transform]);
+    checks.push(['knappen släpps när PDF:en är klar',
+      made.btn === 'Spara PDF' && made.btnOff === false]);
+
+    // Vakthunden: hänger ett steg ska knappen ändå släppas. Utan den står den
+    // kvar för evigt — precis det som rapporterades gång på gång.
+    const hung = await page.evaluate(async () => {
+      window.jspdf = { jsPDF: class { constructor(){ for(;;){ break; } throw new Error('x'); } } };
+      delete window.jsPDF;
+      const btn = document.querySelector('.inv-save-btn');
+      btn.click();
+      await new Promise(r => setTimeout(r, 1200));
+      return { label: btn.textContent.trim(), disabled: btn.disabled };
+    });
+    checks.push(['ett fel låser inte knappen',
+      hung.label === 'Spara PDF' && hung.disabled === false]);
 
     // ── Nedskalningen får inte kunna fastna i full storlek ──
     // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man
