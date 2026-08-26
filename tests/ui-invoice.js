@@ -149,20 +149,29 @@ const form = page => page.click('#inv-tab-form');
         set(o){ window.__saved = o; return this; },
         from(el){ window.__renderedId = el.id; window.__renderedOffscreen =
           el.getBoundingClientRect().right < 0; return this; },
-        save(){
+        outputPdf(kind){
+          window.__outputKind = kind;
           const i = document.getElementById('inv-doc-inner');
           window.__duringRender = { transform: i.style.transform,
             right: Math.round(i.getBoundingClientRect().right), vw: window.innerWidth };
-          return new Promise(r => setTimeout(r, 500));
-        } });
+          return new Promise(r => setTimeout(() => r(new Blob(['%PDF-1.4 stub'],
+            { type: 'application/pdf' })), 500));
+        },
+        save(){ window.__usedSave = true; return new Promise(() => {}); } });
     });
+    await page.evaluate(() => { window.__shared = null;
+      navigator.share = f => { window.__shared = f; return Promise.resolve(); };
+      navigator.canShare = () => true; });
     await page.click('.inv-save-btn');
-    await page.waitForTimeout(1400);
+    await page.waitForTimeout(1800);
     const render = await page.evaluate(() => ({
       during: window.__duringRender, offscreen: window.__renderedOffscreen,
       opt: window.__saved,
       after: document.getElementById('inv-doc-inner').style.transform,
       holders: document.querySelectorAll('body > div[style*="-10000px"]').length,
+      outputKind: window.__outputKind, usedSave: window.__usedSave === true,
+      btn: document.querySelector('.inv-save-btn').textContent.trim(),
+      btnOff: document.querySelector('.inv-save-btn').disabled,
     }));
     checks.push(['förhandsvisningen är fortfarande nedskalad under renderingen',
       /scale\(/.test(render.during?.transform || '')]);
@@ -175,6 +184,13 @@ const form = page => page.click('#inv-tab-form');
       render.opt?.jsPDF?.format === 'a4' && render.opt?.jsPDF?.orientation === 'portrait']);
     checks.push(['telefonen renderar i lägre skala', render.opt?.html2canvas?.scale === 1.5]);
     checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(render.opt?.filename || '')]);
+    // .save() lämnar över till webbläsarens nedladdning, som blockeras i en
+    // installerad iOS-PWA och aldrig blir klar. Filen ska hämtas ut som blob
+    // och gå genom delningsmenyn, precis som bokföringsexporten.
+    checks.push(['filen hämtas ut som blob, inte via webbläsarens nedladdning',
+      render.outputKind === 'blob' && render.usedSave === false]);
+    checks.push(['knappen släpps när PDF:en är klar',
+      render.btn === 'Spara PDF' && render.btnOff === false]);
 
     // ── Nedskalningen får inte kunna fastna i full storlek ──
     // Mättes bredden vid fel tillfälle (iOS: tangentbordet på väg ner när man

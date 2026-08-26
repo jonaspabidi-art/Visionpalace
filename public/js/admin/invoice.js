@@ -414,12 +414,16 @@ async function saveInvPDF() {
   let holder = null;
   try {
     if (!window.html2pdf) {
-      await new Promise((res, rej) => {
+      // Utan tidsgräns kan hämtningen hänga tyst på ett dåligt nät, och då
+      // står knappen kvar på "Skapar PDF…" för alltid
+      await new Promise(res => {
         const el = document.createElement('script');
+        const done = () => { clearTimeout(t); res(); };
+        const t = setTimeout(done, 15000);
         el.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        el.onload = res; el.onerror = rej;
+        el.onload = done; el.onerror = done;
         document.head.appendChild(el);
-      }).catch(() => {});
+      });
     }
     if (!window.html2pdf) { showToast('Kunde inte ladda PDF-biblioteket', 'error'); return; }
 
@@ -434,13 +438,20 @@ async function saveInvPDF() {
     holder.appendChild(clone);
     document.body.appendChild(holder);
 
-    await html2pdf().set({
+    // .save() lämnar över till webbläsarens egen nedladdning. I en installerad
+    // iOS-PWA blockeras den, och löftet blir aldrig klart — knappen stod kvar
+    // på "Skapar PDF…" i all evighet. Bokföringsexporten löste redan detta:
+    // hämta ut en blob och skicka den genom delningsmenyn i stället.
+    const name = `invoice-${invNumber}.pdf`;
+    const blob = await html2pdf().set({
       margin: 0,
-      filename: `invoice-${invNumber}.pdf`,
+      filename: name,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    }).from(clone).save();
+    }).from(clone).outputPdf('blob');
+
+    await deliverExport(blob, name, 'application/pdf');
   } catch (e) {
     console.error('[Faktura] PDF misslyckades:', e);
     showToast('Kunde inte skapa PDF:en', 'error');
