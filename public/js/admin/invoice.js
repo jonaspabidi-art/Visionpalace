@@ -345,6 +345,15 @@ function generateInvoice() {
 // tråden medan det pågår. På en telefon tar det några sekunder — och utan
 // någon återkoppling ser det ut som att appen hängt sig, så man trycker igen
 // och startar om jobbet. Knappen låses och säger vad som händer i stället.
+// Dokumentet är 794 px brett. I dubbel skala blir avritningen 1588 px, alltså
+// nära 2,7 miljoner pixlar som en telefon ska rita och komprimera i ett svep —
+// det är den som tar sekunderna. 1,5 ger ~144 dpi på A4, fullt tillräckligt
+// för en faktura, och drygt hälften så mycket att rita.
+function pdfRenderScale() {
+  const narrow = Math.min(window.innerWidth, window.innerHeight) < 700;
+  return narrow ? 1.5 : 2;
+}
+
 let _invPdfBusy = false;
 async function saveInvPDF() {
   if (_invPdfBusy) return;
@@ -362,6 +371,10 @@ async function saveInvPDF() {
   _invPdfBusy = true;
   if (btn) { btn.textContent = 'Skapar PDF…'; btn.disabled = true; }
   showToast('Skapar PDF…', 'ok');
+  // Renderingen låser huvudtråden. Utan att lämna över till webbläsaren först
+  // hinner den aldrig rita om knappen — texten ovan sattes men syntes aldrig,
+  // och det såg fortfarande ut som att ingenting hände.
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   try {
     if (!window.html2pdf) {
@@ -385,7 +398,7 @@ async function saveInvPDF() {
       margin: 0,
       filename: `invoice-${invNumber}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
+      html2canvas: { scale: pdfRenderScale(), useCORS: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).from(inner).save();
   } catch (e) {

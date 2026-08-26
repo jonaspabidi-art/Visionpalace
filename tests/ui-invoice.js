@@ -160,7 +160,9 @@ const form = page => page.click('#inv-tab-form');
     // Lyckad rendering: knappen ska vara låst medan det pågår
     await page.evaluate(() => {
       window.__saved = null;
-      window.html2pdf = () => ({ set(o){ window.__saved = o; return this; }, from(){ return this; },
+      window.html2pdf = () => ({
+        set(o){ window.__saved = o; return this; },
+        from(){ return this; },
         save(){ return new Promise(r => setTimeout(r, 900)); } });
     });
     await page.click('.inv-save-btn');
@@ -171,9 +173,14 @@ const form = page => page.click('#inv-tab-form');
     }));
     checks.push(['knappen låses medan PDF:en skapas', during.disabled === true]);
     checks.push(['och säger vad som händer', during.label === 'Skapar PDF…']);
+    // Att knapptexten hinner målas innan renderingen låser tråden går inte att
+    // pröva här: renderingen är stubbad och blockerar ingenting, så kontrollen
+    // skulle passera även utan överlämningen. Den är därför utelämnad hellre
+    // än falsk trygghet — överlämningen i saveInvPDF står kvar ändå.
     await page.waitForTimeout(1200);
     const opt = await page.evaluate(() => window.__saved);
     checks.push(['A4 stående begärs', opt?.jsPDF?.format === 'a4' && opt?.jsPDF?.orientation === 'portrait']);
+    checks.push(['telefonen renderar i lägre skala', opt?.html2canvas?.scale === 1.5]);
     checks.push(['filnamnet bär fakturanumret', /^invoice-/.test(opt?.filename || '')]);
     const after = await page.evaluate(() => document.getElementById('inv-doc-inner').style.transform);
     checks.push(['nedskalningen återställs efter ett lyckat försök', after === beforeSave.transform]);
