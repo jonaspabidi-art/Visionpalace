@@ -100,6 +100,11 @@ module.exports = () => {
       const soldBy = s => s.admins?.display_name || s.admins?.username || '';
       let revTotal = 0, profitTotal = 0;
       for (const s of sales || []) {
+        // En avbruten order är ingen försäljning. Historiken och avräkningen
+        // hoppade över den, exporten gjorde det inte — så bokföringen fick både
+        // omsättning och vinst som aldrig funnits, och de tre vyerna visade
+        // olika siffror för samma månad.
+        if (s.status === 'cancelled') continue;
         const client = s.clients?.admin_label || s.clients?.display_name || s.customer_name || '';
         for (const it of s.sale_items || []) {
           const qty = it.qty || 1;
