@@ -134,6 +134,14 @@ function renderPurchases(sales) {
       : purchaseFilter === 'arriving' ? isArriving(s)
         : true);
 
+  // Priset som visas stort är vad RADEN kostade. Stod det bara styckpriset med
+  // ett litet ×3 under fick kunden räkna själv, och totalen längst ner stämde
+  // inte med något av talen i listan.
+  const lineTotal = item => {
+    const t = (parseFloat(item.sell_price) || 0) * (parseInt(item.qty, 10) || 1);
+    return Number.isInteger(t) ? String(t) : t.toFixed(2);
+  };
+
   const cardHTML = sale => {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -148,8 +156,8 @@ function renderPurchases(sales) {
                   style="background:none;border:none;padding:3px 0 0;color:#7aabff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Order again</button>
         </div>
         <div class="sale-item-right">
-          ${item.sell_price != null ? `<div class="sale-item-price">€${item.sell_price}</div>` : ''}
-          ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">×${item.qty}</div>` : ''}
+          ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">${item.qty} × €${item.sell_price}</div>` : ''}
+          ${item.sell_price != null ? `<div class="sale-item-price">€${lineTotal(item)}</div>` : ''}
         </div>
       </div>`).join('');
     const saleData = encodeURIComponent(JSON.stringify(sale));
