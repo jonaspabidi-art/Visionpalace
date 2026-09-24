@@ -453,6 +453,9 @@
     <div id="edit-lines"></div>
 
     <button class="inv-add-row" onclick="addEditDiscount()">+ Lägg till rabatt</button>
+    <!-- Bara på förbeställningar: de rör inte lagret, så varan behöver inte finnas -->
+    <button class="inv-add-row" id="edit-add-preorder-btn" style="display:none"
+            onclick="addEditPreorderLine()">+ Lägg till förbeställd vara</button>
 
     <div class="inv-section-title" style="margin-top:14px">Lägg till ur lagret</div>
     <div id="edit-stock-list"></div>

@@ -401,6 +401,7 @@ let editLines = [];
 let editRestock = true;
 let editStockLoading = false;
 let editStockFailed = false;
+let editIsPreorder = false;
 
 async function openEditSale(saleId) {
   const sale = _saleHistoryCache[saleId];
@@ -428,6 +429,12 @@ async function openEditSale(saleId) {
   document.getElementById('edit-sale-title').textContent =
     `Ändra ${sale.invoice_number || 'order'}`;
   document.getElementById('edit-restock').checked = true;
+  // En förbeställning tar aldrig ur lagret — varan finns ju inte hemma än. Där
+  // måste man kunna skriva in en vara för hand; på en vanlig order vore det att
+  // sälja något man inte har.
+  editIsPreorder = !!sale.is_preorder;
+  document.getElementById('edit-add-preorder-btn').style.display =
+    editIsPreorder ? '' : 'none';
   renderEditLines();
   editStockLoading = true;
   renderEditStockList();
@@ -538,6 +545,40 @@ function addEditDiscount() {
   renderEditLines();
 }
 
+// En rad utan koppling till lagret. Fylls i för hand, precis som när en
+// förbeställning skapas, och ref-koden slår upp namn och priser om modellen
+// sålts förut.
+function addEditPreorderLine() {
+  editLines.push({
+    id: null, name: '', ref_code: '', qty: 1, maxQty: null,
+    sell: '', buy: '', image: null, inventory_ids: null,
+    discount: '', discountId: null, manual: true, hint: '',
+  });
+  renderEditLines();
+}
+
+// Samma uppslag som förbeställningen och fakturaimporten använder
+async function lookupEditRef(i) {
+  const line = editLines[i];
+  if (!line) return;
+  const ref = String(line.ref_code || '').trim().toUpperCase();
+  line.ref_code = ref;
+  if (!ref) { line.hint = ''; renderEditLines(); return; }
+  try {
+    const r = await api(`/api/inventory/ref-lookup?code=${encodeURIComponent(ref)}`);
+    if (!r.ok) { line.hint = ''; renderEditLines(); return; }
+    const d = await r.json();
+    const m = d.match;
+    if (!m) { line.hint = 'Ny modell — fyll i namn och priser själv.'; renderEditLines(); return; }
+    if (!String(line.name).trim() && m.name) line.name = m.name;
+    if (!line.sell && m.sell_price != null) line.sell = String(m.sell_price);
+    if (!line.buy && m.buy_price != null) line.buy = String(m.buy_price);
+    line.image = m.image || null;
+    line.hint = 'Känd modell — namn och priser hämtade.';
+  } catch { line.hint = ''; }
+  renderEditLines();
+}
+
 function addEditFromStock(key) {
   const g = invGroups[key];
   if (!g) return;
@@ -590,9 +631,19 @@ function renderEditLines() {
     div.innerHTML = `
       <button class="inv-line-remove" title="Ta bort raden">×</button>
       <div style="font-size:13px;font-weight:600;color:var(--text);padding-right:28px;margin-bottom:8px">
-        ${esc(line.name)}${line.ref_code ? ` <span style="color:var(--text3);font-weight:400">(${esc(line.ref_code)})</span>` : ''}
+        ${line.manual ? 'Förbeställd vara' : esc(line.name)}${!line.manual && line.ref_code ? ` <span style="color:var(--text3);font-weight:400">(${esc(line.ref_code)})</span>` : ''}
         ${line.id ? '' : '<span style="color:var(--blue);font-size:11px;font-weight:600"> · ny</span>'}
       </div>
+      ${!line.manual ? '' : `
+      <div class="inv-field" style="margin-bottom:8px">
+        <label>Referenskod</label>
+        <input class="inv-input" data-field="ref_code" placeholder="ex. CT-2841" autocomplete="off">
+        ${line.hint ? `<div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(line.hint)}</div>` : ''}
+      </div>
+      <div class="inv-field" style="margin-bottom:8px">
+        <label>Namn</label>
+        <input class="inv-input" data-field="name" placeholder="Skriv namn på varan" autocomplete="off">
+      </div>`}
       <div class="inv-row-grid">
         <div class="inv-field" style="margin-bottom:0">
           <label>Antal</label>
@@ -604,7 +655,12 @@ function renderEditLines() {
           <input class="inv-input" data-field="sell" type="number" step="0.01" inputmode="decimal" placeholder="0">
         </div>
       </div>
-      ${isDiscount || line.buy === '' || line.buy == null ? '' : `
+      ${!line.manual ? '' : `
+      <div class="inv-field" style="margin-top:8px;margin-bottom:0">
+        <label>Inköpspris (€)</label>
+        <input class="inv-input" data-field="buy" type="number" step="0.01" inputmode="decimal" placeholder="0">
+      </div>`}
+      ${isDiscount || (!line.manual && (line.buy === '' || line.buy == null)) ? '' : `
       <div class="inv-field" style="margin-top:8px;margin-bottom:0">
         <label>Rabatt på just den här varan (€)</label>
         <input class="inv-input" data-field="discount" type="number" min="0" step="0.01"
@@ -613,6 +669,13 @@ function renderEditLines() {
       </div>`}`;
     div.querySelector('[data-field="qty"]').value = line.qty;
     div.querySelector('[data-field="sell"]').value = line.sell;
+    if (line.manual) {
+      div.querySelector('[data-field="ref_code"]').value = line.ref_code;
+      div.querySelector('[data-field="name"]').value = line.name;
+      div.querySelector('[data-field="buy"]').value = line.buy;
+      div.querySelector('[data-field="ref_code"]')
+        .addEventListener('change', e => { editLines[i].ref_code = e.target.value; lookupEditRef(i); });
+    }
     const dEl = div.querySelector('[data-field="discount"]');
     if (dEl) {
       dEl.value = line.discount;
@@ -622,7 +685,7 @@ function renderEditLines() {
         ? `Raden blir € ${netto.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         : '';
     }
-    for (const f of ['qty', 'sell', 'discount']) {
+    for (const f of ['qty', 'sell', 'discount', 'name', 'buy']) {
       const el = div.querySelector(`[data-field="${f}"]`);
       if (el) el.addEventListener('change', () => updateEditLine(i, f, el.value));
     }
@@ -643,8 +706,12 @@ async function saveEditSale() {
       // Rabatten skrivs som ett positivt tal men sparas negativt
       const v = Math.abs(parseFloat(l.sell) || 0);
       if (!(v > 0)) { showToast('Ange ett rabattbelopp', 'error'); return; }
+    } else if (l.manual && !String(l.name).trim()) {
+      // Samma krav som när en förbeställning skapas: utan namn syns raden
+      // varken på fakturan eller i historiken
+      showToast('Skriv namn på den förbeställda varan', 'error'); return;
     } else if (!(parseFloat(l.sell) > 0)) {
-      showToast(`Ange säljpris för ${l.name}`, 'error'); return;
+      showToast(`Ange säljpris för ${String(l.name).trim() || 'den nya raden'}`, 'error'); return;
     }
     // En rabatt större än raden själv gör radens pris negativt, och då ser det
     // ut som att ni betalat kunden för att ta varan. Gäller bara rader som
@@ -662,8 +729,8 @@ async function saveEditSale() {
   for (const l of editLines) {
     items.push({
       id: l.id || undefined,
-      name: l.name,
-      ref_code: l.ref_code || null,
+      name: String(l.name).trim(),
+      ref_code: String(l.ref_code || '').trim().toUpperCase() || null,
       qty: Math.max(1, parseInt(l.qty, 10) || 1),
       sell_price: editLineSell(l),
       buy_price: l.buy === '' || l.buy == null ? null : parseFloat(l.buy),
@@ -673,8 +740,8 @@ async function saveEditSale() {
     if (lineDiscount(l) > 0) {
       items.push({
         id: l.discountId || undefined,
-        name: pairDiscountName(l.name),
-        ref_code: l.ref_code || null,
+        name: pairDiscountName(String(l.name).trim()),
+        ref_code: String(l.ref_code || '').trim().toUpperCase() || null,
         qty: 1,
         sell_price: -lineDiscount(l),
         buy_price: 0,          // så att rabatten sänker vinsten, inte bara omsättningen
