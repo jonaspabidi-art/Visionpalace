@@ -152,8 +152,6 @@ function renderPurchases(sales) {
         <div class="sale-item-body">
           <div class="sale-item-name">${esc(item.name || '—')}</div>
           ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
-          <button onclick="orderAgain('${encodeURIComponent(item.name || '')}','${encodeURIComponent(item.ref_code || '')}')"
-                  style="background:none;border:none;padding:3px 0 0;color:#7aabff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Order again</button>
         </div>
         <div class="sale-item-right">
           ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">${item.qty} × €${item.sell_price}</div>` : ''}
@@ -277,20 +275,6 @@ function askPaymentDetails(invoice) {
     const input = document.getElementById('chat-input');
     if (!input) return;
     input.value = `Hi! Could you send me the payment details for invoice ${invoice || ''}?`.trim();
-    input.focus();
-    if (typeof autoResize === 'function') autoResize(input);
-  }, 120);
-}
-
-// Turns the history into a way to buy again instead of just an archive
-function orderAgain(name, ref) {
-  const n = decodeURIComponent(name || '');
-  const r = decodeURIComponent(ref || '');
-  switchTab('messages');
-  setTimeout(() => {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    input.value = `Hi! I'd like to order more of ${n}${r ? ` (${r})` : ''}. How many can you do?`;
     input.focus();
     if (typeof autoResize === 'function') autoResize(input);
   }, 120);

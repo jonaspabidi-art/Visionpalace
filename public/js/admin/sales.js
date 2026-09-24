@@ -421,7 +421,10 @@ async function openEditSale(saleId) {
     buy: it.buy_price == null ? '' : String(it.buy_price),
     image: it.image || null,
     inventory_ids: null,
+    discount: '',                 // rabatt som hör till just den här varan
+    discountId: null,             // raden i databasen rabatten redan har
   }));
+  foldPairDiscounts();
   document.getElementById('edit-sale-title').textContent =
     `Ändra ${sale.invoice_number || 'order'}`;
   document.getElementById('edit-restock').checked = true;
@@ -446,6 +449,33 @@ function closeEditSale() {
   editLines = [];
 }
 
+// En rabatt som hör till ett visst par sparas som en egen minusrad, döpt efter
+// varan: "Discount — Cartier Première". Det kräver ingen ändring i databasen,
+// det syns för kunden på fakturan, och vinsten sänks precis som för rabatten
+// längst ner. I rutan vill man däremot se den som ett fält på varans rad, inte
+// som en egen rad — annars blir listan dubbelt så lång.
+const PAIR_DISCOUNT_PREFIX = 'Discount — ';
+const pairDiscountName = name => PAIR_DISCOUNT_PREFIX + name;
+
+function foldPairDiscounts() {
+  const rest = [];
+  for (const l of editLines) {
+    if (!l.name.startsWith(PAIR_DISCOUNT_PREFIX)) { rest.push(l); continue; }
+    const varan = l.name.slice(PAIR_DISCOUNT_PREFIX.length);
+    const mål = editLines.find(x => x.name === varan && !x.name.startsWith(PAIR_DISCOUNT_PREFIX));
+    // Hittas inte varan raden hörde till får rabatten stå kvar som egen rad,
+    // hellre det än att den tyst försvinner ur ordern
+    if (!mål) { rest.push(l); continue; }
+    mål.discount = String(Math.abs(parseFloat(l.sell) || 0));
+    mål.discountId = l.id || null;
+  }
+  editLines = rest;
+}
+
+function lineDiscount(l) {
+  return Math.abs(parseFloat(l.discount) || 0);
+}
+
 // Rabatten skrivs in som ett positivt tal men är ett avdrag. Räknades den som
 // ett plus här visade rutan fel summa ända fram tills man sparade.
 function editLineSell(l) {
@@ -454,10 +484,12 @@ function editLineSell(l) {
 }
 
 function editTotals() {
-  const revenue = editLines.reduce((s, l) => s + editLineSell(l) * (parseInt(l.qty, 10) || 0), 0);
+  const revenue = editLines.reduce((s, l) =>
+    s + editLineSell(l) * (parseInt(l.qty, 10) || 0) - lineDiscount(l), 0);
   const profit = editLines.reduce((s, l) => {
     if (l.buy === '' || l.buy == null) return s;   // frakt är genomgång, ingen vinst
-    return s + (editLineSell(l) - (parseFloat(l.buy) || 0)) * (parseInt(l.qty, 10) || 0);
+    // Rabatten sparas med inköpspris 0 och sänker därför vinsten krona för krona
+    return s + (editLineSell(l) - (parseFloat(l.buy) || 0)) * (parseInt(l.qty, 10) || 0) - lineDiscount(l);
   }, 0);
   return { revenue, profit };
 }
@@ -491,7 +523,8 @@ function addEditDiscount() {
   // Samma form som vid försäljning: negativt belopp med inköpspris 0, så att
   // rabatten sänker både omsättning och vinst
   editLines.push({ id: null, name: 'Discount', ref_code: '', qty: 1,
-    maxQty: null, sell: '', buy: '0', image: null, inventory_ids: null });
+    maxQty: null, sell: '', buy: '0', image: null, inventory_ids: null,
+    discount: '', discountId: null });
   renderEditLines();
 }
 
@@ -511,6 +544,7 @@ function addEditFromStock(key) {
       sell: g.sell_price == null ? '' : String(g.sell_price),
       buy: g.buy_price == null ? '' : String(g.buy_price),
       image: g.image || null, inventory_ids: [free[0]],
+      discount: '', discountId: null,
     });
   }
   renderEditLines();
@@ -559,12 +593,28 @@ function renderEditLines() {
           <label>${isDiscount ? 'Rabatt (€, minus)' : 'Säljpris (€)'}</label>
           <input class="inv-input" data-field="sell" type="number" step="0.01" inputmode="decimal" placeholder="0">
         </div>
-      </div>`;
+      </div>
+      ${isDiscount || line.buy === '' || line.buy == null ? '' : `
+      <div class="inv-field" style="margin-top:8px;margin-bottom:0">
+        <label>Rabatt på just den här varan (€)</label>
+        <input class="inv-input" data-field="discount" type="number" min="0" step="0.01"
+               inputmode="decimal" placeholder="0">
+        <div data-role="disc-sum" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+      </div>`}`;
     div.querySelector('[data-field="qty"]').value = line.qty;
     div.querySelector('[data-field="sell"]').value = line.sell;
-    for (const f of ['qty', 'sell']) {
+    const dEl = div.querySelector('[data-field="discount"]');
+    if (dEl) {
+      dEl.value = line.discount;
+      const sum = div.querySelector('[data-role="disc-sum"]');
+      const netto = editLineSell(line) * (parseInt(line.qty, 10) || 0) - lineDiscount(line);
+      sum.textContent = lineDiscount(line) > 0
+        ? `Raden blir € ${netto.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '';
+    }
+    for (const f of ['qty', 'sell', 'discount']) {
       const el = div.querySelector(`[data-field="${f}"]`);
-      el.addEventListener('change', () => updateEditLine(i, f, el.value));
+      if (el) el.addEventListener('change', () => updateEditLine(i, f, el.value));
     }
     div.querySelector('.inv-line-remove').addEventListener('click', () => removeEditLine(i));
     wrap.appendChild(div);
@@ -586,18 +636,42 @@ async function saveEditSale() {
     } else if (!(parseFloat(l.sell) > 0)) {
       showToast(`Ange säljpris för ${l.name}`, 'error'); return;
     }
+    // En rabatt större än raden själv gör radens pris negativt, och då ser det
+    // ut som att ni betalat kunden för att ta varan. Gäller bara rader som
+    // FÅTT en parrabatt — rabattraden längst ner har inget eget pris att
+    // jämföra med, och fastnade här tills kontrollen blev villkorad.
+    const rad = editLineSell(l) * (Math.max(1, parseInt(l.qty, 10) || 1));
+    if (lineDiscount(l) > 0 && lineDiscount(l) > rad) {
+      showToast(`Rabatten på ${l.name} är större än raden (€ ${rad})`, 'error'); return;
+    }
   }
 
-  const items = editLines.map(l => ({
-    id: l.id || undefined,
-    name: l.name,
-    ref_code: l.ref_code || null,
-    qty: Math.max(1, parseInt(l.qty, 10) || 1),
-    sell_price: editLineSell(l),
-    buy_price: l.buy === '' || l.buy == null ? null : parseFloat(l.buy),
-    image: l.image || null,
-    inventory_ids: l.inventory_ids || undefined,
-  }));
+  // En rabatt som hör till ett par viks ut till sin egen minusrad igen, direkt
+  // efter varan den gäller, så att den syns på fakturan och sänker vinsten.
+  const items = [];
+  for (const l of editLines) {
+    items.push({
+      id: l.id || undefined,
+      name: l.name,
+      ref_code: l.ref_code || null,
+      qty: Math.max(1, parseInt(l.qty, 10) || 1),
+      sell_price: editLineSell(l),
+      buy_price: l.buy === '' || l.buy == null ? null : parseFloat(l.buy),
+      image: l.image || null,
+      inventory_ids: l.inventory_ids || undefined,
+    });
+    if (lineDiscount(l) > 0) {
+      items.push({
+        id: l.discountId || undefined,
+        name: pairDiscountName(l.name),
+        ref_code: l.ref_code || null,
+        qty: 1,
+        sell_price: -lineDiscount(l),
+        buy_price: 0,          // så att rabatten sänker vinsten, inte bara omsättningen
+        image: null,
+      });
+    }
+  }
 
   const btn = document.getElementById('edit-save-btn');
   btn.textContent = 'Sparar…'; btn.disabled = true;
