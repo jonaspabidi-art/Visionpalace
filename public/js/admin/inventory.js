@@ -40,6 +40,20 @@ function buildInvGroups(items) {
   return groups;
 }
 
+// Lagret läses bara in när man varit inne på Lager-fliken. Går man direkt till
+// Historik för att ändra en order finns inga grupper, och listan man ska välja
+// par ur står tom fast det finns par. Den här hämtar lagret utan att röra
+// fliken, och används där lagret behövs men kanske aldrig visats.
+async function ensureInvGroups() {
+  const r = await api('/api/inventory');
+  if (!r.ok) return false;
+  const d = await r.json();
+  const items = d.items || [];
+  items.forEach(i => { invItemsMap[i.id] = i; });
+  invGroups = buildInvGroups(items);
+  return true;
+}
+
 function renderInventory(items) {
   const grid = document.getElementById('inv-grid');
   invItemsMap = {};
