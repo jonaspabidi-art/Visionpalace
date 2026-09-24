@@ -50,8 +50,12 @@ const INVENTORY = [
     await page.addInitScript(t => localStorage.setItem('vp_admin_token', t), token);
     await page.goto('http://localhost:5959/admin');
     await page.waitForSelector('#app',{state:'visible'});
-    await page.click('#tab-inventory'); await page.waitForTimeout(700);
+    // Gå RAKT till Historik. Klickade testet in på Lager först laddades lagret
+    // dit, och då dolde testet att rutan inte hämtar något själv — precis den
+    // bugg som gjorde att inget gick att lägga till i skarpt läge.
     await page.click('#tab-historik'); await page.waitForTimeout(900);
+    checks.push(['lagret är oläst när man går rakt till Historik',
+      await page.evaluate(() => Object.keys(invGroups).length === 0)]);
 
     const html = await page.textContent('#app');
     checks.push(['obetald order får en Ändra-knapp', html.includes('Ändra')]);
@@ -75,6 +79,10 @@ const INVENTORY = [
     await page.evaluate(() => openEditSale('s1'));
     await page.waitForTimeout(400);
     checks.push(['rutan öppnas med orderns rader', (await lines()) === 2]);
+    // Det här är kärnan: rutan måste hämta lagret själv, annars finns inget
+    // att lägga till för den som inte varit inne på Lager-fliken först
+    checks.push(['rutan hämtar lagret själv',
+      (await page.$$('#edit-stock-list .inv-add-row')).length > 0]);
     checks.push(['rubriken visar fakturanumret',
       (await page.textContent('#edit-sale-title')).includes('VP09-001')]);
     checks.push(['summan visar omsättning och vinst',

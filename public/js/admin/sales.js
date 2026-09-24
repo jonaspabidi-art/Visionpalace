@@ -399,8 +399,10 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
 let editSaleId = null;
 let editLines = [];
 let editRestock = true;
+let editStockLoading = false;
+let editStockFailed = false;
 
-function openEditSale(saleId) {
+async function openEditSale(saleId) {
   const sale = _saleHistoryCache[saleId];
   if (!sale) return;
   if ((sale.status || 'unpaid') !== 'unpaid') {
@@ -424,8 +426,18 @@ function openEditSale(saleId) {
     `Ändra ${sale.invoice_number || 'order'}`;
   document.getElementById('edit-restock').checked = true;
   renderEditLines();
+  editStockLoading = true;
   renderEditStockList();
   document.getElementById('edit-sale-modal').classList.add('open');
+
+  // Lagret finns bara i minnet om man varit inne på Lager-fliken. Gick man rakt
+  // till Historik stod listan tom fast det fanns par att lägga till. Hämta det
+  // alltid: lagret hinner ändras mellan att fliken lästes och ordern ändras.
+  const ok = await ensureInvGroups();
+  editStockLoading = false;
+  if (editSaleId !== saleId) return;          // rutan hann stängas
+  editStockFailed = !ok;
+  renderEditStockList();
 }
 
 function closeEditSale() {
@@ -517,7 +529,10 @@ function renderEditStockList() {
       + ${esc(g.name)}${g.ref_code ? ` <span style="color:var(--text3)">(${esc(g.ref_code)})</span>` : ''}
       <span style="color:var(--text3)"> · ${free} i lager</span></button>`;
   }).join('');
-  list.innerHTML = rows || '<div style="color:var(--text3);font-size:12px;padding:6px 0">Inget kvar i lagret att lägga till.</div>';
+  const tom = editStockLoading ? 'Hämtar lagret…'
+    : editStockFailed ? 'Kunde inte hämta lagret. Stäng och försök igen.'
+    : 'Inget kvar i lagret att lägga till.';
+  list.innerHTML = rows || `<div style="color:var(--text3);font-size:12px;padding:6px 0">${tom}</div>`;
 }
 
 function renderEditLines() {
