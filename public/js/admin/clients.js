@@ -10,6 +10,11 @@ function renderClients() {
     const init = (c.admin_label || c.display_name || '?')[0].toUpperCase();
     const seen = c.is_online ? 'Online' : (c.last_seen_at ? timeAgo(c.last_seen_at) : '');
     const seenStyle = c.is_online ? 'color:#34c759' : '';
+    // Klockslaget under det korta måttet: "1t 23m" säger hur länge sedan,
+    // "14:05" säger när. Man vill veta båda när man ska höra av sig.
+    const seenExact = !c.is_online && c.last_seen_at
+      ? `<div class="last-seen-exact">${esc(exactTime(c.last_seen_at))}</div>` : '';
+    const seenTitle = c.last_seen_at ? ` title="Senast inne ${esc(exactStamp(c.last_seen_at))}"` : '';
     const unread = c.unread_count > 0 ? `<div class="unread-badge">${c.unread_count}</div>` : '';
     const dot = c.is_online ? '<span class="online-dot"></span>' : '';
     return `<div class="client-row${c.is_inactive ? ' client-inactive' : ''}" onclick="openChat('${c.id}')">
@@ -20,7 +25,10 @@ function renderClients() {
       </div>
       <div class="client-right">
         ${unread}
-        <div class="last-seen-txt" style="${seenStyle}">${seen}</div>
+        <div${seenTitle}>
+          <div class="last-seen-txt" style="${seenStyle}">${seen}</div>
+          ${seenExact}
+        </div>
       </div>
     </div>`;
   }).join('');
@@ -116,7 +124,8 @@ function updateChatHeader() {
     sub.textContent = 'Online';
     sub.style.color = '#34c759';
   } else if (c.last_seen_at) {
-    sub.textContent = 'Senast ' + timeAgo(c.last_seen_at);
+    sub.textContent = `Senast ${exactTime(c.last_seen_at)} · ${timeAgo(c.last_seen_at)}`;
+    sub.title = exactStamp(c.last_seen_at);
     sub.style.color = '';
   } else {
     sub.textContent = c.admin_label ? c.display_name : '';

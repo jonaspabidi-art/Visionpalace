@@ -514,7 +514,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   min-width: 20px; height: 20px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; padding: 0 5px;
 }
-.last-seen-txt { font-size: 11px; color: var(--text2); }
+.last-seen-txt { font-size: 11px; color: var(--text2); text-align: right; }
+.last-seen-exact { font-size: 10px; color: var(--text3); text-align: right; margin-top: 1px; white-space: nowrap; }
 .client-inactive { opacity: .35; }
 
 /* ══════════════════════════════════════════
@@ -538,7 +539,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 }
 .chat-panel-info { flex: 1; min-width: 0; }
 .chat-panel-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-panel-sub { font-size: 11px; color: var(--text2); margin-top: 1px; }
+/* Klockslag plus hur länge sedan blir långt. Rubriken ska hålla sin höjd —
+   bryter den till två rader knuffas namnet och knapparna ur läge. */
+.chat-panel-sub { font-size: 11px; color: var(--text2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .danger-btn {
   padding: 6px 12px; border-radius: 8px; border: 1px solid #ff3b30;
   background: transparent; color: #ff3b30; font-size: 12px; cursor: pointer; white-space: nowrap;

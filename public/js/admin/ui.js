@@ -163,8 +163,38 @@ function timeAgo(iso) {
   const d = (Date.now() - new Date(iso)) / 1000;
   if (d < 60) return 'just nu';
   if (d < 3600) return `${Math.floor(d / 60)}m`;
-  if (d < 86400) return `${Math.floor(d / 3600)}t`;
+  // Timmarna rundades ner, så allt mellan 60 och 119 minuter stod som "1t".
+  // Minuterna med gör skillnaden mellan nyss och nästan två timmar sedan.
+  if (d < 86400) {
+    const t = Math.floor(d / 3600);
+    const m = Math.floor((d % 3600) / 60);
+    return m ? `${t}t ${m}m` : `${t}t`;
+  }
   return `${Math.floor(d / 86400)}d`;
+}
+
+// Klockslaget, inte hur länge sedan. "1t" säger inte om någon var inne 14:05
+// eller 14:59, och det är just det man vill veta när man ska höra av sig.
+function exactTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const nu = new Date();
+  const klocka = d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  const sammaDag = x => x.getFullYear() === d.getFullYear()
+    && x.getMonth() === d.getMonth() && x.getDate() === d.getDate();
+  if (sammaDag(nu)) return klocka;
+  const igår = new Date(nu); igår.setDate(igår.getDate() - 1);
+  if (sammaDag(igår)) return `igår ${klocka}`;
+  const datum = d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+  const år = d.getFullYear() === nu.getFullYear() ? '' : ` ${d.getFullYear()}`;
+  return `${datum}${år} ${klocka}`;
+}
+
+// Hela sanningen, för title-texten man kan hålla kvar fingret på
+function exactStamp(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('sv-SE', { dateStyle: 'full', timeStyle: 'short' });
 }
 
 // ── Push / Notifications ──
