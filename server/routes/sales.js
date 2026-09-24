@@ -347,9 +347,12 @@ module.exports = (io) => {
       const toRestore = [];
       const restoreFrom = (row, count) => {
         if (!restock || count <= 0) return;
-        // Frakt och rabatt är inga fysiska par — de har varken ref eller
-        // inköpspris och ska inte hamna i lagret
+        // Frakt och rabatt är inga fysiska par och ska inte hamna i lagret.
+        // Frakten har inget inköpspris alls. Rabatten har inköpspris 0 — inte
+        // null — och slank därför förbi den kontrollen och skapade ett låtsaspar
+        // i lagret när den togs bort. Ett minusbelopp är aldrig ett par.
         if (row.lens_variant_id || row.buy_price == null) return;
+        if (Number(row.sell_price) < 0) return;
         for (let i = 0; i < count; i++) {
           toRestore.push({
             ref_code: row.ref_code || null, name: row.name,

@@ -86,7 +86,7 @@ const INVENTORY = [
     checks.push(['rubriken visar fakturanumret',
       (await page.textContent('#edit-sale-title')).includes('VP09-001')]);
     checks.push(['summan visar omsättning och vinst',
-      (await page.textContent('#edit-total')).replace(/ /g,' ').includes('€ 2 420,00 · vinst € 800,00')]);
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 420,00 · vinst € 800,00')]);
 
     // Antalet på en befintlig rad går att sänka men inte höja
     await page.evaluate(() => updateEditLine(0, 'qty', '5'));
@@ -116,7 +116,7 @@ const INVENTORY = [
     await page.evaluate(() => updateEditLine(3, 'sell', '300'));
     await page.waitForTimeout(200);
     checks.push(['rabatten dras av i summan',
-      (await page.textContent('#edit-total')).replace(/ /g,' ').includes('€ 3 720,00')]);
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 3 720,00')]);
 
     // Ta bort fraktraden
     await page.evaluate(() => removeEditLine(1));
@@ -134,6 +134,87 @@ const INVENTORY = [
     checks.push(['rabatten skickas negativt', disc?.sell_price === -300]);
     checks.push(['med inköpspris 0, så vinsten sänks', disc?.buy_price === 0]);
     checks.push(['återläggning till lagret begärs', patched?.restock === true]);
+
+    // ── Rabatt på ett enskilt par ──
+    // Den sparas som en egen minusrad döpt efter varan, så den syns på fakturan
+    // och sänker vinsten — men i rutan är den ett fält på varans rad.
+    patched = null;
+    await page.evaluate(() => openEditSale('s1'));
+    await page.waitForTimeout(600);
+    const discField = '#edit-lines .inv-line-item:first-child [data-field="discount"]';
+    checks.push(['varuraden har ett eget rabattfält', !!(await page.$(discField))]);
+    checks.push(['fraktraden har inget rabattfält',
+      (await page.$$('#edit-lines [data-field="discount"]')).length === 1]);
+
+    await page.fill(discField, '300');
+    await page.dispatchEvent(discField, 'change');
+    await page.waitForTimeout(300);
+    checks.push(['rutan visar vad raden blir efter rabatt',
+      (await page.textContent('#edit-lines')).replace(/\u00a0/g, ' ').includes('Raden blir € 2 100,00')]);
+    checks.push(['summan sänks av parrabatten',
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 120,00 · vinst € 500,00')]);
+
+    // Större rabatt än raden ska stoppas
+    await page.fill(discField, '9000');
+    await page.dispatchEvent(discField, 'change');
+    await page.evaluate(() => { window.__t = []; const real = window.showToast;
+      window.showToast = (m, t) => { window.__t.push(String(m)); return real(m, t); }; });
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(400);
+    checks.push(['för stor parrabatt sparas inte', patched === null]);
+    checks.push(['och säger varför',
+      /större än raden/i.test(await page.evaluate(() => window.__t.join(' | ')))]);
+
+    await page.fill(discField, '300');
+    await page.dispatchEvent(discField, 'change');
+    await page.waitForTimeout(200);
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(600);
+    const pd = patched?.items?.find(i => String(i.name).startsWith('Discount — '));
+    checks.push(['parrabatten skickas som egen rad', !!pd]);
+    checks.push(['döpt efter varan', pd?.name === 'Discount — Cartier Première']);
+    checks.push(['med negativt belopp', pd?.sell_price === -300]);
+    checks.push(['och inköpspris 0, så vinsten sänks', pd?.buy_price === 0]);
+    checks.push(['den ligger direkt efter sin vara',
+      patched?.items?.findIndex(i => i.name === 'Discount — Cartier Première') === 1]);
+    checks.push(['varans eget pris är orört', patched?.items?.[0]?.sell_price === 1200]);
+
+    // Öppnas ordern igen ska rabatten ligga i fältet, inte som en extra rad
+    await page.evaluate(() => {
+      _saleHistoryCache['s1'].sale_items = [
+        { id:'i1', name:'Cartier Première', ref_code:'CT1', sell_price:'1200', buy_price:'800', qty:2 },
+        { id:'i9', name:'Discount — Cartier Première', ref_code:'CT1', sell_price:'-300', buy_price:'0', qty:1 },
+        { id:'i2', name:'Shipping', ref_code:null, sell_price:'20', buy_price:null, qty:1 },
+      ];
+      openEditSale('s1');
+    });
+    await page.waitForTimeout(600);
+    checks.push(['rabatten blir inte en egen rad när ordern öppnas igen', (await lines()) === 2]);
+    checks.push(['den ligger i varans rabattfält',
+      (await page.inputValue(discField)) === '300']);
+    checks.push(['summan stämmer när ordern öppnas igen',
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 120,00 · vinst € 500,00')]);
+
+    // En parrabatt vars vara inte finns kvar i ordern. Den får inte försvinna
+    // tyst, och den får inte heller stoppa sparandet genom att behandlas som
+    // en vanlig vara utan säljpris.
+    patched = null;
+    await page.evaluate(() => {
+      _saleHistoryCache['s1'].sale_items = [
+        { id:'i1', name:'Cartier Première', ref_code:'CT1', sell_price:'1200', buy_price:'800', qty:2 },
+        { id:'i8', name:'Discount — Borttagen vara', ref_code:'CT5', sell_price:'-100', buy_price:'0', qty:1 },
+      ];
+      openEditSale('s1');
+    });
+    await page.waitForTimeout(600);
+    checks.push(['herrelös parrabatt står kvar som egen rad', (await lines()) === 2]);
+    checks.push(['den räknas som avdrag i summan',
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 300,00 · vinst € 700,00')]);
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(600);
+    checks.push(['och stoppar inte sparandet', !!patched]);
+    checks.push(['den skickas fortfarande negativt',
+      patched?.items?.find(i => i.name === 'Discount — Borttagen vara')?.sell_price === -100]);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

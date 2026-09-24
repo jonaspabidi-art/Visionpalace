@@ -126,6 +126,19 @@ run(fresh(), { items:[{ id:'i2', name:'Shipping', qty:1, sell_price:20 }] }, r1 
           checks.push(['med inköpspris 0, så vinsten sänks', Number(disc?.buy_price)===0]);
           checks.push(['rabatten hamnar inte i lagret', r5.state.restored.length===0]);
 
+          // 5b. Att TA BORT en rabattrad får inte skapa ett par i lagret.
+          // Rabatten har inköpspris 0, inte null, så den slank förbi
+          // undantaget som skulle hålla frakt och rabatt utanför lagret.
+          const medRabatt = fresh();
+          medRabatt.items.push({ id:'i3', sale_id:'s1', name:'Discount', ref_code:null,
+            qty:1, sell_price:'-300', buy_price:'0', image:null });
+          run(medRabatt, { items: baseItems.map(i=>({ id:i.id, name:i.name, ref_code:i.ref_code,
+            qty:i.qty, sell_price:Number(i.sell_price), buy_price:i.buy_price?Number(i.buy_price):null })) },
+          r5b => {
+            checks.push(['borttagen rabatt hamnar inte i lagret', r5b.state.restored.length===0]);
+
+          });
+
           // 6. Betald order är låst
           const paid = fresh(); paid.sale.status = 'paid';
           run(paid, { items:[{ id:'i1', name:'X', qty:1, sell_price:1 }] }, r6 => {

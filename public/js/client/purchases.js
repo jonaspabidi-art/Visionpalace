@@ -134,6 +134,13 @@ function renderPurchases(sales) {
       : purchaseFilter === 'arriving' ? isArriving(s)
         : true);
 
+  // Priset som visas stort är vad RADEN kostade. Stod det bara styckpriset med
+  // ett litet ×3 under fick kunden räkna själv, och totalen längst ner stämde
+  // inte med något av talen i listan.
+  const money = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+  const lineTotal = item => money((parseFloat(item.sell_price) || 0) * (parseInt(item.qty, 10) || 1));
+  const unitPrice = item => money(parseFloat(item.sell_price) || 0);
+
   const cardHTML = sale => {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -144,12 +151,12 @@ function renderPurchases(sales) {
         <div class="sale-item-body">
           <div class="sale-item-name">${esc(item.name || '—')}</div>
           ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
-          <button onclick="orderAgain('${encodeURIComponent(item.name || '')}','${encodeURIComponent(item.ref_code || '')}')"
-                  style="background:none;border:none;padding:3px 0 0;color:#7aabff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Order again</button>
         </div>
         <div class="sale-item-right">
-          ${item.sell_price != null ? `<div class="sale-item-price">€${item.sell_price}</div>` : ''}
-          ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">×${item.qty}</div>` : ''}
+          ${(item.qty || 1) > 1
+            ? `<div class="sale-item-qty">${item.sell_price != null ? `${item.qty} × €${unitPrice(item)}` : `×${item.qty}`}</div>`
+            : ''}
+          ${item.sell_price != null ? `<div class="sale-item-price">€${lineTotal(item)}</div>` : ''}
         </div>
       </div>`).join('');
     const saleData = encodeURIComponent(JSON.stringify(sale));
@@ -269,20 +276,6 @@ function askPaymentDetails(invoice) {
     const input = document.getElementById('chat-input');
     if (!input) return;
     input.value = `Hi! Could you send me the payment details for invoice ${invoice || ''}?`.trim();
-    input.focus();
-    if (typeof autoResize === 'function') autoResize(input);
-  }, 120);
-}
-
-// Turns the history into a way to buy again instead of just an archive
-function orderAgain(name, ref) {
-  const n = decodeURIComponent(name || '');
-  const r = decodeURIComponent(ref || '');
-  switchTab('messages');
-  setTimeout(() => {
-    const input = document.getElementById('chat-input');
-    if (!input) return;
-    input.value = `Hi! I'd like to order more of ${n}${r ? ` (${r})` : ''}. How many can you do?`;
     input.focus();
     if (typeof autoResize === 'function') autoResize(input);
   }, 120);
