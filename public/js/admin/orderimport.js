@@ -8,12 +8,16 @@ let orderDocUrl = null;
 // Kursen som fakturans belopp räknades om med. Sparas med inköpet så att
 // omräkningen går att granska i efterhand.
 let orderEurSekRate = null;
+// Raden som väntar på en bild från filväljaren. Alla rader delar samma dolda
+// input, annars får varje rad sin egen och de blir aldrig uppstädade.
+let orderImgRow = null;
 
 function openOrderImport() {
   orderRows = [];
   orderDocBlob = null;
   orderDocUrl = null;
   orderEurSekRate = null;
+  orderImgRow = null;
   document.getElementById('order-file').value = '';
   document.getElementById('order-status').textContent = '';
   document.getElementById('order-rows').innerHTML = '';
@@ -79,6 +83,62 @@ async function lookupOrderRef(code) {
   } catch { return null; }
 }
 
+// Bilden går att sätta redan här. Tidigare gick bara namn och pris att fylla i,
+// och en helt ny vara hamnade i lagret utan bild — man fick leta upp den efteråt
+// och lägga till bilden en gång till, för varje vara.
+function orderImgCell(row, i) {
+  const src = row.image || row.previewUrl || null;
+  const busy = row.uploading ? 'opacity:.5' : '';
+  return `<button onclick="pickOrderImage(${i})" title="${src ? 'Byt bild' : 'Lägg till bild'}"
+    style="width:44px;height:44px;flex-shrink:0;padding:0;border-radius:8px;cursor:pointer;overflow:hidden;
+           border:1px dashed ${src ? 'transparent' : 'var(--border)'};background:${src ? 'none' : 'rgba(255,255,255,.03)'};
+           color:var(--text3);font-size:17px;font-family:inherit;line-height:1;${busy}">
+    ${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block">` : '+'}
+  </button>`;
+}
+
+function orderImgHint(row) {
+  if (row.uploading) return 'Laddar upp bilden…';
+  if (row.imageFailed) return '<span style="color:#ff7a7a">Bilden kunde inte laddas upp — tryck för att försöka igen</span>';
+  if (row.image || row.previewUrl) return '';
+  return 'Ingen bild — tryck på rutan för att lägga till';
+}
+
+function pickOrderImage(i) {
+  orderImgRow = i;
+  const input = document.getElementById('order-img-file');
+  input.value = '';        // annars ger samma fil två gånger ingen händelse
+  input.click();
+}
+
+function onOrderImagePicked(input) {
+  const file = input.files?.[0];
+  const row = orderRows[orderImgRow];
+  input.value = '';
+  if (!file || !row) return;
+
+  // Samma beskärning och komprimering som lagerformuläret använder, så att
+  // bilderna ser likadana ut oavsett var de lades till
+  compressInvImage(file, async (blob, previewUrl) => {
+    row.previewUrl = previewUrl;   // visas direkt, innan uppladdningen är klar
+    row.uploading = true;
+    row.imageFailed = false;
+    renderOrderRows();
+
+    const url = await uploadProductImage(blob);
+    row.uploading = false;
+    if (url) {
+      row.image = url;
+      row.imageFailed = false;
+    } else {
+      // Behåll förhandsvisningen så man ser vilken bild som inte gick fram
+      row.imageFailed = true;
+      showToast('Bilden kunde inte laddas upp', 'error');
+    }
+    renderOrderRows();
+  });
+}
+
 function renderOrderRows() {
   const box = document.getElementById('order-rows');
   box.innerHTML = orderRows.map((row, i) => {
@@ -91,9 +151,10 @@ function renderOrderRows() {
       : '';
     return `<div style="background:${tint};border:1px solid ${edge};border-radius:10px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        ${row.image ? `<img src="${row.image}" style="width:34px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
+        ${orderImgCell(row, i)}
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;color:var(--text3)">${known ? 'Känd sedan tidigare' : 'Ny vara — fyll i namn och säljpris'}${orig ? ` · ${orig}` : ''}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${orderImgHint(row)}</div>
         </div>
         <button onclick="removeOrderRow(${i})" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0" title="Ta bort raden">✕</button>
       </div>
@@ -164,6 +225,12 @@ function removeOrderRow(i) {
 }
 
 async function importOrderRows() {
+  // En bild som fortfarande laddas upp har ingen url än. Importerade vi nu hade
+  // varan hamnat i lagret utan bild, tyst, trots att man precis valt en.
+  if (orderRows.some(r => r.uploading)) {
+    showToast('Vänta tills bilderna laddats upp', 'error');
+    return;
+  }
   const missing = orderRows.filter(r => !String(r.name || '').trim());
   if (missing.length) {
     showToast(`Fyll i namn på ${missing.length === 1 ? `${missing[0].ref_code}` : `${missing.length} varor`}`, 'error');
