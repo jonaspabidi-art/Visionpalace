@@ -104,6 +104,32 @@ function updatePreTotal() {
     : '';
 }
 
+// En modell som aldrig sålts förut har ingen bild i ref-uppslaget, och då gick
+// förbeställningen iväg helt utan bild.
+function preLineImgCell(line) {
+  const src = line.image || line.previewUrl || null;
+  return `<button data-role="img-pick" title="${src ? 'Byt bild' : 'Lägg till bild'}"
+    style="width:48px;height:48px;flex-shrink:0;padding:0;border-radius:8px;cursor:pointer;overflow:hidden;
+           border:1px dashed ${src ? 'transparent' : 'var(--border)'};background:${src ? 'none' : 'rgba(255,255,255,.03)'};
+           color:var(--text3);font-size:18px;font-family:inherit;line-height:1;${line.imgUploading ? 'opacity:.5' : ''}">
+    ${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block">` : '+'}
+  </button>`;
+}
+
+function pickPreLineImage(lineId) {
+  pickProductImage(({ previewUrl, uploading, url }) => {
+    const line = preLines.find(l => l.id === lineId);
+    if (!line) return;
+    line.previewUrl = previewUrl;
+    line.imgUploading = uploading;
+    if (!uploading) {
+      if (url) line.image = url;
+      else showToast('Bilden kunde inte laddas upp', 'error');
+    }
+    renderPreLines();
+  });
+}
+
 function renderPreLines() {
   const wrap = document.getElementById('pre-lines');
   if (!wrap) return;
@@ -113,6 +139,14 @@ function renderPreLines() {
     div.className = 'inv-line-item';
     div.innerHTML = `
       ${preLines.length > 1 ? '<button class="inv-line-remove" title="Ta bort">×</button>' : ''}
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-right:28px">
+        ${preLineImgCell(line)}
+        <div style="font-size:11px;color:var(--text3);line-height:1.4;min-width:0">
+          ${line.imgUploading ? 'Laddar upp bilden…'
+            : (line.image || line.previewUrl) ? 'Tryck på rutan för att byta bild'
+            : 'Ingen bild — tryck på rutan för att lägga till'}
+        </div>
+      </div>
       <div class="inv-field">
         <label>Referenskod</label>
         <input class="inv-input" data-field="ref" placeholder="ex. CT0582S-005"
@@ -143,6 +177,7 @@ function renderPreLines() {
       input.addEventListener('change', () => updatePreLine(line.id, field, input.value));
     }
     div.querySelector('.pre-hint').textContent = line.hint;
+    div.querySelector('[data-role="img-pick"]').addEventListener('click', () => pickPreLineImage(line.id));
     // Uppslaget fyller i namn och priser på just den här raden
     div.querySelector('[data-field="ref"]').addEventListener('change', () => lookupPreorderRef(line.id));
     div.querySelector('.inv-line-remove')?.addEventListener('click', () => removePreLine(line.id));
@@ -185,6 +220,9 @@ async function createPreorder() {
   const paid = document.getElementById('pre-paid').checked;
 
   if (!clientId && !isWalkin) { showToast('Välj en köpare', 'error'); return; }
+  if (preLines.some(l => l.imgUploading)) {
+    showToast('Vänta tills bilden laddats upp', 'error'); return;
+  }
   if (isWalkin && !walkinName) { showToast('Skriv namnet på köparen', 'error'); return; }
   // Varje rad måste vara komplett. Ett tomt namn eller pris på rad tre är lätt
   // att missa, och felet syns inte förrän fakturan går iväg.

@@ -207,6 +207,32 @@ async function uploadProductImage(blob) {
   } catch { return null; }
 }
 
+// Bildväljare som både förbeställningar och Ändra-rutan använder. En ny modell
+// har ingen bild att hämta ur ref-uppslaget, och då fick varan gå in helt utan
+// bild. Beskärningen och komprimeringen är samma som lagerformulärets, så
+// bilderna ser likadana ut oavsett var de lades till.
+let _productImgCb = null;
+
+function pickProductImage(cb) {
+  _productImgCb = cb;
+  const input = document.getElementById('product-img-file');
+  input.value = '';        // annars ger samma fil två gånger ingen händelse
+  input.click();
+}
+
+function onProductImagePicked(input) {
+  const file = input.files?.[0];
+  const cb = _productImgCb;
+  input.value = '';
+  _productImgCb = null;
+  if (!file || !cb) return;
+  compressInvImage(file, async (blob, previewUrl) => {
+    cb({ previewUrl, uploading: true });          // visas direkt
+    const url = await uploadProductImage(blob);
+    cb({ previewUrl, uploading: false, url });    // url saknas om det gick fel
+  });
+}
+
 // jsPDF needs image data, not URLs — convert storage URLs on demand
 async function imgToDataUrl(src) {
   if (!src || src.startsWith('data:')) return src || null;
