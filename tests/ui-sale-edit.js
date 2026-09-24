@@ -195,6 +195,27 @@ const INVENTORY = [
     checks.push(['summan stämmer när ordern öppnas igen',
       (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 120,00 · vinst € 500,00')]);
 
+    // En parrabatt vars vara inte finns kvar i ordern. Den får inte försvinna
+    // tyst, och den får inte heller stoppa sparandet genom att behandlas som
+    // en vanlig vara utan säljpris.
+    patched = null;
+    await page.evaluate(() => {
+      _saleHistoryCache['s1'].sale_items = [
+        { id:'i1', name:'Cartier Première', ref_code:'CT1', sell_price:'1200', buy_price:'800', qty:2 },
+        { id:'i8', name:'Discount — Borttagen vara', ref_code:'CT5', sell_price:'-100', buy_price:'0', qty:1 },
+      ];
+      openEditSale('s1');
+    });
+    await page.waitForTimeout(600);
+    checks.push(['herrelös parrabatt står kvar som egen rad', (await lines()) === 2]);
+    checks.push(['den räknas som avdrag i summan',
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 300,00 · vinst € 700,00')]);
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(600);
+    checks.push(['och stoppar inte sparandet', !!patched]);
+    checks.push(['den skickas fortfarande negativt',
+      patched?.items?.find(i => i.name === 'Discount — Borttagen vara')?.sell_price === -100]);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
   } catch (e) { crash = e; }

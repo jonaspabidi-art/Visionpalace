@@ -476,11 +476,21 @@ function lineDiscount(l) {
   return Math.abs(parseFloat(l.discount) || 0);
 }
 
+// Rabattraden längst ner heter "Discount", en parrabatt "Discount — <vara>".
+// Ställena som kände igen en rabatt på exakt namn såg bara den första. Normalt
+// är parrabatterna invikta i sina varurader och syns inte här, men hittar
+// foldPairDiscounts inte varan raden hörde till blir den stående som egen rad —
+// och då måste den behandlas som den rabatt den är, annars stoppar den sparandet
+// med "Ange säljpris för Discount — …".
+function isDiscountLine(l) {
+  return l.name === 'Discount' || l.name.startsWith(PAIR_DISCOUNT_PREFIX);
+}
+
 // Rabatten skrivs in som ett positivt tal men är ett avdrag. Räknades den som
 // ett plus här visade rutan fel summa ända fram tills man sparade.
 function editLineSell(l) {
   const v = parseFloat(l.sell) || 0;
-  return l.name === 'Discount' ? -Math.abs(v) : v;
+  return isDiscountLine(l) ? -Math.abs(v) : v;
 }
 
 function editTotals() {
@@ -574,7 +584,7 @@ function renderEditLines() {
   if (!wrap) return;
   wrap.innerHTML = '';
   editLines.forEach((line, i) => {
-    const isDiscount = line.name === 'Discount';
+    const isDiscount = isDiscountLine(line);
     const div = document.createElement('div');
     div.className = 'inv-line-item';
     div.innerHTML = `
@@ -629,7 +639,7 @@ async function saveEditSale() {
   if (!editSaleId) return;
   if (!editLines.length) { showToast('Ordern måste ha minst en rad', 'error'); return; }
   for (const l of editLines) {
-    if (l.name === 'Discount') {
+    if (isDiscountLine(l)) {
       // Rabatten skrivs som ett positivt tal men sparas negativt
       const v = Math.abs(parseFloat(l.sell) || 0);
       if (!(v > 0)) { showToast('Ange ett rabattbelopp', 'error'); return; }

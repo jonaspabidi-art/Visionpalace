@@ -12,6 +12,7 @@ const SALES = [{
     { name:LONG, ref_code:'CT-9120', sell_price:'980', qty:2, image:null },
     { name:'Shipping', ref_code:null, sell_price:'20', qty:1, image:null },
     { name:'Discount', ref_code:null, sell_price:'-250', qty:1, image:null },
+    { name:'Lens fitting', ref_code:null, sell_price:null, qty:2, image:null },
   ],
 }];
 
@@ -65,6 +66,12 @@ const SALES = [{
     });
     checks.push(['långt namn står helt i texten', nameBox.text === LONG]);
     checks.push(['och syns utan att kapas', nameBox.clipped === false]);
+
+    // En rad utan pris får inte bli "2 × €null"
+    checks.push(['rad utan pris visar bara antalet', (await qty(5)) === '×2']);
+    checks.push(['och inget prisfält', (await price(5)) === '']);
+    checks.push(['ordet null syns ingenstans',
+      !(await page.textContent('.sale-card')).includes('null')]);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

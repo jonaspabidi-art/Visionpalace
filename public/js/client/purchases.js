@@ -137,10 +137,9 @@ function renderPurchases(sales) {
   // Priset som visas stort är vad RADEN kostade. Stod det bara styckpriset med
   // ett litet ×3 under fick kunden räkna själv, och totalen längst ner stämde
   // inte med något av talen i listan.
-  const lineTotal = item => {
-    const t = (parseFloat(item.sell_price) || 0) * (parseInt(item.qty, 10) || 1);
-    return Number.isInteger(t) ? String(t) : t.toFixed(2);
-  };
+  const money = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
+  const lineTotal = item => money((parseFloat(item.sell_price) || 0) * (parseInt(item.qty, 10) || 1));
+  const unitPrice = item => money(parseFloat(item.sell_price) || 0);
 
   const cardHTML = sale => {
     const items = sale.sale_items || [];
@@ -154,7 +153,9 @@ function renderPurchases(sales) {
           ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
         </div>
         <div class="sale-item-right">
-          ${(item.qty || 1) > 1 ? `<div class="sale-item-qty">${item.qty} × €${item.sell_price}</div>` : ''}
+          ${(item.qty || 1) > 1
+            ? `<div class="sale-item-qty">${item.sell_price != null ? `${item.qty} × €${unitPrice(item)}` : `×${item.qty}`}</div>`
+            : ''}
           ${item.sell_price != null ? `<div class="sale-item-price">€${lineTotal(item)}</div>` : ''}
         </div>
       </div>`).join('');
