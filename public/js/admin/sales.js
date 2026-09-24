@@ -500,6 +500,16 @@ function editLineSell(l) {
   return isDiscountLine(l) ? -Math.abs(v) : v;
 }
 
+// En rad utan inköpspris räknas som genomgång: den höjer omsättningen men ger
+// noll i vinst. För frakten är det rätt. För en vara är det nästan alltid att
+// man glömt fylla i inköpspriset — och då blir vinsten för låg här, i Historik,
+// i exporten och i avräkningen, utan att något säger till.
+function lineMissingBuy(l) {
+  if (isDiscountLine(l) || l.name === 'Shipping') return false;
+  if (!(parseFloat(l.sell) > 0)) return false;
+  return l.buy === '' || l.buy == null;
+}
+
 function editTotals() {
   const revenue = editLines.reduce((s, l) =>
     s + editLineSell(l) * (parseInt(l.qty, 10) || 0) - lineDiscount(l), 0);
@@ -508,7 +518,8 @@ function editTotals() {
     // Rabatten sparas med inköpspris 0 och sänker därför vinsten krona för krona
     return s + (editLineSell(l) - (parseFloat(l.buy) || 0)) * (parseInt(l.qty, 10) || 0) - lineDiscount(l);
   }, 0);
-  return { revenue, profit };
+  const utanInkop = editLines.filter(lineMissingBuy).length;
+  return { revenue, profit, utanInkop };
 }
 
 function updateEditLine(i, field, value) {
@@ -725,9 +736,16 @@ function renderEditLines() {
     wrap.appendChild(div);
   });
   const eur = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const { revenue, profit } = editTotals();
-  document.getElementById('edit-total').textContent =
-    `€ ${eur(revenue)} · vinst € ${eur(profit)}`;
+  const { revenue, profit, utanInkop } = editTotals();
+  const el = document.getElementById('edit-total');
+  el.textContent = `€ ${eur(revenue)} · vinst € ${eur(profit)}`;
+  const varning = document.getElementById('edit-total-warn');
+  if (varning) {
+    varning.textContent = utanInkop
+      ? `${utanInkop} rad${utanInkop > 1 ? 'er' : ''} saknar inköpspris och räknas inte in i vinsten`
+      : '';
+    varning.style.display = utanInkop ? '' : 'none';
+  }
 }
 
 async function saveEditSale() {

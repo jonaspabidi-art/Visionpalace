@@ -167,6 +167,42 @@ const SALES = [
     checks.push(['bilden följer med till ordern',
       /_thumb/.test(patched?.items?.[1]?.image || '')]);
 
+    // ── Vinsten måste räkna med det man lägger till ──
+    // Och saknas inköpspriset ger raden noll i vinst, tyst. Det ska synas.
+    const total = async () => (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ');
+    const warn = () => page.evaluate(() => {
+      const e = document.getElementById('edit-total-warn');
+      return e.style.display === 'none' ? null : e.textContent.trim();
+    });
+
+    patched = null;
+    await page.evaluate(() => openEditSale('p1'));
+    await page.waitForTimeout(700);
+    checks.push(['ordern börjar på sin egen vinst', (await total()).includes('€ 1 200,00 · vinst € 400,00')]);
+    checks.push(['ingen varning från början', (await warn()) === null]);
+
+    await page.click('#edit-add-preorder-btn');
+    await page.waitForTimeout(300);
+    await setField(2, 'name', 'Ny modell');
+    await setField(2, 'sell', '900');
+    checks.push(['omsättningen räknar den nya raden', (await total()).includes('€ 2 100,00')]);
+    checks.push(['men vinsten står stilla utan inköpspris', (await total()).includes('vinst € 400,00')]);
+    checks.push(['och det syns', /saknar inköpspris/.test(await warn() || '')]);
+
+    await setField(2, 'buy', '600');
+    checks.push(['med inköpspris räknas vinsten på allt', (await total()).includes('vinst € 700,00')]);
+    checks.push(['varningen försvinner', (await warn()) === null]);
+
+    // Frakt ska inte utlösa varningen — den saknar inköpspris med rätta
+    await page.evaluate(() => {
+      editLines.push({ id:null, name:'Shipping', ref_code:'', qty:1, maxQty:null,
+        sell:'20', buy:'', image:null, inventory_ids:null, discount:'', discountId:null });
+      renderEditLines();
+    });
+    await page.waitForTimeout(300);
+    checks.push(['frakten varnar inte', (await warn()) === null]);
+    checks.push(['men räknas i omsättningen', (await total()).includes('€ 2 120,00')]);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
     await page.screenshot({ path:(process.argv[2]||'/tmp')+'/forbest-andra.png' });
