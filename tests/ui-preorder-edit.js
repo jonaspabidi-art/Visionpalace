@@ -36,6 +36,12 @@ const SALES = [
   });
   await page.route('**/api/sales**', r => r.fulfill({ status:200, contentType:'application/json',
     body: JSON.stringify({ sales: SALES }) }));
+  let uploads = 0;
+  await page.route('**/api/upload', r => {
+    uploads++;
+    r.fulfill({ status:200, contentType:'application/json',
+      body: JSON.stringify({ files:[{ url:`https://x/p${uploads}.jpg`, thumbUrl:`https://x/p${uploads}_thumb.jpg` }] }) });
+  });
   await page.route('**/api/sales/*/items', r => {
     patched = JSON.parse(r.request().postData() || '{}');
     r.fulfill({ status:200, contentType:'application/json', body:'{"ok":true,"restored":0,"taken":0}' });
@@ -120,6 +126,46 @@ const SALES = [
     checks.push(['priserna följer med', ny?.sell_price === 1500 && ny?.buy_price === 950]);
     checks.push(['den tar inget ur lagret', ny?.inventory_ids === undefined]);
     checks.push(['den befintliga raden behåller sitt id', patched?.items?.[0]?.id === 'i1']);
+
+    // ── Bild på den handskrivna raden ──
+    // En ny modell har ingen bild i ref-uppslaget, och då gick varan in i ordern
+    // helt utan bild.
+    const path = require('path');
+    const fs = require('fs');
+    const tmpImg = path.join(process.argv[2] || '/tmp', 'pre-bild.jpg');
+    fs.writeFileSync(tmpImg, Buffer.from(
+      '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'+
+      'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'+
+      'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'));
+
+    patched = null;
+    await page.evaluate(() => openEditSale('p1'));
+    await page.waitForTimeout(700);
+    await page.click('#edit-add-preorder-btn');
+    await page.waitForTimeout(300);
+    await setField(2, 'name', 'Helt ny modell');
+    await setField(2, 'sell', '900');
+
+    const imgBtn = '#edit-lines .inv-line-item:nth-child(2) [data-role="img-pick"]';
+    checks.push(['handskriven rad har en bildruta', !!(await page.$(imgBtn))]);
+    checks.push(['befintlig rad har ingen', (await page.$('#edit-lines .inv-line-item:nth-child(1) [data-role="img-pick"]')) === null]);
+    checks.push(['rutan säger att bild saknas',
+      (await page.textContent('#edit-lines')).includes('Ingen bild')]);
+
+    const chooser = page.waitForEvent('filechooser');
+    await page.click(imgBtn);
+    (await chooser).setFiles(tmpImg);
+    await page.waitForFunction(() => !!editLines[1].image, { timeout: 15000 });
+    checks.push(['bilden visas i rutan', !!(await page.$(imgBtn + ' img'))]);
+    checks.push(['miniatyren sparas',
+      (await page.evaluate(() => editLines[1].image)).includes('_thumb')]);
+    checks.push(['uppmaningen försvinner',
+      !(await page.textContent('#edit-lines')).includes('Ingen bild')]);
+
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(700);
+    checks.push(['bilden följer med till ordern',
+      /_thumb/.test(patched?.items?.[1]?.image || '')]);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

@@ -38,6 +38,13 @@ const jwt = require(process.cwd()+'/node_modules/jsonwebtoken');
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }, [i, field, val]);
 
+  let uploads = 0;
+  await page.route('**/api/upload', r => {
+    uploads++;
+    r.fulfill({ status:200, contentType:'application/json',
+      body: JSON.stringify({ files:[{ url:`https://x/n${uploads}.jpg`, thumbUrl:`https://x/n${uploads}_thumb.jpg` }] }) });
+  });
+
   const checks=[]; let crash=null;
   try {
     await page.addInitScript(t => localStorage.setItem('vp_admin_token', t), token);
@@ -106,6 +113,28 @@ const jwt = require(process.cwd()+'/node_modules/jsonwebtoken');
     checks.push(['ordern är märkt som förbeställning', posted?.is_preorder === true]);
     checks.push(['leveransfönstret skickas en gång för hela ordern',
       posted?.eta_weeks_min === 1 && posted?.eta_weeks_max === 6]);
+
+    // En modell som aldrig sålts förut har ingen bild i uppslaget. Utan en egen
+    // bildväljare gick förbeställningen iväg helt utan bild.
+    const fs = require('fs'); const path = require('path');
+    const tmpImg = path.join(process.argv[2] || '/tmp', 'ny-modell.jpg');
+    fs.writeFileSync(tmpImg, Buffer.from(
+      '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'+
+      'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'+
+      'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'));
+    // Rutan stängdes när ordern skapades — öppna en ny med en tom rad
+    await page.evaluate(() => openPreorderModal());
+    await page.waitForSelector('#pre-lines .inv-line-item');
+    await page.waitForTimeout(300);
+    const preImg = '#pre-lines .inv-line-item:first-child [data-role="img-pick"]';
+    checks.push(['raden har en bildruta', !!(await page.$(preImg))]);
+    const ch = page.waitForEvent('filechooser');
+    await page.click(preImg);
+    (await ch).setFiles(tmpImg);
+    await page.waitForFunction(() => !!preLines[0].image, { timeout: 15000 });
+    checks.push(['bilden hamnar på raden',
+      (await page.evaluate(() => preLines[0].image)).includes('_thumb')]);
+    checks.push(['och visas i rutan', !!(await page.$(preImg + ' img'))]);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

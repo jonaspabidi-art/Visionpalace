@@ -557,6 +557,32 @@ function addEditPreorderLine() {
   renderEditLines();
 }
 
+// En ny modell har ingen bild i ref-uppslaget. Utan den här gick varan in i
+// ordern helt utan bild, och kunden såg en tom ruta på sin förbeställning.
+function pickEditLineImage(i) {
+  pickProductImage(({ previewUrl, uploading, url }) => {
+    const line = editLines[i];
+    if (!line) return;
+    line.previewUrl = previewUrl;
+    line.imgUploading = uploading;
+    if (!uploading) {
+      if (url) { line.image = url; line.imgFailed = false; }
+      else { line.imgFailed = true; showToast('Bilden kunde inte laddas upp', 'error'); }
+    }
+    renderEditLines();
+  });
+}
+
+function editLineImgCell(line, i) {
+  const src = line.image || line.previewUrl || null;
+  return `<button data-role="img-pick" title="${src ? 'Byt bild' : 'Lägg till bild'}"
+    style="width:44px;height:44px;flex-shrink:0;padding:0;border-radius:8px;cursor:pointer;overflow:hidden;
+           border:1px dashed ${src ? 'transparent' : 'var(--border)'};background:${src ? 'none' : 'rgba(255,255,255,.03)'};
+           color:var(--text3);font-size:17px;font-family:inherit;line-height:1;${line.imgUploading ? 'opacity:.5' : ''}">
+    ${src ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover;display:block">` : '+'}
+  </button>`;
+}
+
 // Samma uppslag som förbeställningen och fakturaimporten använder
 async function lookupEditRef(i) {
   const line = editLines[i];
@@ -630,9 +656,14 @@ function renderEditLines() {
     div.className = 'inv-line-item';
     div.innerHTML = `
       <button class="inv-line-remove" title="Ta bort raden">×</button>
-      <div style="font-size:13px;font-weight:600;color:var(--text);padding-right:28px;margin-bottom:8px">
-        ${line.manual ? 'Förbeställd vara' : esc(line.name)}${!line.manual && line.ref_code ? ` <span style="color:var(--text3);font-weight:400">(${esc(line.ref_code)})</span>` : ''}
-        ${line.id ? '' : '<span style="color:var(--blue);font-size:11px;font-weight:600"> · ny</span>'}
+      <div style="display:flex;align-items:center;gap:10px;padding-right:28px;margin-bottom:8px">
+        ${line.manual ? editLineImgCell(line, i) : ''}
+        <div style="font-size:13px;font-weight:600;color:var(--text);min-width:0">
+          ${line.manual ? 'Förbeställd vara' : esc(line.name)}${!line.manual && line.ref_code ? ` <span style="color:var(--text3);font-weight:400">(${esc(line.ref_code)})</span>` : ''}
+          ${line.id ? '' : '<span style="color:var(--blue);font-size:11px;font-weight:600"> · ny</span>'}
+          ${line.manual && !line.image && !line.previewUrl ? '<div style="font-size:11px;color:var(--text3);font-weight:400;margin-top:2px">Ingen bild — tryck på rutan</div>' : ''}
+          ${line.imgUploading ? '<div style="font-size:11px;color:var(--text3);font-weight:400;margin-top:2px">Laddar upp bilden…</div>' : ''}
+        </div>
       </div>
       ${!line.manual ? '' : `
       <div class="inv-field" style="margin-bottom:8px">
@@ -670,6 +701,7 @@ function renderEditLines() {
     div.querySelector('[data-field="qty"]').value = line.qty;
     div.querySelector('[data-field="sell"]').value = line.sell;
     if (line.manual) {
+      div.querySelector('[data-role="img-pick"]').addEventListener('click', () => pickEditLineImage(i));
       div.querySelector('[data-field="ref_code"]').value = line.ref_code;
       div.querySelector('[data-field="name"]').value = line.name;
       div.querySelector('[data-field="buy"]').value = line.buy;
@@ -701,6 +733,11 @@ function renderEditLines() {
 async function saveEditSale() {
   if (!editSaleId) return;
   if (!editLines.length) { showToast('Ordern måste ha minst en rad', 'error'); return; }
+  // En bild som fortfarande laddas upp har ingen url än; sparade vi nu hade
+  // raden gått in utan bild, tyst, trots att man precis valt en
+  if (editLines.some(l => l.imgUploading)) {
+    showToast('Vänta tills bilden laddats upp', 'error'); return;
+  }
   for (const l of editLines) {
     if (isDiscountLine(l)) {
       // Rabatten skrivs som ett positivt tal men sparas negativt
