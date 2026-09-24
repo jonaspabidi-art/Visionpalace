@@ -311,6 +311,127 @@ module.exports = (io) => {
   });
 
   // Update sale status (admin)
+  // ── Redigera en order ──
+  // Bara obetalda ordrar. En betald order har passerat både kundens plånbok
+  // och avräkningen mellan delägarna, och där rättar man med en kreditnota,
+  // inte genom att skriva om historien (ägarens besked 2026-09-24).
+  //
+  // Klienten skickar hela den nya raduppsättningen. Rader som fanns förut bär
+  // sitt id; nya rader saknar id och tar med sig vilka lagerrader de plockat.
+  router.patch('/sales/:id/items', adminAuth, async (req, res) => {
+    try {
+      const { items, restock = true } = req.body;
+      if (!Array.isArray(items) || !items.length) {
+        return res.status(400).json({ error: 'En order måste ha minst en rad' });
+      }
+
+      const { data: sale, error: saleErr } = await supabase.from('sales')
+        .select('id, status, invoice_number')
+        .eq('id', req.params.id).eq('admin_id', req.adminId)
+        .abortSignal(dbTimeout()).maybeSingle();
+      if (saleErr) return res.status(500).json({ error: saleErr.message });
+      if (!sale) return res.status(404).json({ error: 'Ordern finns inte' });
+      if (sale.status !== 'unpaid') {
+        return res.status(409).json({
+          error: 'Bara obetalda ordrar går att ändra. Den här är redan markerad som betald.' });
+      }
+
+      const { data: existing, error: exErr } = await supabase.from('sale_items')
+        .select('*').eq('sale_id', sale.id).abortSignal(dbTimeout());
+      if (exErr) return res.status(500).json({ error: exErr.message });
+      const byId = Object.fromEntries((existing || []).map(r => [r.id, r]));
+
+      // Ett par som tas bort måste tillbaka i lagret. Lagerraden raderades vid
+      // försäljningen, så den skapas på nytt ur säljradens uppgifter. Utan det
+      // försvinner paret ur lagret för gott.
+      const toRestore = [];
+      const restoreFrom = (row, count) => {
+        if (!restock || count <= 0) return;
+        // Frakt och rabatt är inga fysiska par — de har varken ref eller
+        // inköpspris och ska inte hamna i lagret
+        if (row.lens_variant_id || row.buy_price == null) return;
+        for (let i = 0; i < count; i++) {
+          toRestore.push({
+            ref_code: row.ref_code || null, name: row.name,
+            buy_price: row.buy_price, sell_price: row.sell_price,
+            image: row.image || null, added_at: new Date().toISOString(),
+          });
+        }
+      };
+
+      const keptIds = new Set();
+      const rows = [];
+      for (const it of items) {
+        const qty = Math.max(1, parseInt(it.qty, 10) || 1);
+        const prev = it.id ? byId[it.id] : null;
+        if (it.id && !prev) return res.status(400).json({ error: 'En rad hör inte till ordern' });
+        if (prev) {
+          keptIds.add(prev.id);
+          const prevQty = prev.qty || 1;
+          if (qty > prevQty) {
+            return res.status(400).json({
+              error: `Går inte att höja antalet på en befintlig rad (${prev.name}). Lägg till den som en ny rad ur lagret i stället, så vet vi vilka par som tas.` });
+          }
+          restoreFrom(prev, prevQty - qty);
+        }
+        rows.push({
+          sale_id: sale.id,
+          inventory_id: it.inventory_id || prev?.inventory_id || null,
+          lens_id: it.lens_id || prev?.lens_id || null,
+          lens_variant_id: it.lens_variant_id || prev?.lens_variant_id || null,
+          name: it.name, ref_code: it.ref_code || null, qty,
+          sell_price: it.sell_price == null || it.sell_price === '' ? null : Number(it.sell_price),
+          buy_price: it.buy_price == null || it.buy_price === '' ? null : Number(it.buy_price),
+          image: it.image ?? prev?.image ?? null,
+        });
+      }
+      // Rader som försvunnit helt
+      for (const row of existing || []) {
+        if (!keptIds.has(row.id)) restoreFrom(row, row.qty || 1);
+      }
+
+      // Nya rader plockar par ur lagret, precis som en vanlig försäljning
+      const takeIds = [...new Set(items.flatMap(i =>
+        !i.id && Array.isArray(i.inventory_ids) ? i.inventory_ids.filter(Boolean) : []))];
+
+      // Raderna byts ut i ett svep. Går insättningen fel står ordern utan
+      // rader, så den görs först och borttagningen efteråt.
+      const { data: inserted, error: insErr } = await supabase.from('sale_items')
+        .insert(rows).select().abortSignal(dbTimeout());
+      if (insErr) return res.status(500).json({ error: `Kunde inte spara raderna: ${insErr.message}` });
+
+      const oldIds = (existing || []).map(r => r.id);
+      if (oldIds.length) {
+        const { error: delErr } = await supabase.from('sale_items')
+          .delete().in('id', oldIds).abortSignal(dbTimeout());
+        if (delErr) console.error(`[Sale] ${sale.invoice_number}: gamla rader blev kvar: ${delErr.message}`);
+      }
+
+      // Härifrån är ordern sparad. Lagret är städning och får aldrig fälla
+      // sparandet — samma regel som vid försäljning.
+      try {
+        if (takeIds.length) {
+          const { error } = await supabase.from('inventory').delete().in('id', takeIds).abortSignal(dbTimeout());
+          if (error) console.error(`[Sale] ${sale.invoice_number}: lagerborttagning misslyckades: ${error.message}`);
+          else { try { io.emit('inventory:sold', { ids: takeIds }); } catch {} }
+        }
+        if (toRestore.length) {
+          const { error } = await supabase.from('inventory').insert(toRestore).abortSignal(dbTimeout());
+          if (error) console.error(`[Sale] ${sale.invoice_number}: kunde inte lägga tillbaka ${toRestore.length} par: ${error.message}`);
+          else console.log(`[Sale] ${sale.invoice_number}: ${toRestore.length} par tillbaka i lagret`);
+        }
+      } catch (e) {
+        console.error(`[Sale] ${sale.invoice_number}: lagerstädning kastade:`, e.stack || e.message);
+      }
+
+      console.log(`[Sale] ${sale.invoice_number} ändrad: ${rows.length} rader, ${takeIds.length} par ur lagret, ${toRestore.length} tillbaka`);
+      res.json({ ok: true, items: inserted || [], restored: toRestore.length, taken: takeIds.length });
+    } catch (e) {
+      console.error('[Sale] Redigering misslyckades:', e.stack || e.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Kunde inte spara ändringen' });
+    }
+  });
+
   router.patch('/sales/:id/status', adminAuth, async (req, res) => {
     const { status, shipping_carrier, tracking_number } = req.body;
     const valid = ['unpaid', 'paid', 'shipped', 'delivered', 'cancelled'];

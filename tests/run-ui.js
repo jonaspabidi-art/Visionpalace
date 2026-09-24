@@ -16,6 +16,7 @@ const TESTS = [
   ['tests/ui-feed-arrows.js', '/tmp'],
   ['tests/ui-invoice.js', '/tmp'],
   ['tests/ui-preorder.js'],
+  ['tests/ui-sale-edit.js', '/tmp'],
 ];
 
 const ping = () => new Promise(res => {

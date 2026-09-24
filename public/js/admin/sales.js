@@ -389,6 +389,219 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
   }, 50);
 }
 
+// ── Redigera en obetald order ──
+// Priser blir fel, en kund vill lägga till ett par, eller så ska en rabatt in
+// i efterhand. Bara obetalda ordrar: en betald har passerat både kundens
+// plånbok och avräkningen mellan delägarna.
+//
+// Raderna som redan finns bär sitt id. Nya rader plockas ur lagret och tar med
+// sig vilka lagerrader de tagit, så att lagret stämmer efteråt.
+let editSaleId = null;
+let editLines = [];
+let editRestock = true;
+
+function openEditSale(saleId) {
+  const sale = _saleHistoryCache[saleId];
+  if (!sale) return;
+  if ((sale.status || 'unpaid') !== 'unpaid') {
+    showToast('Bara obetalda ordrar går att ändra', 'error');
+    return;
+  }
+  editSaleId = saleId;
+  editRestock = true;
+  editLines = (sale.sale_items || []).map(it => ({
+    id: it.id,
+    name: it.name,
+    ref_code: it.ref_code || '',
+    qty: it.qty || 1,
+    maxQty: it.qty || 1,          // befintliga rader kan bara sänkas
+    sell: it.sell_price == null ? '' : String(it.sell_price),
+    buy: it.buy_price == null ? '' : String(it.buy_price),
+    image: it.image || null,
+    inventory_ids: null,
+  }));
+  document.getElementById('edit-sale-title').textContent =
+    `Ändra ${sale.invoice_number || 'order'}`;
+  document.getElementById('edit-restock').checked = true;
+  renderEditLines();
+  renderEditStockList();
+  document.getElementById('edit-sale-modal').classList.add('open');
+}
+
+function closeEditSale() {
+  document.getElementById('edit-sale-modal').classList.remove('open');
+  editSaleId = null;
+  editLines = [];
+}
+
+// Rabatten skrivs in som ett positivt tal men är ett avdrag. Räknades den som
+// ett plus här visade rutan fel summa ända fram tills man sparade.
+function editLineSell(l) {
+  const v = parseFloat(l.sell) || 0;
+  return l.name === 'Discount' ? -Math.abs(v) : v;
+}
+
+function editTotals() {
+  const revenue = editLines.reduce((s, l) => s + editLineSell(l) * (parseInt(l.qty, 10) || 0), 0);
+  const profit = editLines.reduce((s, l) => {
+    if (l.buy === '' || l.buy == null) return s;   // frakt är genomgång, ingen vinst
+    return s + (editLineSell(l) - (parseFloat(l.buy) || 0)) * (parseInt(l.qty, 10) || 0);
+  }, 0);
+  return { revenue, profit };
+}
+
+function updateEditLine(i, field, value) {
+  const line = editLines[i];
+  if (!line) return;
+  if (field === 'qty') {
+    let q = Math.max(1, parseInt(value, 10) || 1);
+    // Fler par än ordern redan tagit ur lagret kräver att man vet VILKA par —
+    // det gör man bara genom att lägga till dem ur lagret nedan
+    if (line.maxQty && q > line.maxQty) {
+      q = line.maxQty;
+      showToast('Lägg till fler par ur lagret längre ned', 'error');
+    }
+    line.qty = q;
+  } else {
+    line[field] = value;
+  }
+  renderEditLines();
+}
+
+function removeEditLine(i) {
+  editLines.splice(i, 1);
+  renderEditLines();
+  renderEditStockList();
+}
+
+function addEditDiscount() {
+  if (editLines.some(l => l.name === 'Discount')) { showToast('Det finns redan en rabattrad', 'error'); return; }
+  // Samma form som vid försäljning: negativt belopp med inköpspris 0, så att
+  // rabatten sänker både omsättning och vinst
+  editLines.push({ id: null, name: 'Discount', ref_code: '', qty: 1,
+    maxQty: null, sell: '', buy: '0', image: null, inventory_ids: null });
+  renderEditLines();
+}
+
+function addEditFromStock(key) {
+  const g = invGroups[key];
+  if (!g) return;
+  const taken = new Set(editLines.flatMap(l => l.inventory_ids || []));
+  const free = g.ids.filter(id => !taken.has(id));
+  if (!free.length) { showToast(`Alla ${g.count} i lager är redan valda`, 'error'); return; }
+  const existing = editLines.find(l => !l.id && l.ref_code === (g.ref_code || '') && l.name === g.name);
+  if (existing) {
+    existing.inventory_ids.push(free[0]);
+    existing.qty = existing.inventory_ids.length;
+  } else {
+    editLines.push({
+      id: null, name: g.name, ref_code: g.ref_code || '', qty: 1, maxQty: null,
+      sell: g.sell_price == null ? '' : String(g.sell_price),
+      buy: g.buy_price == null ? '' : String(g.buy_price),
+      image: g.image || null, inventory_ids: [free[0]],
+    });
+  }
+  renderEditLines();
+  renderEditStockList();
+}
+
+function renderEditStockList() {
+  const list = document.getElementById('edit-stock-list');
+  if (!list) return;
+  const taken = new Set(editLines.flatMap(l => l.inventory_ids || []));
+  const rows = Object.values(invGroups || {}).map(g => {
+    const free = g.ids.filter(id => !taken.has(id)).length;
+    if (!free) return '';
+    return `<button class="inv-add-row" style="text-align:left;margin-bottom:6px"
+      onclick="addEditFromStock('${g.key}')">
+      + ${esc(g.name)}${g.ref_code ? ` <span style="color:var(--text3)">(${esc(g.ref_code)})</span>` : ''}
+      <span style="color:var(--text3)"> · ${free} i lager</span></button>`;
+  }).join('');
+  list.innerHTML = rows || '<div style="color:var(--text3);font-size:12px;padding:6px 0">Inget kvar i lagret att lägga till.</div>';
+}
+
+function renderEditLines() {
+  const wrap = document.getElementById('edit-lines');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  editLines.forEach((line, i) => {
+    const isDiscount = line.name === 'Discount';
+    const div = document.createElement('div');
+    div.className = 'inv-line-item';
+    div.innerHTML = `
+      <button class="inv-line-remove" title="Ta bort raden">×</button>
+      <div style="font-size:13px;font-weight:600;color:var(--text);padding-right:28px;margin-bottom:8px">
+        ${esc(line.name)}${line.ref_code ? ` <span style="color:var(--text3);font-weight:400">(${esc(line.ref_code)})</span>` : ''}
+        ${line.id ? '' : '<span style="color:var(--blue);font-size:11px;font-weight:600"> · ny</span>'}
+      </div>
+      <div class="inv-row-grid">
+        <div class="inv-field" style="margin-bottom:0">
+          <label>Antal</label>
+          <input class="inv-input" data-field="qty" type="number" min="1" step="1"
+                 inputmode="numeric" ${isDiscount ? 'disabled' : ''}>
+        </div>
+        <div class="inv-field" style="margin-bottom:0">
+          <label>${isDiscount ? 'Rabatt (€, minus)' : 'Säljpris (€)'}</label>
+          <input class="inv-input" data-field="sell" type="number" step="0.01" inputmode="decimal" placeholder="0">
+        </div>
+      </div>`;
+    div.querySelector('[data-field="qty"]').value = line.qty;
+    div.querySelector('[data-field="sell"]').value = line.sell;
+    for (const f of ['qty', 'sell']) {
+      const el = div.querySelector(`[data-field="${f}"]`);
+      el.addEventListener('change', () => updateEditLine(i, f, el.value));
+    }
+    div.querySelector('.inv-line-remove').addEventListener('click', () => removeEditLine(i));
+    wrap.appendChild(div);
+  });
+  const eur = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const { revenue, profit } = editTotals();
+  document.getElementById('edit-total').textContent =
+    `€ ${eur(revenue)} · vinst € ${eur(profit)}`;
+}
+
+async function saveEditSale() {
+  if (!editSaleId) return;
+  if (!editLines.length) { showToast('Ordern måste ha minst en rad', 'error'); return; }
+  for (const l of editLines) {
+    if (l.name === 'Discount') {
+      // Rabatten skrivs som ett positivt tal men sparas negativt
+      const v = Math.abs(parseFloat(l.sell) || 0);
+      if (!(v > 0)) { showToast('Ange ett rabattbelopp', 'error'); return; }
+    } else if (!(parseFloat(l.sell) > 0)) {
+      showToast(`Ange säljpris för ${l.name}`, 'error'); return;
+    }
+  }
+
+  const items = editLines.map(l => ({
+    id: l.id || undefined,
+    name: l.name,
+    ref_code: l.ref_code || null,
+    qty: Math.max(1, parseInt(l.qty, 10) || 1),
+    sell_price: editLineSell(l),
+    buy_price: l.buy === '' || l.buy == null ? null : parseFloat(l.buy),
+    image: l.image || null,
+    inventory_ids: l.inventory_ids || undefined,
+  }));
+
+  const btn = document.getElementById('edit-save-btn');
+  btn.textContent = 'Sparar…'; btn.disabled = true;
+  try {
+    const r = await api(`/api/sales/${editSaleId}/items`, {
+      method: 'PATCH',
+      body: JSON.stringify({ items, restock: document.getElementById('edit-restock').checked }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { showToast(d.error || 'Kunde inte spara ändringen', 'error'); return; }
+    closeEditSale();
+    const back = d.restored ? ` — ${d.restored} par tillbaka i lagret` : '';
+    showToast(`Ordern ändrad${back}`, 'success');
+    loadSalesHistory();
+    if (typeof loadInventory === 'function') loadInventory();
+  } catch { showToast('Anslutningsfel', 'error'); }
+  finally { btn.textContent = 'Spara ändringen'; btn.disabled = false; }
+}
+
 function openSaleInvoice(saleId) {
   const sale = _saleHistoryCache[saleId];
   if (!sale) return;
@@ -605,6 +818,7 @@ async function loadSalesHistory() {
             <div id="pay-${sid}" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"></div>
             ${sale.is_preorder ? preorderActionsHTML(sale) : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+              ${(sale.status || 'unpaid') === 'unpaid' ? `<button onclick="event.stopPropagation();openEditSale('${sale.id}')" style="background:none;border:1px solid rgba(201,169,110,.35);border-radius:8px;color:var(--blue);font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ändra</button>` : ''}
               <button onclick="event.stopPropagation();openSaleInvoice('${sale.id}')" style="background:none;border:1px solid rgba(100,150,255,.3);border-radius:8px;color:#7aabff;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Faktura</button>
               <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
             </div>
