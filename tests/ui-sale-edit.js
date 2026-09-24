@@ -34,7 +34,13 @@ const INVENTORY = [
     await page.route(u, r => r.fulfill({ status:200, contentType:'application/json', body:b }));
   await page.route('**/api/clients', r => r.fulfill({ status:200, contentType:'application/json',
     body: JSON.stringify({ clients:[{ id:'c1', display_name:'Samora', admin_label:null, unread:0 }] }) }));
-  await page.route('**/api/settlement', r => r.fulfill({ status:503, contentType:'application/json', body:'{"not_configured":true}' }));
+  let settlementCalls = 0;
+  await page.route('**/api/settlement', r => {
+    settlementCalls++;
+    r.fulfill({ status:200, contentType:'application/json', body: JSON.stringify({
+      configured:true, seller_name:'Rojne', commission_pct:70,
+      earned: 86000, pending: 12000, balance: 86000, months:{}, entries:[], missing_buy_price:0 }) });
+  });
   await page.route('**/api/inventory', r => r.fulfill({ status:200, contentType:'application/json',
     body: JSON.stringify({ items: INVENTORY }) }));
   await page.route('**/api/sales**', r => r.fulfill({ status:200, contentType:'application/json',
@@ -215,6 +221,18 @@ const INVENTORY = [
     checks.push(['och stoppar inte sparandet', !!patched]);
     checks.push(['den skickas fortfarande negativt',
       patched?.items?.find(i => i.name === 'Discount — Borttagen vara')?.sell_price === -100]);
+
+    // Avräkningen räknas ur samma försäljningar som historiken. Ändrar man en
+    // order ändras provisionen den ger — men siffran "kommer läggas på när de
+    // betalas" laddades aldrig om, så den stod kvar på beloppet från innan.
+    await page.evaluate(() => openEditSale('s1'));
+    await page.waitForTimeout(600);
+    const före = settlementCalls;
+    patched = null;
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(900);
+    checks.push(['ändringen sparas', !!patched]);
+    checks.push(['avräkningen laddas om efter en ändring', settlementCalls > före]);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

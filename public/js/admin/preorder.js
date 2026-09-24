@@ -270,7 +270,7 @@ async function createPreorder() {
     }
     closePreorderModal();
     showToast(items.length > 1 ? `Förbeställning skapad — ${items.length} varor` : 'Förbeställning skapad', 'success');
-    if (typeof loadSalesHistory === 'function') loadSalesHistory();
+    if (typeof refreshSalesAndSettlement === 'function') refreshSalesAndSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Skapa förbeställning'; btn.disabled = false; }
 }
@@ -282,7 +282,7 @@ async function markPreorderArrived(saleId) {
     const r = await api(`/api/sales/${saleId}/arrived`, { method: 'POST' });
     if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Kunde inte spara', 'error'); return; }
     showToast('Markerad som inkommen — kunden har fått en notis', 'success');
-    loadSalesHistory();
+    refreshSalesAndSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
 }
 
@@ -308,7 +308,7 @@ function pickSupplierDoc(saleId) {
       if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Kunde inte spara', 'error'); return; }
       const d = await r.json();
       showToast(d.logged ? 'Faktura sparad och inköpet bokfört' : 'Faktura sparad', 'success');
-      loadSalesHistory();
+      refreshSalesAndSettlement();
     } catch { showToast('Anslutningsfel', 'error'); }
   };
   input.click();
