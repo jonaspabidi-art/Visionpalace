@@ -249,6 +249,22 @@ const INVENTORY = [
     checks.push(['ändringen sparas', !!patched]);
     checks.push(['avräkningen laddas om efter en ändring', settlementCalls > före]);
 
+    // Fakturaknappen: rabatterna ska bli EN rad, inte en per par
+    await page.evaluate(() => {
+      _saleHistoryCache['s1'].sale_items = [
+        { id:'i1', name:'Cartier Première', ref_code:'CT1', sell_price:'1200', buy_price:'800', qty:2 },
+        { id:'i7', name:'Discount', ref_code:null, sell_price:'-250', buy_price:'0', qty:1 },
+        { id:'i9', name:'Discount — Cartier Première', ref_code:'CT1', sell_price:'-100', buy_price:'0', qty:2 },
+      ];
+      openSaleInvoice('s1');
+    });
+    await page.waitForTimeout(900);
+    const invRader = await page.evaluate(() => invLineItems.map(l => ({ d: l.desc, p: l.price })));
+    const rabattRader = invRader.filter(r => /Discount/.test(r.d));
+    checks.push(['fakturan får en enda rabattrad', rabattRader.length === 1]);
+    checks.push(['med hela avdraget', parseFloat(rabattRader[0]?.p) === -450]);
+    checks.push(['varuraden är kvar', invRader.some(r => /Cartier Première/.test(r.d))]);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
   } catch (e) { crash = e; }

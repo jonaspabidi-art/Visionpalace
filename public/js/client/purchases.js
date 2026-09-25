@@ -281,6 +281,23 @@ function askPaymentDetails(invoice) {
   }, 120);
 }
 
+// Rabatterna ligger som egna minusrader i ordern — en längst ner och en per
+// par. Utspridda mellan varorna blev fakturan rörig, och på en stor order gick
+// det inte att se vad rabatten blev totalt. De lyfts därför ur varulistan och
+// visas som EN rad i summeringen.
+function isDiscountRow(item) {
+  const n = String(item.name || '');
+  return n === 'Discount' || n.startsWith('Discount — ');
+}
+
+function invoiceParts(items) {
+  const amount = i => (parseFloat(i.sell_price) || 0) * (parseInt(i.qty) || 1);
+  const goods = items.filter(i => !isDiscountRow(i));
+  const subtotal = goods.reduce((s, i) => s + amount(i), 0);
+  const discount = Math.abs(items.filter(isDiscountRow).reduce((s, i) => s + amount(i), 0));
+  return { goods, subtotal, discount, total: subtotal - discount };
+}
+
 function buildInvoiceHTML(sale) {
   const items = sale.sale_items || [];
   const invNumber = sale.invoice_number || '—';
@@ -289,9 +306,9 @@ function buildInvoiceHTML(sale) {
   const clientAddr = [session.address, session.phone].filter(Boolean).join('<br>');
 
   function fmt(n) { return Number(n).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  const subtotal = items.reduce((s, i) => s + (parseFloat(i.sell_price) || 0) * (parseInt(i.qty) || 1), 0);
+  const { goods, subtotal, discount, total } = invoiceParts(items);
 
-  const rowsHtml = items.map(item => {
+  const rowsHtml = goods.map(item => {
     const qty = parseInt(item.qty) || 1;
     const price = parseFloat(item.sell_price) || 0;
     return `<tr>
@@ -336,9 +353,19 @@ function buildInvoiceHTML(sale) {
       <tbody>${rowsHtml}</tbody>
     </table>
     <div style="margin-top:16px;border-top:2px solid #111;padding-top:16px;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+      ${discount > 0 ? `
+      <div style="display:flex;gap:32px;font-size:12px;color:#555">
+        <span style="min-width:120px;text-align:right">Subtotal</span>
+        <span style="min-width:80px;text-align:right">€ ${fmt(subtotal)}</span>
+      </div>
+      <div style="display:flex;gap:32px;font-size:12px;color:#555">
+        <span style="min-width:120px;text-align:right">Discount</span>
+        <span style="min-width:80px;text-align:right">− € ${fmt(discount)}</span>
+      </div>
+      <div style="width:232px;border-top:1px solid #111;margin:4px 0 2px"></div>` : ''}
       <div style="display:flex;gap:32px;font-size:16px;font-weight:800;letter-spacing:1px">
         <span style="min-width:120px;text-align:right">T O T A L</span>
-        <span style="min-width:80px;text-align:right">€ ${fmt(subtotal)}</span>
+        <span style="min-width:80px;text-align:right">€ ${fmt(total)}</span>
       </div>
     </div>
     <div style="margin-top:48px;padding-top:32px;border-top:1px solid #ddd;display:grid;grid-template-columns:1fr 1fr;gap:40px">
@@ -354,6 +381,179 @@ function buildInvoiceHTML(sale) {
         <div style="font-size:10px;color:#888;line-height:1.7;padding-top:8px">Payment is due within 14 business days of invoice date.<br>Thank you for your business.</div>
       </div>
     </div>`;
+}
+
+// Fakturan ritades förut av som en bild med html2canvas. Det gav en enda lång
+// bild som skars rakt av vid sidbrytningen — mitt i en rad — och på en stor
+// order blev den både oläslig och tung. Den skrivs nu som text direkt i PDF:en,
+// med riktiga sidbrytningar: varje sida får tabellhuvudet igen och sidnummer,
+// och summeringen bryts aldrig isär.
+const INV_PAGE = { W: 210, H: 297, M: 16 };
+
+function buildSaleInvoicePdf(JsPDF, sale) {
+  const { W, H, M } = INV_PAGE;
+  const right = W - M;
+  const doc = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const fmt = n => Number(n).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = n => '\u20AC ' + fmt(n);
+  const grey = () => doc.setTextColor(150);
+  const dark = () => doc.setTextColor(17);
+  const label = (text, x, y, align) => {
+    doc.setFont('helvetica', 'bold').setFontSize(6.5); grey();
+    doc.setCharSpace(1.2);
+    doc.text(String(text).toUpperCase(), x, y, align ? { align } : undefined);
+    doc.setCharSpace(0);
+  };
+
+  const { goods, subtotal, discount, total } = invoiceParts(sale.sale_items || []);
+  const number = sale.invoice_number || '—';
+  const date = new Date(sale.created_at).toLocaleDateString('sv-SE');
+  const custName = session.full_name || session.display_name || '—';
+  const custLines = [session.address, session.phone].filter(Boolean);
+
+  const cQty = M + 104, cPrice = M + 142, cAmt = right;
+  // Foten med bankuppgifter ritas bara på SISTA sidan. Reserverade vi dess
+  // höjd på varje sida slutade mellansidorna tre centimeter för tidigt och
+  // fakturan blev längre än den behövde vara. Varuraderna får därför gå nästan
+  // hela vägen ner; bara summeringen kräver att foten får plats under sig.
+  const FOOT_H = 34;
+  const rowsBottom = H - M - 12;            // plats för sidnumret
+  const sumBottom = H - M - FOOT_H - 6;     // plats för foten också
+
+  let page = 0;
+  const pageHeads = [];        // fylls i efterhand med "Page x of y"
+
+  function tableHead(y) {
+    label('Description', M, y);
+    label('Quantity', cQty, y, 'right');
+    label('Unit price', cPrice, y, 'right');
+    label('Amount', cAmt, y, 'right');
+    y += 2.5;
+    doc.setDrawColor(17).setLineWidth(0.3).line(M, y, right, y);
+    return y + 5.5;
+  }
+
+  function newPage(first) {
+    if (!first) doc.addPage();
+    page++;
+    pageHeads.push(page);
+    let y = M + 8;
+    if (first) {
+      doc.setFont('helvetica', 'bold').setFontSize(26); dark();
+      doc.setCharSpace(3.2);
+      doc.text('INVOICE', M, y);
+      doc.setCharSpace(0);
+      doc.setFontSize(15).text('# ' + number, right, y - 1, { align: 'right' });
+      doc.setFont('helvetica', 'normal').setFontSize(8.5); grey();
+      doc.text(date, right, y + 4.5, { align: 'right' });
+
+      y += 16;
+      const colR = M + 92;
+      label('Pay to', M, y);
+      label('Customer', colR, y);
+      y += 6;
+      doc.setFont('helvetica', 'bold').setFontSize(10); dark();
+      doc.text(INV_COMPANY.name, M, y);
+      doc.text(custName, colR, y, { maxWidth: right - colR });
+      y += 5;
+      doc.setFont('helvetica', 'normal').setFontSize(8); doc.setTextColor(70);
+      const l = [INV_COMPANY.vat, INV_COMPANY.address];
+      l.forEach((t, i) => doc.text(t, M, y + i * 4.2));
+      custLines.forEach((t, i) => doc.text(String(t), colR, y + i * 4.2, { maxWidth: right - colR }));
+      y += Math.max(l.length, custLines.length) * 4.2 + 6;
+      doc.setDrawColor(17).setLineWidth(0.5).line(M, y, right, y);
+      y += 7;
+    } else {
+      // Följesidor: bara nummer och datum, så varorna får plats
+      doc.setFont('helvetica', 'bold').setFontSize(11); dark();
+      doc.text('INVOICE # ' + number, M, y);
+      doc.setFont('helvetica', 'normal').setFontSize(8.5); grey();
+      doc.text(date, right, y, { align: 'right' });
+      y += 6;
+      doc.setDrawColor(17).setLineWidth(0.4).line(M, y, right, y);
+      y += 7;
+    }
+    return tableHead(y);
+  }
+
+  let y = newPage(true);
+  doc.setFontSize(8.5);
+  for (const item of goods) {
+    const qty = parseInt(item.qty) || 1;
+    const price = parseFloat(item.sell_price) || 0;
+    const desc = String(item.name || '—');
+    const descLines = doc.splitTextToSize(desc, 98);
+    const rowH = Math.max(descLines.length, 1) * 4.2 + (item.ref_code ? 3.6 : 0) + 3;
+    // Raden får inte hamna halvt utanför sidan
+    if (y + rowH > rowsBottom) { y = newPage(false); doc.setFontSize(8.5); }
+    doc.setFont('helvetica', 'bold'); dark();
+    doc.text(descLines, M, y);
+    let rowY = y + descLines.length * 4.2;
+    if (item.ref_code) {
+      doc.setFont('helvetica', 'normal').setFontSize(7); doc.setTextColor(150);
+      doc.text(String(item.ref_code), M, rowY);
+      rowY += 3.6;
+      doc.setFontSize(8.5);
+    }
+    doc.setFont('helvetica', 'normal'); dark();
+    doc.text(String(qty), cQty, y, { align: 'right' });
+    doc.text(money(price), cPrice, y, { align: 'right' });
+    doc.text(money(qty * price), cAmt, y, { align: 'right' });
+    y = rowY + 3;
+    doc.setDrawColor(235).setLineWidth(0.2).line(M, y - 2, right, y - 2);
+  }
+
+  // Summeringen hålls ihop: får den inte plats går den till nästa sida hel
+  const sumH = discount > 0 ? 26 : 14;
+  if (y + sumH > sumBottom) { y = newPage(false); doc.setFontSize(8.5); }
+  y += 3;
+  doc.setDrawColor(17).setLineWidth(0.5).line(M, y, right, y);
+  y += 6;
+  const sumRow = (text, value, bold) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(bold ? 12 : 8.5);
+    if (bold) dark(); else doc.setTextColor(90);
+    doc.text(text, cPrice, y, { align: 'right' });
+    doc.text(value, cAmt, y, { align: 'right' });
+    y += bold ? 8 : 5;
+  };
+  if (discount > 0) {
+    sumRow('Subtotal', money(subtotal));
+    sumRow('Discount', '- ' + money(discount));
+    doc.setDrawColor(17).setLineWidth(0.4).line(cPrice - 32, y - 3, right, y - 3);
+    y += 1;
+  }
+  sumRow('TOTAL', money(total), true);
+
+  // Foten sitter nederst på SISTA sidan
+  const footY = H - M - FOOT_H;
+  doc.setDrawColor(225).setLineWidth(0.2).line(M, footY, right, footY);
+  let fy = footY + 6;
+  const colR = M + 92;
+  label('Bank details', M, fy);
+  label('Payment terms', colR, fy);
+  fy += 5;
+  doc.setFont('helvetica', 'normal').setFontSize(7.5);
+  const bank = [['Bank name', INV_COMPANY.bankName], ['IBAN', INV_COMPANY.iban],
+    ['Bank address', INV_COMPANY.bankAddress], ['BIC / Swift', INV_COMPANY.bic]];
+  bank.forEach(([k, v], i) => {
+    doc.setTextColor(150); doc.text(k, M, fy + i * 4);
+    doc.setTextColor(30); doc.text(String(v), M + 26, fy + i * 4);
+  });
+  doc.setTextColor(120);
+  doc.text(doc.splitTextToSize(
+    'Payment is due within 14 business days of invoice date. Thank you for your business.',
+    right - colR), colR, fy);
+
+  // Sidnummer skrivs sist, när vi vet hur många sidor det blev
+  const total_pages = pageHeads.length;
+  if (total_pages > 1) {
+    for (let p = 1; p <= total_pages; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal').setFontSize(7.5); grey();
+      doc.text(`Page ${p} of ${total_pages}`, right, H - 8, { align: 'right' });
+    }
+  }
+  return doc;
 }
 
 let _currentInvoiceSale = null;
@@ -396,30 +596,35 @@ function closeInvoice() {
 async function printInvoice() {
   if (!_currentInvoiceSale) return;
   const btn = document.querySelector('.invoice-dl-btn');
+  const original = btn.innerHTML;
   btn.textContent = 'Generating…'; btn.disabled = true;
   try {
-    if (!window.html2pdf) {
+    const JsPDFof = () => window.jspdf?.jsPDF || window.jsPDF;
+    if (!JsPDFof()) {
       await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
+        const el = document.createElement('script');
+        el.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        el.onload = res; el.onerror = () => rej(new Error('kunde inte hämta jspdf'));
+        document.head.appendChild(el);
       });
     }
-    const inner = document.getElementById('inv-client-inner');
-    const saved = inner.style.transform;
-    inner.style.transform = '';
-    inner.style.minHeight = '0';
-    const invNum = _currentInvoiceSale.invoice_number || 'invoice';
-    await html2pdf().set({
-      margin: 0,
-      filename: `invoice-${invNum}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    }).from(inner).save();
-    inner.style.transform = saved;
-    inner.style.minHeight = '';
+    const JsPDF = JsPDFof();
+    if (!JsPDF) throw new Error('jspdf saknas');
+    const doc = buildSaleInvoicePdf(JsPDF, _currentInvoiceSale);
+    const name = `invoice-${_currentInvoiceSale.invoice_number || 'invoice'}.pdf`;
+    const blob = doc.output('blob');
+    const file = new File([blob], name, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return; }
+      catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
   } catch { alert('Could not generate PDF. Try again.'); }
-  finally { btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download / Print'; btn.disabled = false; }
+  finally { btn.innerHTML = original; btn.disabled = false; }
 }
