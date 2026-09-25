@@ -99,8 +99,13 @@ function updatePreTotal() {
   if (!el) return;
   const pairs = preLines.reduce((n, l) => n + (parseInt(l.qty, 10) || 0), 0);
   const total = preLineTotal();
-  el.textContent = total > 0
+  // Utan inköpspris räknas raden som genomgång och ger noll i vinst — i
+  // Historik, i exporten och i avräkningen. Det ska inte gå att missa.
+  const utanInkop = preLines.filter(l =>
+    parseFloat(l.sell) > 0 && (l.buy === '' || l.buy == null)).length;
+  el.innerHTML = total > 0
     ? `${pairs} par · totalt € ${total.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      + (utanInkop ? `<div style="font-size:11px;font-weight:400;color:#ffb066;margin-top:3px;line-height:1.4">${utanInkop} rad${utanInkop > 1 ? 'er' : ''} saknar inköpspris och räknas inte in i vinsten</div>` : '')
     : '';
 }
 
@@ -265,7 +270,7 @@ async function createPreorder() {
     }
     closePreorderModal();
     showToast(items.length > 1 ? `Förbeställning skapad — ${items.length} varor` : 'Förbeställning skapad', 'success');
-    if (typeof loadSalesHistory === 'function') loadSalesHistory();
+    if (typeof refreshSalesAndSettlement === 'function') refreshSalesAndSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Skapa förbeställning'; btn.disabled = false; }
 }
@@ -277,7 +282,7 @@ async function markPreorderArrived(saleId) {
     const r = await api(`/api/sales/${saleId}/arrived`, { method: 'POST' });
     if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Kunde inte spara', 'error'); return; }
     showToast('Markerad som inkommen — kunden har fått en notis', 'success');
-    loadSalesHistory();
+    refreshSalesAndSettlement();
   } catch { showToast('Anslutningsfel', 'error'); }
 }
 
@@ -303,7 +308,7 @@ function pickSupplierDoc(saleId) {
       if (!r.ok) { const d = await r.json().catch(() => ({})); showToast(d.error || 'Kunde inte spara', 'error'); return; }
       const d = await r.json();
       showToast(d.logged ? 'Faktura sparad och inköpet bokfört' : 'Faktura sparad', 'success');
-      loadSalesHistory();
+      refreshSalesAndSettlement();
     } catch { showToast('Anslutningsfel', 'error'); }
   };
   input.click();

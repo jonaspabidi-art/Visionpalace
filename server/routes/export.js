@@ -100,6 +100,11 @@ module.exports = () => {
       const soldBy = s => s.admins?.display_name || s.admins?.username || '';
       let revTotal = 0, profitTotal = 0;
       for (const s of sales || []) {
+        // En avbruten order är ingen försäljning. Historiken och avräkningen
+        // hoppade över den, exporten gjorde det inte — så bokföringen fick både
+        // omsättning och vinst som aldrig funnits, och de tre vyerna visade
+        // olika siffror för samma månad.
+        if (s.status === 'cancelled') continue;
         const client = s.clients?.admin_label || s.clients?.display_name || s.customer_name || '';
         for (const it of s.sale_items || []) {
           const qty = it.qty || 1;
@@ -212,16 +217,21 @@ module.exports = () => {
         if (payErr) {
           push(`Kunde inte läsas: ${payErr.message}`);
         } else {
-          push('Datum', 'Fakturanr', 'Kund', 'Sålt av', 'Belopp (EUR)', 'Kommentar', 'Kvitto');
+          push('Datum', 'Fakturanr', 'Kund', 'Sålt av', 'Status', 'Belopp (EUR)', 'Kommentar', 'Kvitto');
           const byId = Object.fromEntries((sales || []).map(s => [s.id, s]));
           for (const pay of payments || []) {
             const s = byId[pay.sale_id] || {};
             const payer = s.clients?.admin_label || s.clients?.display_name || s.customer_name || '';
-            push(date(pay.paid_at), s.invoice_number || '', payer, soldBy(s),
+            // Betalningen är ett kvitto och ska stå kvar även om ordern avbrutits
+            // — pengarna kom ju in. Men ordern står inte längre bland
+            // försäljningarna, så utan status blir raden omöjlig att förstå.
+            const status = STATUS_SV[s.status || 'unpaid'] || s.status || '';
+            push(date(pay.paid_at), s.invoice_number || '', payer, soldBy(s), status,
               pay.amount == null ? '' : num(pay.amount), pay.note || '', pay.image_url || '');
             report.payments.push({
               date: date(pay.paid_at), invoice: s.invoice_number || '', client: payer,
-              sold_by: soldBy(s), amount: pay.amount == null ? null : Number(pay.amount),
+              sold_by: soldBy(s), status,
+              amount: pay.amount == null ? null : Number(pay.amount),
               note: pay.note || '', receipt: pay.image_url || '',
             });
           }

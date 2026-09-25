@@ -500,6 +500,16 @@ function editLineSell(l) {
   return isDiscountLine(l) ? -Math.abs(v) : v;
 }
 
+// En rad utan inköpspris räknas som genomgång: den höjer omsättningen men ger
+// noll i vinst. För frakten är det rätt. För en vara är det nästan alltid att
+// man glömt fylla i inköpspriset — och då blir vinsten för låg här, i Historik,
+// i exporten och i avräkningen, utan att något säger till.
+function lineMissingBuy(l) {
+  if (isDiscountLine(l) || l.name === 'Shipping') return false;
+  if (!(parseFloat(l.sell) > 0)) return false;
+  return l.buy === '' || l.buy == null;
+}
+
 function editTotals() {
   const revenue = editLines.reduce((s, l) =>
     s + editLineSell(l) * (parseInt(l.qty, 10) || 0) - lineDiscount(l), 0);
@@ -508,12 +518,14 @@ function editTotals() {
     // Rabatten sparas med inköpspris 0 och sänker därför vinsten krona för krona
     return s + (editLineSell(l) - (parseFloat(l.buy) || 0)) * (parseInt(l.qty, 10) || 0) - lineDiscount(l);
   }, 0);
-  return { revenue, profit };
+  const utanInkop = editLines.filter(lineMissingBuy).length;
+  return { revenue, profit, utanInkop };
 }
 
 function updateEditLine(i, field, value) {
   const line = editLines[i];
   if (!line) return;
+  let byggOm = false;
   if (field === 'qty') {
     let q = Math.max(1, parseInt(value, 10) || 1);
     // Fler par än ordern redan tagit ur lagret kräver att man vet VILKA par —
@@ -521,12 +533,40 @@ function updateEditLine(i, field, value) {
     if (line.maxQty && q > line.maxQty) {
       q = line.maxQty;
       showToast('Lägg till fler par ur lagret längre ned', 'error');
+      byggOm = true;              // fältet måste skrivas tillbaka till det kapade värdet
     }
     line.qty = q;
   } else {
     line[field] = value;
   }
-  renderEditLines();
+  // Att bygga om hela listan för varje tecken kastade bort alla fält och gjorde
+  // nya — det tappade markören och kändes trögt på telefonen. Nu räcker det att
+  // räkna om summorna; listan byggs om bara när den faktiskt ändrar form.
+  if (byggOm) renderEditLines();
+  else refreshEditTotals();
+}
+
+// Summan, varningen och radens "Raden blir …" — utan att röra fälten
+function refreshEditTotals() {
+  const eur = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const { revenue, profit, utanInkop } = editTotals();
+  const el = document.getElementById('edit-total');
+  if (el) el.textContent = `€ ${eur(revenue)} · vinst € ${eur(profit)}`;
+  const varning = document.getElementById('edit-total-warn');
+  if (varning) {
+    varning.textContent = utanInkop
+      ? `${utanInkop} rad${utanInkop > 1 ? 'er' : ''} saknar inköpspris och räknas inte in i vinsten`
+      : '';
+    varning.style.display = utanInkop ? '' : 'none';
+  }
+  document.querySelectorAll('#edit-lines .inv-line-item').forEach((div, i) => {
+    const sum = div.querySelector('[data-role="disc-sum"]');
+    if (!sum) return;
+    const line = editLines[i];
+    if (!line) return;
+    const netto = editLineSell(line) * (parseInt(line.qty, 10) || 0) - lineDiscount(line);
+    sum.textContent = lineDiscount(line) > 0 ? `Raden blir € ${eur(netto)}` : '';
+  });
 }
 
 function removeEditLine(i) {
@@ -724,10 +764,7 @@ function renderEditLines() {
     div.querySelector('.inv-line-remove').addEventListener('click', () => removeEditLine(i));
     wrap.appendChild(div);
   });
-  const eur = n => n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const { revenue, profit } = editTotals();
-  document.getElementById('edit-total').textContent =
-    `€ ${eur(revenue)} · vinst € ${eur(profit)}`;
+  refreshEditTotals();
 }
 
 async function saveEditSale() {
@@ -799,7 +836,7 @@ async function saveEditSale() {
     closeEditSale();
     const back = d.restored ? ` — ${d.restored} par tillbaka i lagret` : '';
     showToast(`Ordern ändrad${back}`, 'success');
-    loadSalesHistory();
+    refreshSalesAndSettlement();
     if (typeof loadInventory === 'function') loadInventory();
   } catch { showToast('Anslutningsfel', 'error'); }
   finally { btn.textContent = 'Spara ändringen'; btn.disabled = false; }
@@ -909,6 +946,16 @@ async function doStatusUpdate(saleId, sid, newStatus, carrier, tracking) {
 }
 
 // ── Sales history / profit ──
+// Ändras en order ändras också provisionen den ger. Historik och avräkning
+// läser samma försäljningar, så de måste laddas om tillsammans — annars står
+// "kommer läggas på när de betalas" kvar på siffran från innan ändringen.
+// Statusbytena gjorde det redan; orderändring, borttagning och förbeställningar
+// gjorde det inte.
+function refreshSalesAndSettlement() {
+  loadSalesHistory();
+  if (typeof loadSettlement === 'function') loadSettlement();
+}
+
 async function loadSalesHistory() {
   const summaryEl = document.getElementById('historik-summary');
   const listEl = document.getElementById('historik-list');
@@ -1023,7 +1070,7 @@ async function loadSalesHistory() {
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
               ${(sale.status || 'unpaid') === 'unpaid' ? `<button onclick="event.stopPropagation();openEditSale('${sale.id}')" style="background:none;border:1px solid rgba(201,169,110,.35);border-radius:8px;color:var(--blue);font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ändra</button>` : ''}
               <button onclick="event.stopPropagation();openSaleInvoice('${sale.id}')" style="background:none;border:1px solid rgba(100,150,255,.3);border-radius:8px;color:#7aabff;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Faktura</button>
-              <button onclick="event.stopPropagation();deleteSale('${sale.id}', loadSalesHistory)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
+              <button onclick="event.stopPropagation();deleteSale('${sale.id}', refreshSalesAndSettlement)" style="background:none;border:1px solid rgba(255,100,100,.3);border-radius:8px;color:#ff7a7a;font-size:13px;padding:6px 12px;cursor:pointer;font-family:inherit">Ta bort försäljning</button>
             </div>
           </div>
         </div>`;
