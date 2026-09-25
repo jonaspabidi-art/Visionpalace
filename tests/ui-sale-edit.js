@@ -155,10 +155,14 @@ const INVENTORY = [
     await page.fill(discField, '300');
     await page.dispatchEvent(discField, 'change');
     await page.waitForTimeout(300);
-    checks.push(['rutan visar vad raden blir efter rabatt',
-      (await page.textContent('#edit-lines')).replace(/\u00a0/g, ' ').includes('Raden blir € 2 100,00')]);
-    checks.push(['summan sänks av parrabatten',
-      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 120,00 · vinst € 500,00')]);
+    // Raden är 2 par à 1200. 300 i rabatt är 300 PER PAR, alltså 600 i avdrag:
+    // raden blir 2400 − 600 = 1800, ordern 1800 + 20 = 1820, vinsten 800 − 600 = 200.
+    const rad = async () => (await page.textContent('#edit-lines')).replace(/\u00a0/g, ' ');
+    checks.push(['rutan räknar avdraget per par',
+      (await rad()).includes('2 × € 300,00 = € 600,00')]);
+    checks.push(['och visar vad raden blir', (await rad()).includes('raden blir € 1 800,00')]);
+    checks.push(['summan sänks med hela avdraget',
+      (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 1 820,00 · vinst € 200,00')]);
 
     // Större rabatt än raden ska stoppas
     await page.fill(discField, '9000');
@@ -169,7 +173,7 @@ const INVENTORY = [
     await page.waitForTimeout(400);
     checks.push(['för stor parrabatt sparas inte', patched === null]);
     checks.push(['och säger varför',
-      /större än raden/i.test(await page.evaluate(() => window.__t.join(' | ')))]);
+      /större än vad ett par kostar/i.test(await page.evaluate(() => window.__t.join(' | ')))]);
 
     await page.fill(discField, '300');
     await page.dispatchEvent(discField, 'change');
@@ -196,10 +200,21 @@ const INVENTORY = [
     });
     await page.waitForTimeout(600);
     checks.push(['rabatten blir inte en egen rad när ordern öppnas igen', (await lines()) === 2]);
-    checks.push(['den ligger i varans rabattfält',
-      (await page.inputValue(discField)) === '300']);
-    checks.push(['summan stämmer när ordern öppnas igen',
+    // Ordern är lagd före ändringen: rabatten ligger som EN rad på 300 för hela
+    // varuraden. Den räknas om till avdrag per par — 300 på 2 par blir 150 per
+    // par — och det avgörande är att TOTALEN inte rör sig en krona.
+    checks.push(['gammalt belopp räknas om till per par',
+      (await page.inputValue(discField)) === '150']);
+    checks.push(['och totalen är oförändrad',
       (await page.textContent('#edit-total')).replace(/\u00a0/g, ' ').includes('€ 2 120,00 · vinst € 500,00')]);
+
+    // Sparas den orörd ska beloppet vara exakt detsamma som innan
+    patched = null;
+    await page.click('#edit-save-btn');
+    await page.waitForTimeout(700);
+    const gammal = patched?.items?.find(i => i.name === 'Discount — Cartier Première');
+    checks.push(['en orörd gammal rabatt sparas till samma totalbelopp',
+      Math.abs((gammal?.sell_price || 0) * (gammal?.qty || 1) + 300) < 0.005]);
 
     // En parrabatt vars vara inte finns kvar i ordern. Den får inte försvinna
     // tyst, och den får inte heller stoppa sparandet genom att behandlas som
