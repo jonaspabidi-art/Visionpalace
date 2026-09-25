@@ -83,6 +83,18 @@ const near = (a, b) => Math.abs(a - b) < 0.005;
   checks.push(['avräkningen är exakt sin andel av exportens vinst',
     near(st.earned, vinst * F.COMMISSION_PCT / 100)]);
 
+  // Den avbrutna ordern ska inte finnas bland raderna heller, inte bara saknas
+  // i summan — annars går raderna och summan isär i kalkylbladet
+  const rader = r.sales || [];
+  checks.push(['exporten listar inte den avbrutna ordern',
+    !rader.some(x => x.invoice === 'VP09-002')]);
+  checks.push(['raderna summerar till exportens egen summa',
+    near(rader.reduce((a, x) => a + x.amount, 0), F.REVENUE)]);
+  checks.push(['och vinstraderna likaså',
+    near(rader.reduce((a, x) => a + (x.profit || 0), 0), F.PROFIT)]);
+  checks.push(['betalningsraderna bär orderns status',
+    (r.payments || []).every(x => typeof x.status === 'string')]);
+
   srv.close(); db.close();
   let ok = true;
   for (const [l,p] of checks) { console.log(`${p?'PASS':'FAIL'} — ${l}`); if (!p) ok = false; }
