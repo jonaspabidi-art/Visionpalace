@@ -97,8 +97,12 @@ const kr = n => n.toLocaleString('sv-SE', { minimumFractionDigits:2, maximumFrac
         total: tal(kort.querySelector('.sale-total-val').textContent),
       };
     });
-    checks.push(['Kunden: varuraderna summerar till delsumman',
-      kortTal.rader === kortTal.delsumma]);
+    // Radens belopp är vad paren kostar EFTER sin egen rabatt, så raderna
+    // summerar till totalen plus den generella rabatten — den hör inte till
+    // något par och dras av först i summeringen.
+    const generell = 250;   // "Discount" i fixturen, utan vara
+    checks.push(['Kunden: varuraderna summerar till totalen plus den generella rabatten',
+      Math.abs(kortTal.rader - (kortTal.total + generell)) < 0.005]);
     checks.push(['Kunden: delsumman minus rabatten är totalen',
       Math.abs(kortTal.delsumma - kortTal.rabatt - kortTal.total) < 0.005]);
     checks.push(['Kunden: totalen är orderns omsättning', kortTal.total === F.REVENUE]);

@@ -10,6 +10,8 @@ const SALES = [{
     { name:'Cartier Première', ref_code:'CT1', sell_price:'1200', qty:3, image:null },
     { name:'Woods', ref_code:'CT7', sell_price:'1400', qty:1, image:null },
     { name:LONG, ref_code:'CT-9120', sell_price:'980', qty:2, image:null },
+    { name:'Panthere Rose', ref_code:'CT-5000', sell_price:'900', qty:3, image:null },
+    { name:'Discount \u2014 Panthere Rose', ref_code:'CT-5000', sell_price:'-60', qty:3, image:null },
     { name:'Shipping', ref_code:null, sell_price:'20', qty:1, image:null },
     { name:'Discount', ref_code:null, sell_price:'-250', qty:1, image:null },
     { name:'Lens fitting', ref_code:null, sell_price:null, qty:2, image:null },
@@ -49,7 +51,11 @@ const SALES = [{
     // Ett par ska se ut precis som förr — ingen "1 ×"-rad
     checks.push(['ett par visar bara priset', (await price(1)) === '€1400']);
     checks.push(['och ingen antalsrad', (await qty(1)) === null]);
-    checks.push(['frakten är orörd', (await price(3)) === '€20']);
+    const radPris = namn => page.evaluate(n => {
+      const rad = [...document.querySelectorAll('.sale-item-row')].find(r => r.textContent.includes(n));
+      return rad?.querySelector('.sale-item-price')?.textContent.trim() ?? null;
+    }, namn);
+    checks.push(['frakten är orörd', (await radPris('Shipping')) === '€20']);
     // Rabatten står inte längre bland varorna utan i summeringen — annars blev
     // kortet dubbelt så långt, med en tom bildruta per rabattrad.
     const sumRader = () => page.evaluate(() =>
@@ -57,10 +63,10 @@ const SALES = [{
         [...r.querySelectorAll('span')].map(s => s.textContent.trim())));
     const summering = await sumRader();
     checks.push(['rabatten ligger inte bland varorna',
-      (await page.$$('.sale-item-row')).length === 5]);
+      (await page.$$('.sale-item-row')).length === 6]);
     checks.push(['delsumman visas', summering.some(r => /Subtotal/i.test(r[0]))]);
     checks.push(['rabatten visas som avdrag',
-      summering.some(r => /Discount/i.test(r[0]) && /250/.test(r[1]))]);
+      summering.some(r => /Discount/i.test(r[0]) && /430/.test(r[1]))]);
 
     // Varuraderna ska summera till delsumman, och delsumman minus rabatten till
     // totalen. Det var det som inte gick ihop förut.
@@ -68,8 +74,9 @@ const SALES = [{
       .reduce((s, e) => s + parseFloat(e.textContent.replace('\u20ac','')), 0));
     const total = await page.evaluate(() =>
       document.querySelector('.sale-total-val').textContent.replace(/[\u20ac\s\u00a0,]/g,''));
-    checks.push(['varuraderna summerar till delsumman', sum === 6980]);
-    checks.push(['delsumman minus rabatten är totalen', total === '6730']);
+    // 6 980 + 3 \u00d7 900 = 9 680 i delsumma; raderna visar netto, alltso 9 680 \u2212 180 = 9 500
+    checks.push(['varuraderna summerar till delsumman minus parrabatten', sum === 9500]);
+    checks.push(['delsumman minus all rabatt är totalen', total === '9250']);
 
     // Långa namn kapades mitt i ordet
     const nameBox = await page.evaluate(() => {
@@ -80,10 +87,45 @@ const SALES = [{
     checks.push(['och syns utan att kapas', nameBox.clipped === false]);
 
     // En rad utan pris får inte bli "2 × €null"
-    checks.push(['rad utan pris visar bara antalet', (await qty(4)) === '\u00d72']);
-    checks.push(['och inget prisfält', (await price(4)) === '']);
+    const utanPris = await page.evaluate(() => {
+      const rad = [...document.querySelectorAll('.sale-item-row')].find(r => r.textContent.includes('Lens fitting'));
+      return { qty: rad?.querySelector('.sale-item-qty')?.textContent.trim() ?? null,
+               pris: rad?.querySelector('.sale-item-price')?.textContent.trim() ?? '' };
+    });
+    checks.push(['rad utan pris visar bara antalet', utanPris.qty === '\u00d72']);
+    checks.push(['och inget prisfält', utanPris.pris === '']);
     checks.push(['ordet null syns ingenstans',
       !(await page.textContent('.sale-card')).includes('null')]);
+
+    // ── Rabatt per par ──
+    // Kunden ska se sitt NYA pris per par, vad ordinarie var, och hur stort
+    // avdraget är. Stod bara radens summa fick man räkna baklänges.
+    const par = await page.evaluate(() => {
+      const rad = [...document.querySelectorAll('.sale-item-row')]
+        .find(r => r.textContent.includes('Panthere Rose'));
+      return {
+        styck: rad.querySelector('.sale-item-qty')?.textContent.replace(/\s+/g, ' ').trim(),
+        ordinarie: rad.querySelector('.sale-item-qty s')?.textContent.trim(),
+        nytt: rad.querySelector('.sale-item-new')?.textContent.trim(),
+        belopp: rad.querySelector('.sale-item-price')?.textContent.trim(),
+        sparat: rad.querySelector('.sale-item-saved')?.textContent.trim(),
+      };
+    });
+    checks.push(['ordinarie priset stryks över', par.ordinarie === '\u20ac900']);
+    checks.push(['nya priset per par visas', par.nytt === '\u20ac840']);
+    checks.push(['antalet står med', /^3 \u00d7/.test(par.styck || '')]);
+    checks.push(['avdraget per par skrivs ut', /60/.test(par.sparat || '') && /per par/.test(par.sparat || '')]);
+    checks.push(['radens belopp är efter rabatt', par.belopp === '\u20ac2520']);
+
+    // En vara utan parrabatt ska se ut precis som förut
+    const utan = await page.evaluate(() => {
+      const rad = [...document.querySelectorAll('.sale-item-row')]
+        .find(r => r.textContent.includes('Woods'));
+      return { ny: !!rad.querySelector('.sale-item-new'), sparat: !!rad.querySelector('.sale-item-saved'),
+               belopp: rad.querySelector('.sale-item-price')?.textContent.trim() };
+    });
+    checks.push(['vara utan parrabatt är orörd',
+      !utan.ny && !utan.sparat && utan.belopp === '\u20ac1400']);
 
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));

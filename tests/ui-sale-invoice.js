@@ -125,6 +125,20 @@ const nbsp = t => t.replace(/ /g, ' ');
     checks.push(['ingen rabattrad bland varorna i PDF:en',
       !pdf.text.some(t => /Discount .* Cartier Modell 1/.test(t))]);
 
+    // Kunden ska se sitt nya pris per par, inte bara radens summa
+    const parRad = pdf.text.join(' ');
+    checks.push(['avdraget per par skrivs ut i PDF:en', /per pair/i.test(parRad)]);
+    const prev2 = nbsp(await page.textContent('#invoice-doc'));
+    checks.push(['och i förhandsvisningen', /per pair/i.test(prev2)]);
+    const nytt = await page.evaluate(() => {
+      const rad = [...document.querySelectorAll('#invoice-doc tr')]
+        .find(r => r.textContent.includes('Cartier Modell 1') && !r.textContent.includes('Modell 10'));
+      return { struket: rad?.querySelector('s')?.textContent.trim() || null,
+               nytt: rad?.querySelector('strong')?.textContent.trim() || null };
+    });
+    checks.push(['ordinarie priset stryks över på fakturan', /901/.test(nytt.struket || '')]);
+    checks.push(['nya priset per par står bredvid', /601/.test(nytt.nytt || '')]);
+
     checks.push(['inga JS-fel', errors.length===0]);
     if (errors.length) console.log('   fel:', errors.slice(0,3));
     console.log(`   (${pdf.sidor} sidor, ${Math.round(pdf.storlek/1024)} kB)`);
