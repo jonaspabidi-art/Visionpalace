@@ -137,9 +137,11 @@ window.addEventListener('resize', () => {
   if (preview && preview.style.display !== 'none') scaleInvDoc();
 });
 
-function addInvLine(desc = '', qty = '1', price = '', vat = '0') {
+// discount är avdraget PER enhet, precis som i Ändra-rutan. Kunden ska se sitt
+// pris per par efter rabatt, inte bara vad hela ordern gick ner till.
+function addInvLine(desc = '', qty = '1', price = '', vat = '0', discount = '') {
   const id = invLineNextId++;
-  invLineItems.push({ id, desc, qty, price, vat });
+  invLineItems.push({ id, desc, qty, price, vat, discount });
   renderInvLines();
 }
 
@@ -177,6 +179,10 @@ function renderInvLines() {
         </div>
       </div>
       <div class="inv-field">
+        <label>Rabatt per st (${invCur().short})</label>
+        <input class="inv-input" type="number" min="0" step="0.01" placeholder="0.00" inputmode="decimal" data-field="discount">
+      </div>
+      <div class="inv-field">
         <label>Momssats (%)</label>
         <select class="inv-input" data-field="vat">
           <option value="0">0%</option>
@@ -189,6 +195,7 @@ function renderInvLines() {
     div.querySelector('[data-field="qty"]').value = item.qty;
     div.querySelector('[data-field="price"]').value = item.price;
     div.querySelector('[data-field="vat"]').value = item.vat;
+    div.querySelector('[data-field="discount"]').value = item.discount || '';
     div.querySelector('.inv-line-remove').addEventListener('click', () => removeInvLine(item.id));
     div.querySelectorAll('[data-field]').forEach(input => {
       input.addEventListener('change', () => updateInvLine(item.id, input.dataset.field, input.value));
@@ -206,7 +213,7 @@ const INV_TEXT = {
   en: {
     title: 'INVOICE', payTo: 'PAY TO', custCompany: 'BILLED TO', custPrivate: 'CUSTOMER',
     colDesc: 'Description', colQty: 'Quantity', colVat: 'VAT', colPrice: 'Unit Price', colAmount: 'Amount',
-    net: 'Netto', discount: 'Discount', vatLabel: 'VAT', total: 'TOTAL',
+    net: 'Netto', discount: 'Discount', perUnit: 'per pair', vatLabel: 'VAT', total: 'TOTAL',
     bankDetails: 'Bank details', bankName: 'Bank Name', bankAddress: 'Bank Address',
     paymentTerms: 'Payment terms', notes: 'Notes',
     paymentText: days => `Payment is required within ${days} business days of invoice date.<br>Thank you for your business.`,
@@ -216,7 +223,7 @@ const INV_TEXT = {
   sv: {
     title: 'FAKTURA', payTo: 'BETALA TILL', custCompany: 'KUND', custPrivate: 'KUND',
     colDesc: 'Beskrivning', colQty: 'Antal', colVat: 'Moms', colPrice: 'Á-pris', colAmount: 'Belopp',
-    net: 'Netto', discount: 'Rabatt', vatLabel: 'Moms', total: 'TOTALT',
+    net: 'Netto', discount: 'Rabatt', perUnit: 'per par', vatLabel: 'Moms', total: 'TOTALT',
     bankDetails: 'Bankuppgifter', bankName: 'Bank', bankAddress: 'Bankadress',
     paymentTerms: 'Betalningsvillkor', notes: 'Anteckningar',
     paymentText: days => `Betalning ska ske inom ${days} bankdagar från fakturadatum.<br>Tack för ditt köp.`,
@@ -237,20 +244,29 @@ function invIsDiscount(item) {
 function invSplitLines(lineItems) {
   const num = v => parseFloat(v) || 0;
   const vatGroups = {};
-  let goodsNet = 0, discountNet = 0;
+  let goodsNet = 0, avdrag = 0;
   const goods = [];
   for (const item of lineItems) {
     const qty = num(item.qty), price = num(item.price), vat = num(item.vat);
-    const net = qty * price;
-    vatGroups[vat] = (vatGroups[vat] || 0) + net * (vat / 100);
-    if (invIsDiscount(item)) { discountNet += net; continue; }
-    goodsNet += net;
-    goods.push({ desc: item.desc || '—', qty, price, vat, amount: net });
+    const brutto = qty * price;
+    // En hel minusrad (t.ex. "Discount") gäller hela ordern och hör bara hemma
+    // i summeringen. Ett avdrag per styck hör till sin vara och visas på raden.
+    if (invIsDiscount(item)) {
+      avdrag += Math.abs(brutto);
+      vatGroups[vat] = (vatGroups[vat] || 0) + brutto * (vat / 100);
+      continue;
+    }
+    const perSt = Math.abs(num(item.discount));
+    const radAvdrag = perSt * qty;
+    avdrag += radAvdrag;
+    goodsNet += brutto;
+    vatGroups[vat] = (vatGroups[vat] || 0) + (brutto - radAvdrag) * (vat / 100);
+    goods.push({ desc: item.desc || '—', qty, price, vat,
+      perSt, nyttPris: price - perSt, amount: brutto, netto: brutto - radAvdrag });
   }
   const totalVat = Object.values(vatGroups).reduce((a, b) => a + b, 0);
-  const discount = Math.abs(discountNet);
-  return { goods, vatGroups, totalVat, subtotal: goodsNet, discount,
-    total: goodsNet - discount + totalVat };
+  return { goods, vatGroups, totalVat, subtotal: goodsNet, discount: avdrag,
+    total: goodsNet - avdrag + totalVat };
 }
 
 function generateInvoice() {
@@ -277,12 +293,19 @@ function generateInvoice() {
 
   const rowsHtml = goods.map(item => {
     const { qty, price, vat } = item;
+    // Ordinarie priset stryks över och det nya priset per styck står bredvid,
+    // så kunden ser vad ETT par kostar efter rabatt
+    const prisCell = item.perSt > 0
+      ? `<s style="color:#bbb">${money(price)}</s> <strong>${money(item.nyttPris)}</strong>`
+      : money(price);
     return `<tr>
-      <td style="font-weight:600;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${esc(item.desc) || '—'}</td>
+      <td style="font-weight:600;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${esc(item.desc) || '—'}
+        ${item.perSt > 0 ? `<div style="font-size:10px;color:#2e8b57;font-weight:400;margin-top:2px">${T.discount} − ${money(item.perSt)} ${T.perUnit}</div>` : ''}
+      </td>
       <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${qty % 1 === 0 ? qty : fmt(qty)}</td>
       <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${vat}%</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${money(price)}</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${money(qty * price)}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${prisCell}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${money(item.netto)}</td>
     </tr>`;
   }).join('');
 
@@ -520,17 +543,39 @@ function buildInvoicePdf(JsPDF, d) {
   doc.setFontSize(8.5);
   for (const r of d.rows) {
     const descLines = doc.splitTextToSize(r.desc, 96);
-    const radH = Math.max(descLines.length, 1) * 4.2 + 3;
+    const radH = Math.max(descLines.length, 1) * 4.2 + (r.perSt > 0 ? 3.6 : 0) + 3;
     // Raden får inte hamna halvt utanför sidan
     if (y + radH > rowsBottom) y = nySida();
     doc.setFont('helvetica', 'bold'); dark();
     doc.text(descLines, M, y);
-    doc.setFont('helvetica', 'normal');
+    let radY = y + Math.max(descLines.length, 1) * 4.2;
+    if (r.perSt > 0) {
+      doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(46, 139, 87);
+      doc.text(`${d.T.discount} - ${money(r.perSt)} ${d.T.perUnit}`, M, radY);
+      radY += 3.6;
+      doc.setFontSize(8.5);
+    }
+    doc.setFont('helvetica', 'normal'); dark();
     doc.text(String(r.qty % 1 === 0 ? r.qty : r.qty.toFixed(2)), cQty, y, { align: 'right' });
     doc.text(r.vat + '%', cVat, y, { align: 'right' });
-    doc.text(money(r.price), cPrice, y, { align: 'right' });
-    doc.text(money(r.amount), cAmt, y, { align: 'right' });
-    y += Math.max(descLines.length, 1) * 4.2 + 3;
+    if (r.perSt > 0) {
+      // Ordinarie pris överstruket, priset efter rabatt i fetstil
+      const nytt = money(r.nyttPris);
+      doc.setFont('helvetica', 'bold');
+      doc.text(nytt, cPrice, y, { align: 'right' });
+      const nyBredd = doc.getTextWidth(nytt);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(150);
+      const gammalt = money(r.price);
+      const gamBredd = doc.getTextWidth(gammalt);
+      const gamX = cPrice - nyBredd - 2;
+      doc.text(gammalt, gamX, y, { align: 'right' });
+      doc.setDrawColor(150).setLineWidth(0.25).line(gamX - gamBredd, y - 1.1, gamX, y - 1.1);
+      dark();
+    } else {
+      doc.text(money(r.price), cPrice, y, { align: 'right' });
+    }
+    doc.text(money(r.netto), cAmt, y, { align: 'right' });
+    y = radY + 3;
     doc.setDrawColor(235).setLineWidth(0.2).line(M, y - 2, right, y - 2);
   }
 

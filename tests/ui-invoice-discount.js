@@ -57,7 +57,15 @@ const SALES = [{ id:'s1', created_at:'2026-09-25T10:00:00Z', status:'unpaid', in
     // Raderna som fylls i
     const rader = await page.evaluate(() => invLineItems.map(l => l.desc));
     checks.push(['varje vara får en rad', rader.filter(d => !/^Discount/.test(d)).length === 9]);
-    checks.push(['rabatterna blir en enda rad', rader.filter(d => /^Discount/.test(d)).length === 1]);
+    // Parrabatterna blir avdrag PÅ varans rad, inte egna rader
+    checks.push(['inga rabattrader alls', rader.filter(d => /^Discount/.test(d)).length === 0]);
+    const avdrag = await page.evaluate(() => invLineItems.map(l => ({ d: l.desc, r: l.discount })));
+    checks.push(['varje vara bär sitt avdrag per styck',
+      avdrag.filter(a => parseFloat(a.r) > 0).length === 9]);
+    // Två modeller heter likadant med olika ref — deras avdrag får inte slås ihop
+    const dubbletter = avdrag.filter(a => /C decor silver solglas/.test(a.d));
+    checks.push(['samma namn med olika ref hålls isär',
+      dubbletter.length === 2 && dubbletter.every(a => parseFloat(a.r) === 50)]);
 
     // Förhandsvisningen
     const prev = (await page.textContent('#inv-panel-preview')).replace(/ /g, ' ');
@@ -66,6 +74,19 @@ const SALES = [{ id:'s1', created_at:'2026-09-25T10:00:00Z', status:'unpaid', in
     checks.push(['rabatten står som egen summarad', /Discount|Rabatt/.test(prev)]);
     checks.push(['med hela avdraget', prev.includes(kr(rabattSumma))]);
     checks.push(['totalen är varorna minus rabatten', prev.includes(kr(varuSumma - rabattSumma))]);
+
+    // Kunden ska se sitt pris per par, precis som i appens faktura. Måste
+    // kontrolleras HÄR — längre ner byter testet ut raderna mot en stor order
+    // och skriver då över förhandsvisningen.
+    checks.push(['avdraget per par skrivs ut', /per par|per pair/i.test(prev)]);
+    const parPris = await page.evaluate(() => {
+      const rad = [...document.querySelectorAll('#inv-panel-preview tr')]
+        .find(r => r.textContent.includes('Cartier Jumping'));
+      return { struket: rad?.querySelector('s')?.textContent.trim() || null,
+               nytt: rad?.querySelector('strong')?.textContent.trim() || null };
+    });
+    checks.push(['ordinarie priset stryks över', /679/.test(parPris.struket || '')]);
+    checks.push(['nya priset per par står bredvid', /629/.test(parPris.nytt || '')]);
 
     // PDF:en
     const pdf = await page.evaluate(async () => {
@@ -129,6 +150,7 @@ const SALES = [{ id:'s1', created_at:'2026-09-25T10:00:00Z', status:'unpaid', in
     checks.push(['summeringen står på sista sidan', /TOTAL/.test(sista)]);
     checks.push(['rabatten summeras i PDF:en', /Discount|Rabatt/.test(sista)]);
     checks.push(['bankuppgifterna står sist', /IBAN|Clearing/.test(sista)]);
+    checks.push(['avdraget per par skrivs ut i PDF:en', /per par|per pair/i.test(mätt.text.join(' '))]);
     checks.push(['ingen rabattrad bland varorna i PDF:en',
       !mätt.text.some(t => /Discount .{0,4} Cartier/.test(t))]);
 
