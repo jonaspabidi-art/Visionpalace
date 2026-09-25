@@ -138,14 +138,34 @@ function renderPurchases(sales) {
   // ett litet ×3 under fick kunden räkna själv, och totalen längst ner stämde
   // inte med något av talen i listan.
   const money = n => (Number.isInteger(n) ? String(n) : n.toFixed(2));
-  const lineTotal = item => money((parseFloat(item.sell_price) || 0) * (parseInt(item.qty, 10) || 1));
-  const unitPrice = item => money(parseFloat(item.sell_price) || 0);
+
+  // Kunden ska se sitt pris PER PAR efter rabatt, och vad ordinarie var. Stod
+  // bara radens summa fick man räkna baklänges för att förstå vad ett par kostade.
+  const saleItemPriceHtml = g => {
+    if (g.pris == null) {
+      return (g.qty || 1) > 1 ? `<div class="sale-item-qty">×${g.qty}</div>` : '';
+    }
+    const flera = (g.qty || 1) > 1;
+    if (g.perPar > 0) {
+      const styck = `<s>€${money(g.pris)}</s> <span class="sale-item-new">€${money(g.nyttPris)}</span>`;
+      return `<div class="sale-item-qty">${flera ? `${g.qty} × ` : ''}${styck}</div>
+        <div class="sale-item-price">€${money(g.netto)}</div>
+        <div class="sale-item-saved">−€${money(g.perPar)} per par</div>`;
+    }
+    return `${flera ? `<div class="sale-item-qty">${g.qty} × €${money(g.pris)}</div>` : ''}
+      <div class="sale-item-price">€${money(g.netto)}</div>`;
+  };
 
   const cardHTML = sale => {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const total = items.reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
-    const itemsHTML = items.map(item => `
+    // Rabatterna ligger som egna minusrader, en per par. I listan blev det en
+    // extra rad med tom bildruta för varje vara — dubbelt så långt kort utan att
+    // visa vad rabatten blev totalt. Samma sak som på fakturan: de hör hemma i
+    // summeringen, inte bland varorna.
+    const { goods, subtotal, discount } = invoiceParts(items);
+    const itemsHTML = goods.map(item => `
       <div class="sale-item-row">
         ${item.image ? `<img class="sale-item-img" src="${item.image}" loading="lazy">` : `<div class="sale-item-img-ph"></div>`}
         <div class="sale-item-body">
@@ -153,10 +173,7 @@ function renderPurchases(sales) {
           ${item.ref_code ? `<div class="sale-item-ref">${esc(item.ref_code)}</div>` : ''}
         </div>
         <div class="sale-item-right">
-          ${(item.qty || 1) > 1
-            ? `<div class="sale-item-qty">${item.sell_price != null ? `${item.qty} × €${unitPrice(item)}` : `×${item.qty}`}</div>`
-            : ''}
-          ${item.sell_price != null ? `<div class="sale-item-price">€${lineTotal(item)}</div>` : ''}
+          ${saleItemPriceHtml(item)}
         </div>
       </div>`).join('');
     const saleData = encodeURIComponent(JSON.stringify(sale));
@@ -194,6 +211,15 @@ function renderPurchases(sales) {
                   color:#ff9944;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">How to pay</button>
         </div>` : ''}
       ${trackingHTML}
+      ${discount > 0 ? `
+      <div class="sale-card-sum">
+        <span>Subtotal</span>
+        <span>€${subtotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+      </div>
+      <div class="sale-card-sum">
+        <span>Discount</span>
+        <span class="sale-sum-minus">− €${discount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+      </div>` : ''}
       <div class="sale-card-footer">
         <span class="sale-total-label">Total</span>
         <span class="sale-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
@@ -285,17 +311,50 @@ function askPaymentDetails(invoice) {
 // par. Utspridda mellan varorna blev fakturan rörig, och på en stor order gick
 // det inte att se vad rabatten blev totalt. De lyfts därför ur varulistan och
 // visas som EN rad i summeringen.
+const PAIR_DISCOUNT_LABEL = 'Discount — ';
+
 function isDiscountRow(item) {
   const n = String(item.name || '');
-  return n === 'Discount' || n.startsWith('Discount — ');
+  return n === 'Discount' || n.startsWith(PAIR_DISCOUNT_LABEL);
 }
 
 function invoiceParts(items) {
-  const amount = i => (parseFloat(i.sell_price) || 0) * (parseInt(i.qty) || 1);
-  const goods = items.filter(i => !isDiscountRow(i));
-  const subtotal = goods.reduce((s, i) => s + amount(i), 0);
-  const discount = Math.abs(items.filter(isDiscountRow).reduce((s, i) => s + amount(i), 0));
-  return { goods, subtotal, discount, total: subtotal - discount };
+  const belopp = i => (parseFloat(i.sell_price) || 0) * (parseInt(i.qty) || 1);
+
+  // En parrabatt heter "Discount — <varans namn>" och hör till just den varan.
+  // Rabatten längst ner heter bara "Discount" och gäller hela ordern.
+  const perVara = new Map();
+  let generell = 0;
+  for (const d of items.filter(isDiscountRow)) {
+    const namn = String(d.name || '');
+    if (namn.startsWith(PAIR_DISCOUNT_LABEL)) {
+      const key = namn.slice(PAIR_DISCOUNT_LABEL.length);
+      perVara.set(key, (perVara.get(key) || 0) + Math.abs(belopp(d)));
+    } else {
+      generell += Math.abs(belopp(d));
+    }
+  }
+
+  const goods = items.filter(i => !isDiscountRow(i)).map(i => {
+    const qty = parseInt(i.qty) || 1;
+    const pris = i.sell_price == null ? null : (parseFloat(i.sell_price) || 0);
+    const avdrag = perVara.get(String(i.name || '')) || 0;
+    const perPar = qty ? avdrag / qty : 0;
+    return {
+      ...i, qty,
+      pris,                                   // ordinarie styckpris
+      nyttPris: pris == null ? null : pris - perPar,   // kundens pris efter rabatt
+      perPar,
+      brutto: pris == null ? 0 : pris * qty,
+      netto: pris == null ? 0 : pris * qty - avdrag,
+    };
+  });
+
+  const subtotal = goods.reduce((s, g) => s + g.brutto, 0);
+  const discount = [...perVara.values()].reduce((a, b) => a + b, 0) + generell;
+  // Radernas netto summerar till subtotal minus parrabatterna; den generella
+  // rabatten dras av först i summeringen. Totalen stämmer i båda fallen.
+  return { goods, subtotal, discount, general: generell, total: subtotal - discount };
 }
 
 function buildInvoiceHTML(sale) {
@@ -308,16 +367,20 @@ function buildInvoiceHTML(sale) {
   function fmt(n) { return Number(n).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   const { goods, subtotal, discount, total } = invoiceParts(items);
 
-  const rowsHtml = goods.map(item => {
-    const qty = parseInt(item.qty) || 1;
-    const price = parseFloat(item.sell_price) || 0;
+  const rowsHtml = goods.map(g => {
+    // Priset kunden faktiskt betalar per par står först, ordinarie överstruket
+    // bredvid. Utan det gick det inte att se vad ett par kostade efter rabatt.
+    const prisCell = g.perPar > 0
+      ? `<s style="color:#bbb">€ ${fmt(g.pris)}</s> <strong>€ ${fmt(g.nyttPris)}</strong>`
+      : `€ ${fmt(g.pris || 0)}`;
     return `<tr>
       <td style="font-weight:600;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">
-        ${esc(item.name || '—')}${item.ref_code ? `<div style="font-size:10px;color:#999;margin-top:2px">${esc(item.ref_code)}</div>` : ''}
+        ${esc(g.name || '—')}${g.ref_code ? `<div style="font-size:10px;color:#999;margin-top:2px">${esc(g.ref_code)}</div>` : ''}
+        ${g.perPar > 0 ? `<div style="font-size:10px;color:#2e8b57;margin-top:2px">Discount − € ${fmt(g.perPar)} per pair</div>` : ''}
       </td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${qty}</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">€ ${fmt(price)}</td>
-      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">€ ${fmt(qty * price)}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${g.qty}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${prisCell}</td>
+      <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">€ ${fmt(g.netto)}</td>
     </tr>`;
   }).join('');
 
@@ -478,27 +541,49 @@ function buildSaleInvoicePdf(JsPDF, sale) {
 
   let y = newPage(true);
   doc.setFontSize(8.5);
-  for (const item of goods) {
-    const qty = parseInt(item.qty) || 1;
-    const price = parseFloat(item.sell_price) || 0;
-    const desc = String(item.name || '—');
+  for (const g of goods) {
+    const desc = String(g.name || '—');
     const descLines = doc.splitTextToSize(desc, 98);
-    const rowH = Math.max(descLines.length, 1) * 4.2 + (item.ref_code ? 3.6 : 0) + 3;
+    const rowH = Math.max(descLines.length, 1) * 4.2
+      + (g.ref_code ? 3.6 : 0) + (g.perPar > 0 ? 3.6 : 0) + 3;
     // Raden får inte hamna halvt utanför sidan
     if (y + rowH > rowsBottom) { y = newPage(false); doc.setFontSize(8.5); }
     doc.setFont('helvetica', 'bold'); dark();
     doc.text(descLines, M, y);
     let rowY = y + descLines.length * 4.2;
-    if (item.ref_code) {
+    if (g.ref_code) {
       doc.setFont('helvetica', 'normal').setFontSize(7); doc.setTextColor(150);
-      doc.text(String(item.ref_code), M, rowY);
+      doc.text(String(g.ref_code), M, rowY);
+      rowY += 3.6;
+      doc.setFontSize(8.5);
+    }
+    if (g.perPar > 0) {
+      doc.setFont('helvetica', 'normal').setFontSize(7); doc.setTextColor(46, 139, 87);
+      doc.text(`Discount - ${money(g.perPar)} per pair`, M, rowY);
       rowY += 3.6;
       doc.setFontSize(8.5);
     }
     doc.setFont('helvetica', 'normal'); dark();
-    doc.text(String(qty), cQty, y, { align: 'right' });
-    doc.text(money(price), cPrice, y, { align: 'right' });
-    doc.text(money(qty * price), cAmt, y, { align: 'right' });
+    doc.text(String(g.qty), cQty, y, { align: 'right' });
+    if (g.perPar > 0) {
+      // Ordinarie pris överstruket, kundens pris efter rabatt i fetstil
+      const nytt = money(g.nyttPris);
+      doc.setFont('helvetica', 'bold');
+      doc.text(nytt, cPrice, y, { align: 'right' });
+      const nyBredd = doc.getTextWidth(nytt);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(150);
+      const gammalt = money(g.pris);
+      const gamBredd = doc.getTextWidth(gammalt);
+      const gamX = cPrice - nyBredd - 2;
+      doc.text(gammalt, gamX, y, { align: 'right' });
+      doc.setDrawColor(150).setLineWidth(0.25)
+        .line(gamX - gamBredd, y - 1.1, gamX, y - 1.1);
+      dark();
+    } else {
+      doc.text(money(g.pris || 0), cPrice, y, { align: 'right' });
+    }
+    doc.setFont('helvetica', 'normal'); dark();
+    doc.text(money(g.netto), cAmt, y, { align: 'right' });
     y = rowY + 3;
     doc.setDrawColor(235).setLineWidth(0.2).line(M, y - 2, right, y - 2);
   }

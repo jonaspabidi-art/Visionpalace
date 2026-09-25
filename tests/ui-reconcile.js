@@ -80,14 +80,32 @@ const kr = n => n.toLocaleString('sv-SE', { minimumFractionDigits:2, maximumFrac
     checks.push(['Kunden: summan är samma omsättning',
       parseFloat(String(kundTotal).replace(/,/g, '')) === F.REVENUE]);
 
-    // Raderna i kundens kort måste summera till samma tal
-    const radsumma = await cp.evaluate(() => {
+    // Rabatterna visas inte längre som rader utan i summeringen. Varuraderna
+    // ska därför summera till DELSUMMAN, och delsumman minus rabatten till
+    // totalen — annars går kortets egna tal inte ihop.
+    const kortTal = await cp.evaluate(() => {
       const kort = [...document.querySelectorAll('.sale-card')]
         .find(k => k.textContent.includes('VP09-001'));
-      return [...kort.querySelectorAll('.sale-item-price')]
-        .reduce((s, e) => s + parseFloat(e.textContent.replace('€','')), 0);
+      const tal = t => parseFloat(String(t).replace(/[^\d.-]/g, ''));
+      const sum = [...kort.querySelectorAll('.sale-card-sum')]
+        .map(r => [...r.querySelectorAll('span')].map(s => s.textContent.trim()));
+      return {
+        rader: [...kort.querySelectorAll('.sale-item-price')]
+          .reduce((s, e) => s + parseFloat(e.textContent.replace('€','')), 0),
+        delsumma: tal(sum.find(r => /Subtotal/i.test(r[0]))?.[1]),
+        rabatt: Math.abs(tal(sum.find(r => /Discount/i.test(r[0]))?.[1])),
+        total: tal(kort.querySelector('.sale-total-val').textContent),
+      };
     });
-    checks.push(['Kunden: raderna summerar till totalen', radsumma === F.REVENUE]);
+    // Radens belopp är vad paren kostar EFTER sin egen rabatt, så raderna
+    // summerar till totalen plus den generella rabatten — den hör inte till
+    // något par och dras av först i summeringen.
+    const generell = 250;   // "Discount" i fixturen, utan vara
+    checks.push(['Kunden: varuraderna summerar till totalen plus den generella rabatten',
+      Math.abs(kortTal.rader - (kortTal.total + generell)) < 0.005]);
+    checks.push(['Kunden: delsumman minus rabatten är totalen',
+      Math.abs(kortTal.delsumma - kortTal.rabatt - kortTal.total) < 0.005]);
+    checks.push(['Kunden: totalen är orderns omsättning', kortTal.total === F.REVENUE]);
 
     // Fakturan kunden öppnar
     await cp.evaluate(() => {
