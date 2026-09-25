@@ -206,7 +206,7 @@ const INV_TEXT = {
   en: {
     title: 'INVOICE', payTo: 'PAY TO', custCompany: 'BILLED TO', custPrivate: 'CUSTOMER',
     colDesc: 'Description', colQty: 'Quantity', colVat: 'VAT', colPrice: 'Unit Price', colAmount: 'Amount',
-    net: 'Netto', vatLabel: 'VAT', total: 'TOTAL',
+    net: 'Netto', discount: 'Discount', vatLabel: 'VAT', total: 'TOTAL',
     bankDetails: 'Bank details', bankName: 'Bank Name', bankAddress: 'Bank Address',
     paymentTerms: 'Payment terms', notes: 'Notes',
     paymentText: days => `Payment is required within ${days} business days of invoice date.<br>Thank you for your business.`,
@@ -216,7 +216,7 @@ const INV_TEXT = {
   sv: {
     title: 'FAKTURA', payTo: 'BETALA TILL', custCompany: 'KUND', custPrivate: 'KUND',
     colDesc: 'Beskrivning', colQty: 'Antal', colVat: 'Moms', colPrice: 'Á-pris', colAmount: 'Belopp',
-    net: 'Netto', vatLabel: 'Moms', total: 'TOTALT',
+    net: 'Netto', discount: 'Rabatt', vatLabel: 'Moms', total: 'TOTALT',
     bankDetails: 'Bankuppgifter', bankName: 'Bank', bankAddress: 'Bankadress',
     paymentTerms: 'Betalningsvillkor', notes: 'Anteckningar',
     paymentText: days => `Betalning ska ske inom ${days} bankdagar från fakturadatum.<br>Tack för ditt köp.`,
@@ -224,6 +224,34 @@ const INV_TEXT = {
     address: () => INV_COMPANY.addressSv,
   },
 };
+
+// Rabatterna kom in som egna minusrader, en per par, och låg mitt bland
+// varorna. På en order med åtta par blev fakturan dubbelt så lång och det gick
+// inte att se vad avdraget blev totalt. De lyfts ur varulistan och visas som en
+// rad i summeringen. Momsen räknas fortfarande på alla rader, så ett avdrag
+// med moms drar ner momsen också.
+function invIsDiscount(item) {
+  return /^discount\b/i.test(String(item.desc || '').trim());
+}
+
+function invSplitLines(lineItems) {
+  const num = v => parseFloat(v) || 0;
+  const vatGroups = {};
+  let goodsNet = 0, discountNet = 0;
+  const goods = [];
+  for (const item of lineItems) {
+    const qty = num(item.qty), price = num(item.price), vat = num(item.vat);
+    const net = qty * price;
+    vatGroups[vat] = (vatGroups[vat] || 0) + net * (vat / 100);
+    if (invIsDiscount(item)) { discountNet += net; continue; }
+    goodsNet += net;
+    goods.push({ desc: item.desc || '—', qty, price, vat, amount: net });
+  }
+  const totalVat = Object.values(vatGroups).reduce((a, b) => a + b, 0);
+  const discount = Math.abs(discountNet);
+  return { goods, vatGroups, totalVat, subtotal: goodsNet, discount,
+    total: goodsNet - discount + totalVat };
+}
 
 function generateInvoice() {
   // Dismiss any focused form field first. On iOS Safari, tapping this button
@@ -242,27 +270,13 @@ function generateInvoice() {
   const notes = (document.getElementById('inv-notes')?.value || '').trim();
   const dateFormatted = invDate ? new Date(invDate + 'T12:00:00').toLocaleDateString('sv-SE') : '—';
 
-  const vatGroups = {};
-  let subtotal = 0;
-  invLineItems.forEach(item => {
-    const qty = parseFloat(item.qty) || 0;
-    const price = parseFloat(item.price) || 0;
-    const vat = parseFloat(item.vat) || 0;
-    const net = qty * price;
-    subtotal += net;
-    if (!vatGroups[vat]) vatGroups[vat] = 0;
-    vatGroups[vat] += net * (vat / 100);
-  });
-  const totalVat = Object.values(vatGroups).reduce((a, b) => a + b, 0);
-  const total = subtotal + totalVat;
+  const { goods, vatGroups, subtotal, discount, total } = invSplitLines(invLineItems);
 
   function fmt(n) { return n.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   const money = n => invCur().format(fmt, n);
 
-  const rowsHtml = invLineItems.map(item => {
-    const qty = parseFloat(item.qty) || 0;
-    const price = parseFloat(item.price) || 0;
-    const vat = parseFloat(item.vat) || 0;
+  const rowsHtml = goods.map(item => {
+    const { qty, price, vat } = item;
     return `<tr>
       <td style="font-weight:600;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${esc(item.desc) || '—'}</td>
       <td style="text-align:right;padding:12px 0;border-bottom:1px solid #eee;font-size:12px">${qty % 1 === 0 ? qty : fmt(qty)}</td>
@@ -331,6 +345,10 @@ function generateInvoice() {
         <span style="min-width:120px;text-align:right">${T.net}</span>
         <span style="min-width:80px;text-align:right">${money(subtotal)}</span>
       </div>
+      ${discount > 0 ? `<div style="display:flex;gap:32px;font-size:11px;color:#555;margin-top:6px">
+        <span style="min-width:120px;text-align:right">${T.discount}</span>
+        <span style="min-width:80px;text-align:right">− ${money(discount)}</span>
+      </div>` : ''}
       ${vatRowsHtml}
       <div style="display:flex;gap:32px;font-size:16px;font-weight:800;margin-top:8px;letter-spacing:1px;border-top:1.5px solid #111;padding-top:8px">
         <span style="min-width:120px;text-align:right">${ls(T.total)}</span>
@@ -392,20 +410,10 @@ function generateInvoice() {
 
 function invSamlaData() {
   const T = INV_TEXT[invLang] || INV_TEXT.en;
-  const num = v => parseFloat(v) || 0;
-  const vatGroups = {};
-  let subtotal = 0;
-  const rows = invLineItems.map(item => {
-    const qty = num(item.qty), price = num(item.price), vat = num(item.vat);
-    const net = qty * price;
-    subtotal += net;
-    vatGroups[vat] = (vatGroups[vat] || 0) + net * (vat / 100);
-    return { desc: item.desc || '—', qty, price, vat, amount: net };
-  });
-  const totalVat = Object.values(vatGroups).reduce((a, b) => a + b, 0);
+  const { goods, vatGroups, subtotal, discount, totalVat, total } = invSplitLines(invLineItems);
   const invDate = document.getElementById('inv-date').value;
   return {
-    T, rows, vatGroups, subtotal, totalVat, total: subtotal + totalVat,
+    T, rows: goods, vatGroups, subtotal, discount, totalVat, total,
     number: document.getElementById('inv-number').value.trim() || '—',
     date: invDate ? new Date(invDate + 'T12:00:00').toLocaleDateString('sv-SE') : '—',
     days: document.getElementById('inv-days').value || '14',
@@ -431,7 +439,46 @@ function buildInvoicePdf(JsPDF, d) {
     doc.text(String(text).toUpperCase(), x, y, align ? { align } : undefined);
     doc.setCharSpace(0);
   };
+  const H = 297;
+  // Foten ritas bara på sista sidan. Varuraderna får därför gå nästan hela
+  // vägen ner; bara summeringen kräver att foten får plats under sig.
+  const FOOT_H = 34;
+  const rowsBottom = H - M - 12;
+  const sumBottom = H - M - FOOT_H - 6;
+  const colR = M + 92;
+  const cQty = M + 100, cVat = M + 118, cPrice = M + 150, cAmt = right;
+  let sidor = 0;
+
+  function tabellhuvud(y) {
+    label(d.T.colDesc, M, y);
+    label(d.T.colQty, cQty, y, 'right');
+    label(d.T.colVat, cVat, y, 'right');
+    label(d.T.colPrice, cPrice, y, 'right');
+    label(d.T.colAmount, cAmt, y, 'right');
+    y += 2.5;
+    doc.setDrawColor(17).setLineWidth(0.3).line(M, y, right, y);
+    return y + 5.5;
+  }
+
+  // Följesidor får bara nummer och datum, så varorna får plats
+  function nySida() {
+    doc.addPage();
+    sidor++;
+    let y = M + 8;
+    doc.setFont('helvetica', 'bold').setFontSize(11); dark();
+    doc.text(`${d.T.title} # ${d.number}`, M, y);
+    doc.setFont('helvetica', 'normal').setFontSize(8.5); grey();
+    doc.text(d.date, right, y, { align: 'right' });
+    y += 6;
+    doc.setDrawColor(17).setLineWidth(0.4).line(M, y, right, y);
+    y += 7;
+    const ny = tabellhuvud(y);
+    doc.setFontSize(8.5);
+    return ny;
+  }
+
   let y = M + 8;
+  sidor = 1;
 
   // Rubrik och nummer
   doc.setFont('helvetica', 'bold').setFontSize(26); dark();
@@ -444,7 +491,6 @@ function buildInvoicePdf(JsPDF, d) {
 
   // Parterna
   y += 16;
-  const colR = M + 92;
   label(d.T.payTo, M, y);
   label(d.isPrivate ? d.T.custPrivate : d.T.custCompany, colR, y);
   y += 6;
@@ -469,20 +515,15 @@ function buildInvoicePdf(JsPDF, d) {
   y += 7;
 
   // Tabellhuvud — kolumnerna är högerkanter för de högerställda fälten
-  const cQty = M + 100, cVat = M + 118, cPrice = M + 150, cAmt = right;
-  label(d.T.colDesc, M, y);
-  label(d.T.colQty, cQty, y, 'right');
-  label(d.T.colVat, cVat, y, 'right');
-  label(d.T.colPrice, cPrice, y, 'right');
-  label(d.T.colAmount, cAmt, y, 'right');
-  y += 2.5;
-  doc.setDrawColor(17).setLineWidth(0.3).line(M, y, right, y);
-  y += 5.5;
+  y = tabellhuvud(y);
 
   doc.setFontSize(8.5);
   for (const r of d.rows) {
-    doc.setFont('helvetica', 'bold'); dark();
     const descLines = doc.splitTextToSize(r.desc, 96);
+    const radH = Math.max(descLines.length, 1) * 4.2 + 3;
+    // Raden får inte hamna halvt utanför sidan
+    if (y + radH > rowsBottom) y = nySida();
+    doc.setFont('helvetica', 'bold'); dark();
     doc.text(descLines, M, y);
     doc.setFont('helvetica', 'normal');
     doc.text(String(r.qty % 1 === 0 ? r.qty : r.qty.toFixed(2)), cQty, y, { align: 'right' });
@@ -493,7 +534,9 @@ function buildInvoicePdf(JsPDF, d) {
     doc.setDrawColor(235).setLineWidth(0.2).line(M, y - 2, right, y - 2);
   }
 
-  // Summering
+  // Summeringen hålls ihop: får den inte plats går den till nästa sida hel
+  const sumH = (d.discount > 0 ? 5 : 0) + Object.keys(d.vatGroups).length * 5 + 22;
+  if (y + sumH > sumBottom) y = nySida();
   y += 3;
   doc.setDrawColor(17).setLineWidth(0.5).line(M, y, right, y);
   y += 6;
@@ -505,6 +548,7 @@ function buildInvoicePdf(JsPDF, d) {
     y += bold ? 8 : 5;
   };
   sumRow(d.T.net, money(d.subtotal));
+  if (d.discount > 0) sumRow(d.T.discount, '- ' + money(d.discount));
   for (const [rate, amount] of Object.entries(d.vatGroups)) {
     sumRow(`${d.T.vatLabel} ${rate}%`, money(amount));
   }
@@ -517,6 +561,7 @@ function buildInvoicePdf(JsPDF, d) {
     y += 4;
     const noteLines = doc.splitTextToSize(d.notes, right - M - 8);
     const boxH = noteLines.length * 4.2 + 12;
+    if (y + boxH > sumBottom) y = nySida();
     doc.setDrawColor(230).setFillColor(250).setLineWidth(0.2);
     doc.roundedRect(M, y, right - M, boxH, 1.5, 1.5, 'FD');
     label(d.T.notes, M + 4, y + 6);
@@ -525,8 +570,8 @@ function buildInvoicePdf(JsPDF, d) {
     y += boxH;
   }
 
-  // Foten sitter alltid nederst, oavsett hur många rader fakturan har
-  const footY = 297 - M - 34;
+  // Foten sitter nederst på SISTA sidan, oavsett hur många rader fakturan har
+  const footY = H - M - FOOT_H;
   doc.setDrawColor(225).setLineWidth(0.2).line(M, footY, right, footY);
   let fy = footY + 6;
   label(d.T.bankDetails, M, fy);
@@ -545,6 +590,16 @@ function buildInvoicePdf(JsPDF, d) {
   doc.setTextColor(130);
   const terms = String(d.T.paymentText(d.days)).replace(/<br>/g, '\n');
   doc.text(doc.splitTextToSize(terms, right - colR), colR, fy);
+
+  // Sidnummer skrivs sist, när vi vet hur många sidor det blev
+  if (sidor > 1) {
+    for (let p = 1; p <= sidor; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal').setFontSize(7.5); grey();
+      doc.text(`${p} / ${sidor}`, right, H - 8, { align: 'right' });
+    }
+    doc.setPage(sidor);
+  }
 
   return doc.output('blob');
 }

@@ -378,12 +378,22 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
     if (notesEl) notesEl.value = '';
     invLineItems = [];
     invLineNextId = 0;
-    items.forEach(item => addInvLine(
+    // Rabatterna ligger som egna minusrader i ordern — en längst ner och en per
+    // par. Utspridda mellan varorna blir en stor faktura rörig och det går inte
+    // att se vad rabatten blev totalt. De slås ihop till EN rad sist.
+    const ärRabatt = i => {
+      const n = String(i.name || '');
+      return n === 'Discount' || n.startsWith('Discount — ');
+    };
+    const rabatt = items.filter(ärRabatt).reduce((s, i) =>
+      s + (parseFloat(i.sell_price) || 0) * (parseInt(i.qty, 10) || 1), 0);
+    items.filter(i => !ärRabatt(i)).forEach(item => addInvLine(
       item.ref_code ? `${item.name} (${item.ref_code})` : item.name,
       String(item.qty || 1),
       item.sell_price != null ? String(item.sell_price) : '',
       '0'
     ));
+    if (rabatt !== 0) addInvLine('Discount', '1', String(rabatt), '0');
     renderInvLines();
     generateInvoice();
   }, 50);
