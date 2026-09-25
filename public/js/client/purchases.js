@@ -145,7 +145,12 @@ function renderPurchases(sales) {
     const items = sale.sale_items || [];
     const date = new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const total = items.reduce((s, i) => s + (i.sell_price || 0) * (i.qty || 1), 0);
-    const itemsHTML = items.map(item => `
+    // Rabatterna ligger som egna minusrader, en per par. I listan blev det en
+    // extra rad med tom bildruta för varje vara — dubbelt så långt kort utan att
+    // visa vad rabatten blev totalt. Samma sak som på fakturan: de hör hemma i
+    // summeringen, inte bland varorna.
+    const { goods, subtotal, discount } = invoiceParts(items);
+    const itemsHTML = goods.map(item => `
       <div class="sale-item-row">
         ${item.image ? `<img class="sale-item-img" src="${item.image}" loading="lazy">` : `<div class="sale-item-img-ph"></div>`}
         <div class="sale-item-body">
@@ -194,6 +199,15 @@ function renderPurchases(sales) {
                   color:#ff9944;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">How to pay</button>
         </div>` : ''}
       ${trackingHTML}
+      ${discount > 0 ? `
+      <div class="sale-card-sum">
+        <span>Subtotal</span>
+        <span>€${subtotal.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+      </div>
+      <div class="sale-card-sum">
+        <span>Discount</span>
+        <span class="sale-sum-minus">− €${discount.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+      </div>` : ''}
       <div class="sale-card-footer">
         <span class="sale-total-label">Total</span>
         <span class="sale-total-val">€${total.toLocaleString('en-GB', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>

@@ -50,14 +50,26 @@ const SALES = [{
     checks.push(['ett par visar bara priset', (await price(1)) === '€1400']);
     checks.push(['och ingen antalsrad', (await qty(1)) === null]);
     checks.push(['frakten är orörd', (await price(3)) === '€20']);
-    checks.push(['rabatten är kvar som minus', (await price(4)) === '€-250']);
+    // Rabatten står inte längre bland varorna utan i summeringen — annars blev
+    // kortet dubbelt så långt, med en tom bildruta per rabattrad.
+    const sumRader = () => page.evaluate(() =>
+      [...document.querySelectorAll('.sale-card-sum')].map(r =>
+        [...r.querySelectorAll('span')].map(s => s.textContent.trim())));
+    const summering = await sumRader();
+    checks.push(['rabatten ligger inte bland varorna',
+      (await page.$$('.sale-item-row')).length === 5]);
+    checks.push(['delsumman visas', summering.some(r => /Subtotal/i.test(r[0]))]);
+    checks.push(['rabatten visas som avdrag',
+      summering.some(r => /Discount/i.test(r[0]) && /250/.test(r[1]))]);
 
-    // Summan av raderna måste bli totalen. Det var det som inte gick ihop förut.
+    // Varuraderna ska summera till delsumman, och delsumman minus rabatten till
+    // totalen. Det var det som inte gick ihop förut.
     const sum = await page.evaluate(() => [...document.querySelectorAll('.sale-item-price')]
-      .reduce((s, e) => s + parseFloat(e.textContent.replace('€','')), 0));
+      .reduce((s, e) => s + parseFloat(e.textContent.replace('\u20ac','')), 0));
     const total = await page.evaluate(() =>
-      document.querySelector('.sale-total-val').textContent.replace(/[€\s ,]/g,''));
-    checks.push(['raderna summerar till totalen', sum === 6730 && total === '6730']);
+      document.querySelector('.sale-total-val').textContent.replace(/[\u20ac\s\u00a0,]/g,''));
+    checks.push(['varuraderna summerar till delsumman', sum === 6980]);
+    checks.push(['delsumman minus rabatten är totalen', total === '6730']);
 
     // Långa namn kapades mitt i ordet
     const nameBox = await page.evaluate(() => {
@@ -68,8 +80,8 @@ const SALES = [{
     checks.push(['och syns utan att kapas', nameBox.clipped === false]);
 
     // En rad utan pris får inte bli "2 × €null"
-    checks.push(['rad utan pris visar bara antalet', (await qty(5)) === '×2']);
-    checks.push(['och inget prisfält', (await price(5)) === '']);
+    checks.push(['rad utan pris visar bara antalet', (await qty(4)) === '\u00d72']);
+    checks.push(['och inget prisfält', (await price(4)) === '']);
     checks.push(['ordet null syns ingenstans',
       !(await page.textContent('.sale-card')).includes('null')]);
 
