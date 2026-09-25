@@ -378,22 +378,41 @@ function fillInvoiceFromSale(clientId, items, invoiceNumber, buyerName) {
     if (notesEl) notesEl.value = '';
     invLineItems = [];
     invLineNextId = 0;
-    // Rabatterna ligger som egna minusrader i ordern — en längst ner och en per
-    // par. Utspridda mellan varorna blir en stor faktura rörig och det går inte
-    // att se vad rabatten blev totalt. De slås ihop till EN rad sist.
+    // Rabatterna ligger som egna minusrader i ordern. En parrabatt hör till sin
+    // vara och följer med som avdrag PER styck på den raden, så kunden ser vad
+    // ett par kostar efter rabatt — samma sak som i appens faktura. Rabatten
+    // längst ner hör inte till någon vara och blir en egen rad.
+    const PAR = 'Discount — ';
     const ärRabatt = i => {
       const n = String(i.name || '');
-      return n === 'Discount' || n.startsWith('Discount — ');
+      return n === 'Discount' || n.startsWith(PAR);
     };
-    const rabatt = items.filter(ärRabatt).reduce((s, i) =>
-      s + (parseFloat(i.sell_price) || 0) * (parseInt(i.qty, 10) || 1), 0);
-    items.filter(i => !ärRabatt(i)).forEach(item => addInvLine(
-      item.ref_code ? `${item.name} (${item.ref_code})` : item.name,
-      String(item.qty || 1),
-      item.sell_price != null ? String(item.sell_price) : '',
-      '0'
-    ));
-    if (rabatt !== 0) addInvLine('Discount', '1', String(rabatt), '0');
+    // Nyckeln är namn OCH ref-kod: två modeller kan heta likadant med olika ref,
+    // och då slogs deras rabatter ihop så att båda fick hela avdraget.
+    const nyckel = (namn, ref) => `${namn}|${String(ref || '').trim().toUpperCase()}`;
+    const perVara = new Map();
+    let generell = 0;
+    for (const i of items.filter(ärRabatt)) {
+      const n = String(i.name || '');
+      const qty = Math.max(1, parseInt(i.qty, 10) || 1);
+      const total = Math.abs((parseFloat(i.sell_price) || 0) * qty);
+      if (n.startsWith(PAR)) {
+        const k = nyckel(n.slice(PAR.length), i.ref_code);
+        perVara.set(k, (perVara.get(k) || 0) + total);
+      } else generell += total;
+    }
+    items.filter(i => !ärRabatt(i)).forEach(item => {
+      const qty = Math.max(1, parseInt(item.qty, 10) || 1);
+      const avdrag = perVara.get(nyckel(String(item.name || ''), item.ref_code)) || 0;
+      addInvLine(
+        item.ref_code ? `${item.name} (${item.ref_code})` : item.name,
+        String(item.qty || 1),
+        item.sell_price != null ? String(item.sell_price) : '',
+        '0',
+        avdrag ? String(Math.round((avdrag / qty) * 100) / 100) : ''
+      );
+    });
+    if (generell !== 0) addInvLine('Discount', '1', String(-generell), '0');
     renderInvLines();
     generateInvoice();
   }, 50);

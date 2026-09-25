@@ -323,13 +323,17 @@ function invoiceParts(items) {
 
   // En parrabatt heter "Discount — <varans namn>" och hör till just den varan.
   // Rabatten längst ner heter bara "Discount" och gäller hela ordern.
+  // Nyckeln är namn OCH ref-kod. Två modeller kan heta likadant med olika
+  // ref — nycklade vi bara på namnet slogs deras rabatter ihop och båda fick
+  // hela avdraget.
+  const nyckel = (namn, ref) => `${namn}|${String(ref || '').trim().toUpperCase()}`;
   const perVara = new Map();
   let generell = 0;
   for (const d of items.filter(isDiscountRow)) {
     const namn = String(d.name || '');
     if (namn.startsWith(PAIR_DISCOUNT_LABEL)) {
-      const key = namn.slice(PAIR_DISCOUNT_LABEL.length);
-      perVara.set(key, (perVara.get(key) || 0) + Math.abs(belopp(d)));
+      const k = nyckel(namn.slice(PAIR_DISCOUNT_LABEL.length), d.ref_code);
+      perVara.set(k, (perVara.get(k) || 0) + Math.abs(belopp(d)));
     } else {
       generell += Math.abs(belopp(d));
     }
@@ -338,7 +342,7 @@ function invoiceParts(items) {
   const goods = items.filter(i => !isDiscountRow(i)).map(i => {
     const qty = parseInt(i.qty) || 1;
     const pris = i.sell_price == null ? null : (parseFloat(i.sell_price) || 0);
-    const avdrag = perVara.get(String(i.name || '')) || 0;
+    const avdrag = perVara.get(nyckel(String(i.name || ''), i.ref_code)) || 0;
     const perPar = qty ? avdrag / qty : 0;
     return {
       ...i, qty,
